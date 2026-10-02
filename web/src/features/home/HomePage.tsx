@@ -158,7 +158,7 @@ function Hero({ data }: { data?: HomeData }) {
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.12em] text-accent">Discover. Connect. Book. Grow.</p>
           <h1 className="mt-3 text-3xl font-bold leading-[1.15] tracking-tight sm:text-4xl lg:text-5xl">Find trusted local pros who are available right now.</h1>
-          <p className="mt-4 max-w-xl text-base text-[#CBD5E1] md:text-lg">Compare verified businesses, see live availability, request quotes and book in minutes.</p>
+          <p className="mt-4 max-w-xl text-base text-on-navy-muted md:text-lg">Compare verified businesses, see live availability, request quotes and book in minutes.</p>
 
           <form onSubmit={submit} className="mt-7 flex flex-col gap-2 rounded-xl bg-surface p-2 sm:flex-row sm:items-center" role="search">
             <div className="flex flex-1 items-center gap-2 px-2">
@@ -173,7 +173,7 @@ function Hero({ data }: { data?: HomeData }) {
           <div className="mt-4 flex flex-wrap gap-2">
             {quickSearches.map((s) => (
               <Link key={s.label} to={`${s.to}${citySlug ? `&city=${citySlug}` : ''}`}
-                className="rounded-full border border-white/15 px-3 py-1.5 text-[13px] text-[#E2E8F0] transition-colors hover:border-accent hover:text-white">{s.label}</Link>
+                className="rounded-full border border-white/15 px-3 py-1.5 text-[13px] text-on-navy transition-colors hover:border-accent hover:text-white">{s.label}</Link>
             ))}
           </div>
 
@@ -182,7 +182,7 @@ function Hero({ data }: { data?: HomeData }) {
               ['Businesses', data?.stats.businesses], ['Reviews', data?.stats.reviews], ['Bookings completed', data?.stats.bookingsCompleted],
             ].map(([label, value]) => (
               <div key={label as string}>
-                <dt className="text-xs text-[#94A3B8]">{label}</dt>
+                <dt className="text-xs text-on-navy-muted">{label}</dt>
                 <dd className="mt-0.5 text-2xl font-bold">{value === undefined ? <Skeleton width={56} sx={{ bgcolor: 'rgba(255,255,255,.12)' }} /> : compactNumber(value as number)}</dd>
               </div>
             ))}
@@ -195,7 +195,7 @@ function Hero({ data }: { data?: HomeData }) {
               <Img src={banner.mobileImageUrl ?? banner.imageUrl} alt={banner.altText ?? banner.title} className="absolute inset-0 h-full w-full" rounded="rounded-none" eager />
               <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#0B1220] via-[#0B1220]/80 to-transparent p-6 pt-16">
                 <h2 className="text-xl font-bold">{banner.title}</h2>
-                {banner.subtitle && <p className="mt-1 text-sm text-[#CBD5E1]">{banner.subtitle}</p>}
+                {banner.subtitle && <p className="mt-1 text-sm text-on-navy-muted">{banner.subtitle}</p>}
                 {banner.ctaText && <span className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-accent group-hover:underline">{banner.ctaText} <ArrowForwardRounded sx={{ fontSize: 18 }} /></span>}
               </div>
             </Link>
@@ -239,7 +239,7 @@ function PromoBanner({ banner }: { banner: Banner }) {
       </picture>
       <div className="absolute inset-0 flex flex-col justify-center bg-gradient-to-r from-[#0B1220] via-[#0B1220]/85 to-transparent p-6 md:p-10">
         <h2 className="max-w-lg text-2xl font-bold md:text-3xl">{banner.title}</h2>
-        {banner.subtitle && <p className="mt-2 max-w-lg text-sm text-[#CBD5E1] md:text-base">{banner.subtitle}</p>}
+        {banner.subtitle && <p className="mt-2 max-w-lg text-sm text-on-navy-muted md:text-base">{banner.subtitle}</p>}
         {banner.ctaText && <span className="mt-5 inline-flex w-fit items-center gap-1 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-on-accent">{banner.ctaText} <ArrowForwardRounded sx={{ fontSize: 18 }} /></span>}
       </div>
     </Link>

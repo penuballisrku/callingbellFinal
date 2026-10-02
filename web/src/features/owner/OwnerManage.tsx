@@ -11,12 +11,16 @@ import AddRounded from '@mui/icons-material/AddRounded';
 import dayjs from 'dayjs';
 import { useSnackbar } from 'notistack';
 import { ApiError, api, errorMessage } from '@/lib/api';
-import { ago, date, money, moneyExact, number } from '@/lib/format';
+import { ago, date, money, moneyExact, moneyPrecise, number } from '@/lib/format';
 import { useDocumentTitle, useLookup } from '@/lib/hooks';
 import type { OwnerAd, OwnerProfile as Profile, OwnerReview, OwnerService, OwnerSubscription as Subscription } from '@/lib/types';
 import { EmptyState, ErrorState, PageHeader, Panel, StatusBadge, Stars } from '@/components/ui';
 import { PlanGrid } from '@/features/pricing/PricingPage';
 import { useBusiness } from './OwnerPortal';
+import { SocialLinksPanel } from './SocialLinksPanel';
+import { PlanCheckoutDialog } from './PlanCheckoutDialog';
+import { usePaymentConfig } from '@/lib/payments';
+import type { Plan } from '@/lib/types';
 
 /* ===================== Reviews ===================== */
 export function OwnerReviews() {
@@ -238,6 +242,7 @@ export function OwnerProfile() {
   if (isLoading) return <Skeleton variant="rounded" height={600} />;
 
   return (
+    <>
     <form onSubmit={handleSubmit(save)} noValidate>
       <PageHeader title="Business profile" subtitle="This information appears on your public listing."
         actions={<Button type="submit" variant="contained" disabled={isSubmitting || !isDirty}>{isSubmitting ? 'Saving…' : 'Save changes'}</Button>} />
@@ -291,6 +296,8 @@ export function OwnerProfile() {
         </Panel>
       </div>
     </form>
+    <SocialLinksPanel businessId={business.id} slug={business.slug} />
+    </>
   );
 }
 
@@ -300,12 +307,21 @@ export function OwnerSubscription() {
   const business = useBusiness();
   const { enqueueSnackbar } = useSnackbar();
   const [cycle, setCycle] = useState<'monthly' | 'annual'>('monthly');
+  const [checkout, setCheckout] = useState<Plan | null>(null);
+  const payments = usePaymentConfig();
   const { data, isLoading, isError, refetch } = useQuery({ queryKey: ['owner', 'subscription', business.id], queryFn: () => api.get<Subscription>(`/api/owner/businesses/${business.id}/subscription`) });
+  const choose = (p: Plan) => {
+    if (p.monthlyPrice === 0) enqueueSnackbar('To move back to the Free plan, contact support and we will switch you at the end of your current period.', { variant: 'info' });
+    else if (!payments.data?.enabled) enqueueSnackbar(`Online payment is unavailable right now. Our team will call you to activate ${p.name}.`, { variant: 'info' });
+    else setCheckout(p);
+  };
   if (isError) return <ErrorState onRetry={() => refetch()} />;
 
   return (
     <>
-      <PageHeader title="Plan & billing" subtitle="Upgrade for more lead credits, priority placement and advanced analytics." />
+      <PageHeader title="Plan & billing" subtitle="Upgrade for more lead credits, priority placement and advanced analytics. Pay securely online by UPI, card or net banking." />
+      <PlanCheckoutDialog businessId={business.id} plan={checkout} cycle={cycle === 'annual' ? 'Annual' : 'Monthly'} open={!!checkout}
+        onClose={() => { setCheckout(null); void refetch(); }} />
       {isLoading ? <Skeleton variant="rounded" height={500} /> : (
         <div className="space-y-6">
           {data!.current && (
@@ -328,8 +344,8 @@ export function OwnerSubscription() {
           </div>
           <PlanGrid plans={data!.plans} cycle={cycle} currentCode={data!.currentPlanCode} action={(p) => (
             <Button fullWidth variant={p.code === data!.currentPlanCode ? 'outlined' : 'contained'} disabled={p.code === data!.currentPlanCode}
-              onClick={() => enqueueSnackbar(`Our team will call you to activate ${p.name}. Online payments are coming soon.`, { variant: 'info' })}>
-              {p.code === data!.currentPlanCode ? 'Current plan' : `Switch to ${p.name}`}
+              onClick={() => choose(p)}>
+              {p.code === data!.currentPlanCode ? 'Current plan' : p.monthlyPrice === 0 ? 'Switch to Free' : `Upgrade to ${p.name}`}
             </Button>
           )} />
           <Panel title="Invoices" subtitle="Subscriptions, advertising, booking commission and lead credits" noPad>
@@ -343,8 +359,8 @@ export function OwnerSubscription() {
                         <TableCell sx={{ fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>{i.invoiceNumber}</TableCell>
                         <TableCell><StatusBadge type="PaymentType" code={i.paymentType} /></TableCell>
                         <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>{date(i.paidOn)}</TableCell>
-                        <TableCell align="right">{moneyExact(i.amount)}</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 600 }}>{moneyExact(i.totalAmount)}</TableCell>
+                        <TableCell align="right">{moneyPrecise(i.amount)}</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 600 }}>{moneyPrecise(i.totalAmount)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

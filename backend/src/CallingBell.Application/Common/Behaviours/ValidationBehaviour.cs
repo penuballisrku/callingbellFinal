@@ -30,6 +30,7 @@ public sealed class ValidationBehaviour<TRequest, TResponse>(IEnumerable<IValida
         return await next();
     }
 
+    // "Business.Services[0].Name" -> "business.services[0].name" so clients can map nested errors to fields.
     private static string ToCamelCase(string name) =>
-        string.IsNullOrEmpty(name) ? name : char.ToLowerInvariant(name[0]) + name[1..];
+        string.Join('.', name.Split('.').Select(part => string.IsNullOrEmpty(part) ? part : char.ToLowerInvariant(part[0]) + part[1..]));
 }

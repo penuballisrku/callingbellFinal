@@ -12,7 +12,7 @@ export function BusinessCard({ b, layout = 'grid' }: { b: Card; layout?: 'grid' 
   if (layout === 'row') return <BusinessRow b={b} />;
   return (
     <Link to={`/b/${b.slug}`}
-      className="group card flex h-full flex-col overflow-hidden transition-[border-color,box-shadow] hover:border-line-strong hover:shadow-[0_4px_16px_rgba(16,24,40,0.06)]">
+      className="group card flex h-full flex-col overflow-hidden">
       <div className="relative">
         <Img src={b.coverImageUrl} alt={`${b.name} cover`} aspect="16/7" rounded="rounded-none" className="w-full" fallbackText={b.name} />
         {(b.isSponsored || b.isFeatured) && (
@@ -45,7 +45,7 @@ export function BusinessCard({ b, layout = 'grid' }: { b: Card; layout?: 'grid' 
 
 function BusinessRow({ b }: { b: Card }) {
   return (
-    <Link to={`/b/${b.slug}`} className="group card flex gap-4 p-4 transition-colors hover:border-line-strong">
+    <Link to={`/b/${b.slug}`} className="group card flex gap-4 p-4">
       <Img src={b.logoUrl} alt={`${b.name} logo`} className="h-16 w-16 shrink-0 sm:h-20 sm:w-20" rounded="rounded-xl" fallbackText={b.name} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

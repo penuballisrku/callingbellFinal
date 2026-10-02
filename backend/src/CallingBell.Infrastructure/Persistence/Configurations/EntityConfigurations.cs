@@ -73,6 +73,8 @@ internal sealed class BusinessConfiguration : IEntityTypeConfiguration<Business>
         b.HasMany(x => x.Services).WithOne(s => s.Business).HasForeignKey(s => s.BusinessId);
         b.HasMany(x => x.Hours).WithOne(h => h.Business).HasForeignKey(h => h.BusinessId);
         b.HasMany(x => x.Images).WithOne(i => i.Business).HasForeignKey(i => i.BusinessId);
+        b.HasMany(x => x.Videos).WithOne(v => v.Business).HasForeignKey(v => v.BusinessId);
+        b.HasMany(x => x.SocialLinks).WithOne(l => l.Business).HasForeignKey(l => l.BusinessId);
         b.HasMany(x => x.Reviews).WithOne(r => r.Business).HasForeignKey(r => r.BusinessId);
         b.HasMany(x => x.Enquiries).WithOne(e => e.Business).HasForeignKey(e => e.BusinessId);
         b.HasMany(x => x.Bookings).WithOne(bk => bk.Business).HasForeignKey(bk => bk.BusinessId);
@@ -101,8 +103,22 @@ internal sealed class EngagementConfiguration :
 }
 
 internal sealed class MonetizationConfiguration :
-    IEntityTypeConfiguration<BusinessSubscription>, IEntityTypeConfiguration<Advertisement>, IEntityTypeConfiguration<Payment>
+    IEntityTypeConfiguration<BusinessSubscription>, IEntityTypeConfiguration<Advertisement>, IEntityTypeConfiguration<Payment>,
+    IEntityTypeConfiguration<MarketingContent>, IEntityTypeConfiguration<PaymentOrder>
 {
+    public void Configure(EntityTypeBuilder<PaymentOrder> b)
+    {
+        b.Property(o => o.RowVersion).IsRowVersion();
+        b.HasOne(o => o.Business).WithMany().HasForeignKey(o => o.BusinessId);
+        b.HasOne(o => o.Plan).WithMany().HasForeignKey(o => o.PlanId);
+    }
+
+    public void Configure(EntityTypeBuilder<MarketingContent> b)
+    {
+        b.ToTable("MarketingContent");
+        b.HasOne(c => c.Business).WithMany().HasForeignKey(c => c.BusinessId);
+    }
+
     public void Configure(EntityTypeBuilder<BusinessSubscription> b) =>
         b.HasOne(s => s.Plan).WithMany().HasForeignKey(s => s.PlanId);
 

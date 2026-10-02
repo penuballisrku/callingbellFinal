@@ -23,7 +23,7 @@ export default function CategoriesPage() {
           <Img src={single.bannerUrl} alt={single.altText ?? single.name} aspect="1600/400" rounded="rounded-none" className="w-full min-h-[160px]" />
           <div className="absolute inset-0 flex flex-col justify-center p-6 text-white md:p-10">
             <h1 className="text-2xl font-bold md:text-4xl">{single.name}</h1>
-            <p className="mt-2 max-w-xl text-sm text-[#CBD5E1] md:text-base">{single.description}</p>
+            <p className="mt-2 max-w-xl text-sm text-on-navy-muted md:text-base">{single.description}</p>
           </div>
         </div>
       )}

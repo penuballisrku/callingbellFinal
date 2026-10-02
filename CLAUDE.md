@@ -937,3 +937,48 @@ The application should demonstrate the complete business flow:
 **Discover → Search → View Business → Enquire → Book → Review → Manage → Advertise → Analyze**
 
 Use real database-driven data throughout the application and ensure the UI, API, and SQL database work together as one complete system.
+
+Business Lead Registration Flow
+
+1. During account creation, the Business Lead must provide the following information:
+   - Business Name
+   - Business Category
+   - Industry Type
+   - Business Description
+   - Contact Information
+   - Website URL
+   - Business Address
+   - Available Business Plans/Packages
+   - Services Offered
+   - Social Media Links
+
+2. Allow the Business Lead to upload:
+   - Business Logo
+   - Cover Image/Banner
+   - Business Photos (multiple uploads)
+   - Promotional Videos (multiple uploads)
+
+3. Validate all mandatory fields before account creation.
+
+4. After successful registration and profile setup:
+   - Create the business profile automatically.
+   - Save all uploaded images and videos.
+   - Redirect the user to the Business Dashboard.
+
+5. Business Dashboard should display:
+   - Business Overview
+   - Uploaded Photos and Videos
+   - Active Plan Details
+   - Lead Management
+   - Analytics and Insights
+   - Profile Completion Status
+   - Recent Activities
+   - Settings and Account Management
+
+6. UI Requirements:
+   - Modern and Professional Design
+   - Responsive Layout
+   - Multi-step Registration Wizard
+   - Drag-and-Drop Media Upload
+   - Progress Indicator During Registration
+   - Clean Dashboard with Cards, Charts, and Metrics

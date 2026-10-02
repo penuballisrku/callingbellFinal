@@ -11,8 +11,10 @@ import StorefrontOutlined from '@mui/icons-material/StorefrontOutlined';
 import WorkspacePremiumOutlined from '@mui/icons-material/WorkspacePremiumOutlined';
 import CampaignOutlined from '@mui/icons-material/CampaignOutlined';
 import OpenInNewRounded from '@mui/icons-material/OpenInNewRounded';
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import PermMediaOutlined from '@mui/icons-material/PermMediaOutlined';
+import SettingsOutlined from '@mui/icons-material/SettingsOutlined';
+import RocketLaunchOutlined from '@mui/icons-material/RocketLaunchOutlined';
+import { useSelectedBusiness } from '@/stores/ownerBusiness';
 import { useSnackbar } from 'notistack';
 import { api, errorMessage } from '@/lib/api';
 import { useLookup } from '@/lib/hooks';
@@ -22,10 +24,11 @@ import { EmptyState } from '@/components/ui';
 import OwnerDashboard from './OwnerDashboard';
 import { OwnerBookings, OwnerLeads } from './OwnerPipeline';
 import { OwnerAds, OwnerProfile, OwnerReviews, OwnerServices, OwnerSubscription } from './OwnerManage';
+import OwnerMedia from './OwnerMedia';
+import OwnerSettings from './OwnerSettings';
+import BusinessWizard from '@/features/onboarding/BusinessWizard';
 
-const useSelected = create<{ id: string | null; set: (id: string) => void }>()(
-  persist((set) => ({ id: null, set: (id) => set({ id }) }), { name: 'cb-owner-business' }),
-);
+const useSelected = useSelectedBusiness;
 
 const BusinessContext = createContext<OwnerBusiness | null>(null);
 export const useBusiness = () => useContext(BusinessContext)!;
@@ -56,8 +59,10 @@ export default function OwnerPortal() {
     { to: '/business/reviews', label: 'Reviews', icon: <RateReviewOutlined fontSize="small" /> },
     { to: '/business/services', label: 'Services', icon: <HandymanOutlined fontSize="small" /> },
     { to: '/business/profile', label: 'Business profile', icon: <StorefrontOutlined fontSize="small" /> },
+    { to: '/business/media', label: 'Photos & videos', icon: <PermMediaOutlined fontSize="small" /> },
     { to: '/business/plan', label: 'Plan & billing', icon: <WorkspacePremiumOutlined fontSize="small" /> },
     { to: '/business/advertising', label: 'Advertising', icon: <CampaignOutlined fontSize="small" /> },
+    { to: '/business/settings', label: 'Settings', icon: <SettingsOutlined fontSize="small" /> },
   ];
 
   const header = business ? (
@@ -76,9 +81,17 @@ export default function OwnerPortal() {
       <Routes>
         <Route element={<PortalLayout title="Business portal" nav={nav} headerExtra={header}
           footer={business && <Button fullWidth size="small" variant="outlined" component={Link} to={`/b/${business.slug}`} target="_blank" endIcon={<OpenInNewRounded fontSize="small" />}
-            sx={{ color: '#CBD5E1', borderColor: 'rgba(255,255,255,.2)' }}>View public profile</Button>} />}>
+            sx={{ color: 'var(--cb-on-navy)', borderColor: 'rgba(255,255,255,.2)', bgcolor: 'transparent', boxShadow: 'none', '&:hover': { bgcolor: 'rgba(255,255,255,.06)', borderColor: 'rgba(255,255,255,.35)' } }}>View public profile</Button>} />}>
           {isLoading ? <Route path="*" element={<Skeleton variant="rounded" height={400} />} /> : !business ? (
-            <Route path="*" element={<EmptyState title="No business listed yet" message="Your listing will appear here once it's created. Contact support to add a business." />} />
+            <>
+              <Route path="setup" element={<BusinessWizard mode="setup" />} />
+              <Route path="settings" element={<OwnerSettings />} />
+              <Route path="*" element={
+                <EmptyState icon={<RocketLaunchOutlined />} title="Let's set up your business"
+                  message="Add your business details, services, photos and videos. It takes about 5 minutes, and customers can find you once our team approves your listing."
+                  action={<Button variant="contained" color="secondary" size="large" component={Link} to="/business/setup">Set up your business</Button>} />
+              } />
+            </>
           ) : (
             <>
               <Route index element={<OwnerDashboard />} />
@@ -89,6 +102,9 @@ export default function OwnerPortal() {
               <Route path="profile" element={<OwnerProfile />} />
               <Route path="plan" element={<OwnerSubscription />} />
               <Route path="advertising" element={<OwnerAds />} />
+              <Route path="media" element={<OwnerMedia />} />
+              <Route path="settings" element={<OwnerSettings />} />
+              <Route path="setup" element={<BusinessWizard mode="setup" />} />
               <Route path="*" element={<Navigate to="/business" replace />} />
             </>
           )}

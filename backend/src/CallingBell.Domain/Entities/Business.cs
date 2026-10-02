@@ -64,6 +64,8 @@ public class Business : AuditableEntity
     public ICollection<BusinessService> Services { get; set; } = new List<BusinessService>();
     public ICollection<BusinessHour> Hours { get; set; } = new List<BusinessHour>();
     public ICollection<BusinessImage> Images { get; set; } = new List<BusinessImage>();
+    public ICollection<BusinessVideo> Videos { get; set; } = new List<BusinessVideo>();
+    public ICollection<BusinessSocialLink> SocialLinks { get; set; } = new List<BusinessSocialLink>();
     public ICollection<Review> Reviews { get; set; } = new List<Review>();
     public ICollection<Enquiry> Enquiries { get; set; } = new List<Enquiry>();
     public ICollection<Booking> Bookings { get; set; } = new List<Booking>();
@@ -110,6 +112,31 @@ public class BusinessImage : AuditableEntity
     public string? Caption { get; set; }
     public bool IsPrimary { get; set; }
     public int SortOrder { get; set; }
+
+    public Business Business { get; set; } = null!;
+}
+
+/// <summary>Promotional video uploaded by the business. Bytes live in <see cref="Media"/> (EntityType BusinessVideo).</summary>
+public class BusinessVideo : AuditableEntity
+{
+    public Guid BusinessId { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string VideoUrl { get; set; } = string.Empty;
+    public string? PosterUrl { get; set; }
+    public string ContentType { get; set; } = string.Empty;
+    public long FileSize { get; set; }
+    public int? DurationSeconds { get; set; }
+    public int SortOrder { get; set; }
+
+    public Business Business { get; set; } = null!;
+}
+
+/// <summary>A social media profile; <see cref="Platform"/> is a SocialPlatform lookup code.</summary>
+public class BusinessSocialLink : AuditableEntity
+{
+    public Guid BusinessId { get; set; }
+    public string Platform { get; set; } = string.Empty;
+    public string Url { get; set; } = string.Empty;
 
     public Business Business { get; set; } = null!;
 }

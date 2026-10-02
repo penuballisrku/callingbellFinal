@@ -202,6 +202,59 @@ internal sealed class IdentityService(
         return await ToDtoAsync(user, roles, permissions, ct);
     }
 
+    public async Task<bool> IsEmailAvailableAsync(string email, CancellationToken ct) =>
+        await userManager.FindByEmailAsync(email.Trim()) is null;
+
+    public async Task<AccountSettingsDto> GetAccountSettingsAsync(string userId, CancellationToken ct)
+    {
+        var user = await userManager.FindByIdAsync(userId) ?? throw new NotFoundException("User", userId);
+        var now = DateTimeOffset.UtcNow;
+        var sessions = await db.RefreshTokens.CountAsync(t => t.UserId == userId && t.RevokedAt == null && t.ExpiresAt > now, ct);
+        var google = (await userManager.GetLoginsAsync(user)).Any(l => l.LoginProvider == GoogleProvider);
+        return new AccountSettingsDto(user.DisplayName, user.Email ?? string.Empty, user.PhoneNumber, await userManager.HasPasswordAsync(user), google,
+            user.CreatedOn, user.LastLoginOn, sessions);
+    }
+
+    public async Task<CurrentUserDto> UpdateAccountAsync(string userId, string displayName, string phoneNumber, CancellationToken ct)
+    {
+        var user = await userManager.FindByIdAsync(userId) ?? throw new NotFoundException("User", userId);
+        user.DisplayName = displayName.Trim();
+        user.PhoneNumber = NormalizePhone(phoneNumber.Trim());
+        var result = await userManager.UpdateAsync(user);
+        if (!result.Succeeded) throw new BadRequestException(result.Errors.First().Description);
+        return await GetCurrentUserAsync(userId, ct);
+    }
+
+    public async Task ChangePasswordAsync(string userId, string? currentPassword, string newPassword, CancellationToken ct)
+    {
+        var user = await userManager.FindByIdAsync(userId) ?? throw new NotFoundException("User", userId);
+        var hasPassword = await userManager.HasPasswordAsync(user);
+        if (hasPassword && string.IsNullOrEmpty(currentPassword))
+            throw new ValidationException(new Dictionary<string, string[]> { ["currentPassword"] = ["Enter your current password."] });
+
+        var result = hasPassword
+            ? await userManager.ChangePasswordAsync(user, currentPassword!, newPassword)
+            : await userManager.AddPasswordAsync(user, newPassword);
+        if (!result.Succeeded)
+        {
+            var mismatch = result.Errors.Any(e => e.Code == nameof(IdentityErrorDescriber.PasswordMismatch));
+            throw new ValidationException(new Dictionary<string, string[]>
+            {
+                [mismatch ? "currentPassword" : "newPassword"] = mismatch ? ["Your current password is incorrect."] : result.Errors.Select(e => e.Description).ToArray()
+            });
+        }
+    }
+
+    public async Task<int> RevokeOtherSessionsAsync(string userId, string? keepRefreshToken, CancellationToken ct)
+    {
+        var keep = string.IsNullOrWhiteSpace(keepRefreshToken) ? null : Hash(keepRefreshToken);
+        var now = DateTimeOffset.UtcNow;
+        var tokens = await db.RefreshTokens.Where(t => t.UserId == userId && t.RevokedAt == null && t.ExpiresAt > now && t.TokenHash != keep).ToListAsync(ct);
+        tokens.ForEach(t => t.RevokedAt = now);
+        await db.SaveChangesAsync(ct);
+        return tokens.Count;
+    }
+
     private async Task<AuthResultDto> IssueTokensAsync(ApplicationUser user, CancellationToken ct, bool persist = true)
     {
         var (roles, permissions) = await GetRolesAndPermissionsAsync(user, ct);

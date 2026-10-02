@@ -2,15 +2,21 @@ using CallingBell.Application.Common.Models;
 using CallingBell.Application.Features.Auth;
 using CallingBell.Application.Features.Businesses;
 using CallingBell.Application.Features.Catalog;
+using CallingBell.Application.Features.Content;
+using CallingBell.Application.Features.Geo;
 using CallingBell.Application.Features.Engagement;
 using CallingBell.Application.Features.Home;
 using CallingBell.Application.Features.Media;
+using CallingBell.Application.Features.Onboarding;
+using CallingBell.Application.Features.Payments;
 using CallingBell.Domain.Constants;
+using CallingBell.Infrastructure.Geo;
 using CallingBell.Infrastructure.Identity;
 using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace CallingBell.Api.Controllers;
 
@@ -26,6 +32,15 @@ public sealed class AuthController : ApiControllerBase
     [HttpPost("register"), EnableRateLimiting("auth")]
     public async Task<ActionResult<ApiResponse<AuthResultDto>>> Register(RegisterCommand command, CancellationToken ct) =>
         Success(await Sender.Send(command, ct), "Account created");
+
+    /// <summary>Business sign-up wizard: creates the owner account and the business profile in one transaction.</summary>
+    [HttpPost("register-business"), EnableRateLimiting("auth")]
+    public async Task<ActionResult<ApiResponse<BusinessRegistrationResultDto>>> RegisterBusiness(RegisterBusinessCommand command, CancellationToken ct) =>
+        Success(await Sender.Send(command, ct), "Your business account has been created");
+
+    [HttpGet("email-available"), EnableRateLimiting("auth")]
+    public async Task<ActionResult<ApiResponse<bool>>> EmailAvailable([FromQuery] string email, CancellationToken ct) =>
+        Success(await Sender.Send(new EmailAvailabilityQuery(email ?? string.Empty), ct));
 
     [HttpPost("google"), EnableRateLimiting("auth")]
     public async Task<ActionResult<ApiResponse<AuthResultDto>>> Google(GoogleSignInCommand command, CancellationToken ct) =>
@@ -85,6 +100,11 @@ public sealed class CatalogController : ApiControllerBase
     [HttpGet("banners")]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<BannerDto>>>> Banners([FromQuery] string placement = "HomeHero", CancellationToken ct = default) =>
         Success(await Sender.Send(new GetBannersQuery(placement), ct));
+
+    /// <summary>Database-driven marketing page content, e.g. <c>/api/content/pages/ListYourBusiness</c>.</summary>
+    [HttpGet("content/pages/{pageKey}")]
+    public async Task<ActionResult<ApiResponse<MarketingPageDto>>> MarketingPage(string pageKey, CancellationToken ct) =>
+        Success(await Sender.Send(new GetMarketingPageQuery(pageKey), ct));
 }
 
 [Route("api/businesses")]
@@ -135,6 +155,44 @@ public sealed class BusinessesController : ApiControllerBase
     }
 }
 
+[Route("api/geo")]
+public sealed class GeoController : ApiControllerBase
+{
+    /// <summary>The visitor's country (ISO code) from a CDN edge header or the local GeoIP database.</summary>
+    [HttpGet("country")]
+    public async Task<ActionResult<ApiResponse<VisitorCountryDto>>> Country([FromServices] IOptions<GeoIpOptions> options, CancellationToken ct)
+    {
+        var cdn = Request.Headers["CF-IPCountry"].FirstOrDefault() ?? Request.Headers["CloudFront-Viewer-Country"].FirstOrDefault();
+        var ip = options.Value.TrustForwardedFor
+            ? Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim() ?? HttpContext.Connection.RemoteIpAddress?.ToString()
+            : HttpContext.Connection.RemoteIpAddress?.ToString();
+        Response.Headers.CacheControl = "private, max-age=3600";
+        Response.Headers.Vary = "CF-IPCountry, CloudFront-Viewer-Country, X-Forwarded-For";
+        return Success(await Sender.Send(new GetVisitorCountryQuery(cdn, ip), ct));
+    }
+}
+
+[Route("api/payments")]
+public sealed class PaymentsController : ApiControllerBase
+{
+    /// <summary>Whether online checkout is available, and the publishable key for the browser.</summary>
+    [HttpGet("config")]
+    public async Task<ActionResult<ApiResponse<PaymentConfigDto>>> Config(CancellationToken ct) => Success(await Sender.Send(new GetPaymentConfigQuery(), ct));
+
+    /// <summary>
+    /// Razorpay webhook (configure payment.captured, payment.failed and order.paid in the Razorpay dashboard).
+    /// Confirms payments even if the customer closed the browser before the checkout callback ran.
+    /// </summary>
+    [AllowAnonymous, HttpPost("razorpay/webhook")]
+    public async Task<IActionResult> RazorpayWebhook(CancellationToken ct)
+    {
+        using var reader = new StreamReader(Request.Body);
+        var body = await reader.ReadToEndAsync(ct);
+        var handled = await Sender.Send(new HandlePaymentWebhookCommand(body, Request.Headers["X-Razorpay-Signature"].ToString()), ct);
+        return handled ? Ok() : BadRequest();
+    }
+}
+
 [Route("api/media")]
 public sealed class MediaController : ApiControllerBase
 {
@@ -146,13 +204,24 @@ public sealed class MediaController : ApiControllerBase
     [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any)]
     public Task<IActionResult> Thumbnail(Guid id, CancellationToken ct) => Serve(id, true, ct);
 
+    // Videos are fetched in many small HTTP range requests; keep recently played large files in memory (bounded) so each
+    // range request doesn't reload the whole file from SQL Server.
+    private const long LargeFileBytes = 1024 * 1024;
+    private static readonly MemoryCache LargeFiles = new(new MemoryCacheOptions { SizeLimit = 256L * 1024 * 1024 });
+
     private async Task<IActionResult> Serve(Guid id, bool thumbnail, CancellationToken ct)
     {
-        var file = await Sender.Send(new GetMediaFileQuery(id, thumbnail), ct);
+        var key = (id, thumbnail);
+        if (!LargeFiles.TryGetValue(key, out MediaFileDto? file) || file is null)
+        {
+            file = await Sender.Send(new GetMediaFileQuery(id, thumbnail), ct);
+            if (file.Data.LongLength >= LargeFileBytes)
+                LargeFiles.Set(key, file, new MemoryCacheEntryOptions { Size = file.Data.LongLength, AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10) });
+        }
         // Stored SVGs are rendered as images only: forbid scripts and external loads.
         Response.Headers.ContentSecurityPolicy = "default-src 'none'; style-src 'unsafe-inline'; img-src data:";
         Response.Headers.XContentTypeOptions = "nosniff";
         var etag = new Microsoft.Net.Http.Headers.EntityTagHeaderValue($"\"{id:N}-{file.LastModified.UtcTicks:x}{(thumbnail ? "-t" : "")}\"");
-        return File(file.Data, file.ContentType, file.LastModified, etag);
+        return File(file.Data, file.ContentType, file.LastModified, etag, enableRangeProcessing: true);
     }
 }

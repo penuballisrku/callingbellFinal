@@ -11,3 +11,6 @@ dist/
 ## Local
 *.log
 .env.local
+
+## GeoIP database (download with database/tools/download_geoip.ps1; licences don't allow committing it)
+*.mmdb

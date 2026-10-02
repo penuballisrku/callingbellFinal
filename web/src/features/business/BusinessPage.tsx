@@ -16,6 +16,7 @@ import DirectionsOutlined from '@mui/icons-material/DirectionsOutlined';
 import ScheduleOutlined from '@mui/icons-material/ScheduleOutlined';
 import VerifiedUserOutlined from '@mui/icons-material/VerifiedUserOutlined';
 import CloseRounded from '@mui/icons-material/CloseRounded';
+import PlayArrowRounded from '@mui/icons-material/PlayArrowRounded';
 import { useSnackbar } from 'notistack';
 import { api, errorMessage } from '@/lib/api';
 import { ago, date, hhmm, money, number } from '@/lib/format';
@@ -27,6 +28,7 @@ import { AvailabilityBadge, EmptyState, ErrorState, Img, Panel, Rating, Stars, V
 import { BookingDialog, EnquiryDialog, ReviewDialog, useRequireLogin } from './Dialogs';
 
 export default function BusinessPage() {
+  const platforms = useLookup('SocialPlatform');
   const { slug = '' } = useParams();
   const queryClient = useQueryClient();
   const { enqueueSnackbar } = useSnackbar();
@@ -161,6 +163,12 @@ export default function BusinessPage() {
               </Panel>
             )}
 
+            {b.videos?.length > 0 && (
+              <Panel title="Videos" subtitle={`${b.videos.length} video${b.videos.length === 1 ? '' : 's'} from ${c.name}`}>
+                <div className="grid gap-4 sm:grid-cols-2">{b.videos.map((v) => <ProfileVideo key={v.id} title={v.title} src={v.videoUrl} poster={v.posterUrl} />)}</div>
+              </Panel>
+            )}
+
             <ReviewsSection b={b} totalReviews={totalReviews} onWrite={() => requireLogin(() => setReviewOpen(true))} />
           </div>
 
@@ -178,6 +186,16 @@ export default function BusinessPage() {
                   {b.phoneNumber && <Row icon={<CallRounded fontSize="small" />}>{b.phoneNumber}</Row>}
                   {b.email && <Row icon={<MailOutlineRounded fontSize="small" />}><a href={`mailto:${b.email}`} className="break-all hover:underline">{b.email}</a></Row>}
                   {b.website && <Row icon={<LanguageOutlined fontSize="small" />}><a href={b.website} target="_blank" rel="noopener" className="break-all hover:underline">{b.website.replace(/^https?:\/\//, '')}</a></Row>}
+                  {b.socialLinks?.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-1" aria-label="Social media">
+                      {b.socialLinks.map((l) => (
+                        <a key={l.platform} href={l.url} target="_blank" rel="noopener nofollow ugc"
+                          className="rounded-md border border-line px-2 py-1 text-xs font-semibold text-ink-2 transition-colors hover:border-line-strong hover:bg-subtle">
+                          {platforms.find((p) => p.code === l.platform)?.name ?? l.platform}
+                        </a>
+                      ))}
+                    </div>
+                  )}
                   <Row icon={<PlaceOutlined fontSize="small" />}>{b.addressLine}, {c.area}, {c.city} {b.pincode}{b.landmark && <span className="block text-muted">{b.landmark}</span>}</Row>
                 </div>
                 {mapUrl && <Button fullWidth startIcon={<DirectionsOutlined />} href={mapUrl} target="_blank" rel="noopener">Get directions</Button>}
@@ -306,6 +324,27 @@ const Fact = ({ label, value }: { label: string; value: string }) => (
 const Row = ({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) => (
   <div className="flex gap-2.5"><span className="mt-0.5 text-faint">{icon}</span><div className="min-w-0">{children}</div></div>
 );
+
+/** Poster first; the video streams only after the visitor presses play. */
+function ProfileVideo({ title, src, poster }: { title: string; src: string; poster?: string | null }) {
+  const [play, setPlay] = useState(false);
+  return (
+    <figure className="min-w-0">
+      <div className="overflow-hidden rounded-lg border border-line bg-black">
+        {play ? <video src={src} poster={poster ?? undefined} controls autoPlay playsInline className="aspect-video w-full" aria-label={title} />
+          : (
+            <button type="button" onClick={() => setPlay(true)} className="group relative block w-full" aria-label={`Play video: ${title}`}>
+              <Img src={poster} alt="" aspect="16/9" rounded="rounded-none" className="w-full opacity-90" fallbackText={title} />
+              <span className="absolute inset-0 flex items-center justify-center">
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/95 text-navy shadow-lg transition-transform group-hover:scale-105"><PlayArrowRounded /></span>
+              </span>
+            </button>
+          )}
+      </div>
+      <figcaption className="mt-1.5 truncate text-sm font-medium">{title}</figcaption>
+    </figure>
+  );
+}
 
 function BusinessSkeleton() {
   return (

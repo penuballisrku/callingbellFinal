@@ -9,6 +9,9 @@ const compact = new Intl.NumberFormat('en-IN', { notation: 'compact', maximumFra
 
 export const money = (v?: number | null) => (v === null || v === undefined ? '' : v === 0 ? 'Free' : inr.format(v));
 export const moneyExact = (v: number) => inr.format(v);
+const inrPaise = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+/** Exact amount for payments and invoices: keeps paise when present (₹2,948.82), whole rupees otherwise (₹2,499). */
+export const moneyPrecise = (v: number) => (Number.isInteger(v) ? inr.format(v) : inrPaise.format(v));
 export const number = (v: number) => num.format(v);
 export const compactNumber = (v: number) => compact.format(v);
 /** Indian short scale for revenue: ₹4.2L, ₹1.3Cr */

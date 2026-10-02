@@ -197,10 +197,15 @@ public sealed record BusinessDetailDto
     public IReadOnlyList<ServiceDto> Services { get; init; } = [];
     public IReadOnlyList<HoursDto> Hours { get; init; } = [];
     public IReadOnlyList<ImageDto> Images { get; init; } = [];
+    public IReadOnlyList<VideoDto> Videos { get; init; } = [];
+    public IReadOnlyList<SocialLinkDto> SocialLinks { get; init; } = [];
     public IReadOnlyDictionary<int, int> RatingBreakdown { get; init; } = new Dictionary<int, int>();
     public IReadOnlyList<ReviewDto> RecentReviews { get; init; } = [];
     public IReadOnlyList<BusinessCardDto> Similar { get; init; } = [];
 }
+
+public sealed record VideoDto(Guid Id, string Title, string VideoUrl, string? PosterUrl, int? DurationSeconds);
+public sealed record SocialLinkDto(string Platform, string Url);
 
 public sealed record GetBusinessBySlugQuery(string Slug) : IRequest<BusinessDetailDto>;
 
@@ -241,6 +246,16 @@ public sealed class GetBusinessBySlugHandler(IUnitOfWork uow, ICurrentUser user)
             .Select(i => new ImageDto(i.Id, i.ImageUrl, i.ThumbnailUrl, i.MobileImageUrl, i.DesktopImageUrl, i.AltText, i.Caption, i.IsPrimary))
             .ToListAsync(ct);
 
+        var videos = await uow.Repository<BusinessVideo>().QueryNoTracking()
+            .Where(v => v.BusinessId == card.Id).OrderBy(v => v.SortOrder)
+            .Select(v => new VideoDto(v.Id, v.Title, v.VideoUrl, v.PosterUrl, v.DurationSeconds))
+            .ToListAsync(ct);
+        var platformOrder = await uow.Repository<LookupValue>().QueryNoTracking()
+            .Where(l => l.LookupType == LookupTypes.SocialPlatform).ToDictionaryAsync(l => l.Code, l => l.SortOrder, ct);
+        var socialLinks = (await uow.Repository<BusinessSocialLink>().QueryNoTracking().Where(l => l.BusinessId == card.Id)
+                .Select(l => new SocialLinkDto(l.Platform, l.Url)).ToListAsync(ct))
+            .OrderBy(l => platformOrder.GetValueOrDefault(l.Platform, 99)).ToList();
+
         var published = uow.Repository<Review>().QueryNoTracking().Where(r => r.BusinessId == card.Id && r.Status == ReviewStatuses.Published);
         var breakdownRows = await published.GroupBy(r => r.Rating).Select(g => new { Rating = (int)g.Key, Count = g.Count() }).ToListAsync(ct);
         var breakdown = Enumerable.Range(1, 5).ToDictionary(i => i, i => breakdownRows.FirstOrDefault(x => x.Rating == i)?.Count ?? 0);
@@ -260,7 +275,7 @@ public sealed class GetBusinessBySlugHandler(IUnitOfWork uow, ICurrentUser user)
             Latitude = info.Latitude, Longitude = info.Longitude, PhoneNumber = info.PhoneNumber, WhatsAppNumber = info.WhatsAppNumber,
             Email = info.Email, Website = info.Website, YearEstablished = info.YearEstablished, TeamSize = info.TeamSize, Languages = info.Languages,
             VerifiedOn = info.VerifiedOn, CategoryColor = info.CategoryColor, CitySlug = info.CitySlug, PlanName = info.PlanName,
-            IsFavorite = isFavorite, Services = services, Hours = hours, Images = images, RatingBreakdown = breakdown,
+            IsFavorite = isFavorite, Services = services, Hours = hours, Images = images, Videos = videos, SocialLinks = socialLinks, RatingBreakdown = breakdown,
             RecentReviews = recent, Similar = similar
         };
     }

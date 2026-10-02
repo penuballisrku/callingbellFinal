@@ -78,7 +78,7 @@ export function AuthShell({ title, subtitle, children }: { title: string; subtit
         <div className="rounded-2xl bg-navy p-10 text-white">
           <p className="text-sm font-semibold uppercase tracking-[0.12em] text-accent">Calling Bell</p>
           <h2 className="mt-3 text-3xl font-bold leading-tight">India's real-time local business network.</h2>
-          <ul className="mt-6 space-y-3 text-[15px] text-[#CBD5E1]">
+          <ul className="mt-6 space-y-3 text-[15px] text-on-navy-muted">
             <li>• See who's available right now - call, chat or book instantly</li>
             <li>• Verified professionals with genuine customer reviews</li>
             <li>• Businesses get real-time leads and a booking calendar</li>

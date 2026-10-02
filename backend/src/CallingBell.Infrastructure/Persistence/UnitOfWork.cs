@@ -22,4 +22,15 @@ internal sealed class UnitOfWork(ApplicationDbContext context) : IUnitOfWork
         (IRepository<T>)_repositories.GetOrAdd(typeof(T), _ => new Repository<T>(context));
 
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) => context.SaveChangesAsync(cancellationToken);
+
+    // SQL retries are enabled, so a user transaction must run inside the execution strategy.
+    public Task<T> ExecuteInTransactionAsync<T>(Func<CancellationToken, Task<T>> work, CancellationToken cancellationToken = default) =>
+        context.Database.CreateExecutionStrategy().ExecuteAsync(async ct =>
+        {
+            context.ChangeTracker.Clear(); // a retry starts from a clean slate
+            await using var transaction = await context.Database.BeginTransactionAsync(ct);
+            var result = await work(ct);
+            await transaction.CommitAsync(ct);
+            return result;
+        }, cancellationToken);
 }

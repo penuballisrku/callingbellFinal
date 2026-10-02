@@ -74,6 +74,38 @@ async function request<T>(method: string, url: string, body?: unknown, retry = t
   return payload;
 }
 
+/** Multipart upload with progress (fetch has no upload progress events, so this uses XHR). */
+function uploadOnce<T>(url: string, form: FormData, onProgress?: (fraction: number) => void, signal?: AbortSignal): Promise<{ status: number; payload: ApiEnvelope<T> | null }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    const token = useAuth.getState().accessToken;
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.setRequestHeader('Accept', 'application/json');
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress?.(e.loaded / e.total); };
+    xhr.onload = () => {
+      let payload: ApiEnvelope<T> | null = null;
+      try { payload = JSON.parse(xhr.responseText) as ApiEnvelope<T>; } catch { /* non-JSON */ }
+      resolve({ status: xhr.status, payload });
+    };
+    xhr.onerror = () => reject(new ApiError('Upload failed. Check your connection and try again.', 0));
+    xhr.onabort = () => reject(new ApiError('Upload cancelled.', 499));
+    signal?.addEventListener('abort', () => xhr.abort());
+    xhr.send(form);
+  });
+}
+
+async function upload<T>(url: string, form: FormData, onProgress?: (fraction: number) => void, signal?: AbortSignal): Promise<ApiEnvelope<T>> {
+  let res = await uploadOnce<T>(url, form, onProgress, signal);
+  if (res.status === 401 && (await refreshSession())) res = await uploadOnce<T>(url, form, onProgress, signal);
+  if (res.status < 200 || res.status >= 300 || !res.payload?.success) {
+    const fallback = res.status === 413 ? 'This file is too large to upload.' : 'Upload failed. Please try again.';
+    const fieldError = res.payload?.errors ? Object.values(res.payload.errors)[0]?.[0] : undefined;
+    throw new ApiError(fieldError ?? res.payload?.message ?? fallback, res.status, res.payload?.errors);
+  }
+  return res.payload;
+}
+
 export const api = {
   get: async <T>(url: string, params?: Query) => (await request<T>('GET', url + qs(params))).data,
   paged: async <T>(url: string, params?: Query): Promise<Paged<T>> => {
@@ -84,6 +116,8 @@ export const api = {
   post: async <T>(url: string, body?: unknown) => request<T>('POST', url, body ?? {}),
   put: async <T>(url: string, body?: unknown) => request<T>('PUT', url, body ?? {}),
   patch: async <T>(url: string, body?: unknown) => request<T>('PATCH', url, body ?? {}),
+  del: async <T>(url: string) => request<T>('DELETE', url),
+  upload,
 };
 
 export const errorMessage = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong. Please try again.');

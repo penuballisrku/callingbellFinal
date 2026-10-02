@@ -25,6 +25,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<BusinessService> BusinessServices => Set<BusinessService>();
     public DbSet<BusinessHour> BusinessHours => Set<BusinessHour>();
     public DbSet<BusinessImage> BusinessImages => Set<BusinessImage>();
+    public DbSet<BusinessVideo> BusinessVideos => Set<BusinessVideo>();
+    public DbSet<BusinessSocialLink> BusinessSocialLinks => Set<BusinessSocialLink>();
     public DbSet<BusinessDailyStat> BusinessDailyStats => Set<BusinessDailyStat>();
     public DbSet<PlatformDailyStat> PlatformDailyStats => Set<PlatformDailyStat>();
     public DbSet<Review> Reviews => Set<Review>();
@@ -35,7 +37,9 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<BusinessSubscription> BusinessSubscriptions => Set<BusinessSubscription>();
     public DbSet<Advertisement> Advertisements => Set<Advertisement>();
     public DbSet<Banner> Banners => Set<Banner>();
+    public DbSet<MarketingContent> MarketingContent => Set<MarketingContent>();
     public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<PaymentOrder> PaymentOrders => Set<PaymentOrder>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();

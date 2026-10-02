@@ -18,7 +18,8 @@ public sealed record AreaDto(Guid Id, string Name, string Slug, string Pincode);
 public sealed record CityDto(Guid Id, string Name, string Slug, string State, string? ImageUrl, bool IsPopular, int BusinessCount, IReadOnlyList<AreaDto> Areas);
 public sealed record LookupDto(string Code, string Name, string? Description, string? ColorHex, int SortOrder);
 public sealed record PlanDto(Guid Id, string Code, string Name, string? Tagline, decimal MonthlyPrice, decimal AnnualPrice, int LeadCredits,
-    bool IncludesFeaturedListing, bool IncludesPrioritySupport, IReadOnlyList<string> Features, string? ImageUrl, string? BadgeColor, bool IsPopular);
+    bool IncludesFeaturedListing, bool IncludesPrioritySupport, IReadOnlyList<string> Features, string? ImageUrl, string? BadgeColor, bool IsPopular,
+    int MaxServices, int MaxImages);
 public sealed record BannerDto(Guid Id, string Title, string? Subtitle, string? CtaText, string? LinkUrl, string ImageUrl,
     string? MobileImageUrl, string? DesktopImageUrl, string? AltText, string Placement);
 
@@ -120,7 +121,8 @@ public sealed class GetPlansHandler(IUnitOfWork uow) : IRequestHandler<GetPlansQ
 
     public static PlanDto ToDto(SubscriptionPlan p) => new(p.Id, p.Code, p.Name, p.Tagline, p.MonthlyPrice, p.AnnualPrice, p.LeadCredits,
         p.IncludesFeaturedListing, p.IncludesPrioritySupport,
-        p.Features.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), p.ImageUrl, p.BadgeColor, p.IsPopular);
+        p.Features.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), p.ImageUrl, p.BadgeColor, p.IsPopular,
+        p.MaxServices, p.MaxImages);
 }
 
 // ---------- Banners ----------

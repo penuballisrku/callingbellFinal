@@ -120,7 +120,7 @@ export function AdminCities() {
             <article key={c.id} className={`card overflow-hidden ${c.isActive ? '' : 'opacity-75'}`}>
               <div className="relative">
                 <Img src={c.imageUrl} alt={`${c.name} skyline`} aspect="16/6" rounded="rounded-none" className="w-full" fallbackText={c.name} />
-                <div className="absolute bottom-3 left-4 text-white"><div className="text-lg font-bold">{c.name}</div><div className="text-xs text-[#CBD5E1]">{c.state} · {c.areaCount} areas</div></div>
+                <div className="absolute bottom-3 left-4 text-white"><div className="text-lg font-bold">{c.name}</div><div className="text-xs text-on-navy-muted">{c.state} · {c.areaCount} areas</div></div>
                 {!c.isActive && <span className="absolute right-3 top-3 rounded-md bg-surface px-2 py-0.5 text-xs font-semibold">Launching soon</span>}
               </div>
               <div className="grid grid-cols-3 divide-x divide-line border-b border-line text-center">

@@ -84,6 +84,68 @@ public class Banner : AuditableEntity
     public bool IsActive { get; set; } = true;
 }
 
+/// <summary>
+/// A block of marketing-page content (hero, overview, offering, highlight, gallery photo, video, testimonial, FAQ...),
+/// grouped by <see cref="PageKey"/> and <see cref="SectionKey"/>. Testimonials link to a real <see cref="Business"/>.
+/// </summary>
+public class MarketingContent : AuditableEntity
+{
+    public string Code { get; set; } = string.Empty;
+    public string PageKey { get; set; } = string.Empty;
+    public string SectionKey { get; set; } = string.Empty;
+    public string? Eyebrow { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string? Subtitle { get; set; }
+    public string? Body { get; set; }
+    public string? IconKey { get; set; }
+    public string? ImageUrl { get; set; }
+    public string? ThumbnailUrl { get; set; }
+    public string? MobileImageUrl { get; set; }
+    public string? DesktopImageUrl { get; set; }
+    public string? AltText { get; set; }
+    public string? VideoUrl { get; set; }
+    public string? MediaCredit { get; set; }
+    public string? MediaCreditUrl { get; set; }
+    public string? CtaText { get; set; }
+    public string? LinkUrl { get; set; }
+    public Guid? BusinessId { get; set; }
+    public int SortOrder { get; set; }
+    public bool IsActive { get; set; } = true;
+
+    public Business? Business { get; set; }
+}
+
+/// <summary>
+/// One online checkout attempt for a subscription plan. When the gateway confirms payment it activates a
+/// <see cref="BusinessSubscription"/> and writes a <see cref="Payment"/> ledger row (invoice).
+/// </summary>
+public class PaymentOrder : AuditableEntity
+{
+    public string OrderNumber { get; set; } = string.Empty;
+    public Guid BusinessId { get; set; }
+    public Guid PlanId { get; set; }
+    public string BillingCycle { get; set; } = "Monthly";
+    public decimal Amount { get; set; }
+    public decimal TaxAmount { get; set; }
+    public decimal TotalAmount { get; set; }
+    public string Currency { get; set; } = "INR";
+    public string Gateway { get; set; } = string.Empty;
+    public string? GatewayOrderId { get; set; }
+    public string? GatewayPaymentId { get; set; }
+    public string? PaymentMethod { get; set; }
+    public string Status { get; set; } = "Created";
+    public string? FailureReason { get; set; }
+    public string? Gstin { get; set; }
+    public DateTimeOffset? PaidOn { get; set; }
+    public Guid? SubscriptionId { get; set; }
+    public string? InvoiceNumber { get; set; }
+    /// <summary>Optimistic concurrency: the browser callback and the webhook may confirm the same payment at once.</summary>
+    public byte[] RowVersion { get; set; } = [];
+
+    public Business Business { get; set; } = null!;
+    public SubscriptionPlan Plan { get; set; } = null!;
+}
+
 /// <summary>Platform revenue ledger: subscriptions, advertising, booking commission and lead credits.</summary>
 public class Payment : AuditableEntity
 {

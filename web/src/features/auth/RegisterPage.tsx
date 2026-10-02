@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Alert, Button, MenuItem, TextField, ToggleButton, ToggleButtonGroup } from '@mui/material';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { useCities, useDocumentTitle } from '@/lib/hooks';
-import { homeFor, useAuth } from '@/stores/auth';
+import { homeFor, isOwner, useAuth } from '@/stores/auth';
+import { EmptyState } from '@/components/ui';
+import BusinessWizard from '@/features/onboarding/BusinessWizard';
 import type { AuthResult } from '@/lib/types';
 import { AuthShell } from './LoginPage';
 import { GoogleSignInButton } from './GoogleSignInButton';
@@ -22,6 +24,23 @@ const schema = z.object({
 type Form = z.infer<typeof schema>;
 
 export default function RegisterPage() {
+  const [params] = useSearchParams();
+  // Decide once, on arrival: the wizard signs the new owner in part-way through submitting (before payment and uploads),
+  // and must not be swapped out for a redirect when that happens.
+  const [user] = useState(() => useAuth.getState().user);
+  if (params.get('type') !== 'business') return <CustomerRegister />;
+  // Business sign-up: a multi-step wizard that creates the account and the business profile together.
+  if (!user) return <BusinessWizard mode="register" />;
+  if (isOwner(user)) return <Navigate to="/business/setup" replace />;
+  return (
+    <div className="container-page py-16">
+      <EmptyState title="You're signed in with a customer account" message="Sign out and create a business account to list your business on Calling Bell."
+        action={<Button component={Link} to="/" variant="outlined">Back to home</Button>} />
+    </div>
+  );
+}
+
+function CustomerRegister() {
   useDocumentTitle('Create account');
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -53,7 +72,8 @@ export default function RegisterPage() {
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
         {error && <Alert severity="error">{error}</Alert>}
         <Controller control={control} name="accountType" render={({ field }) => (
-          <ToggleButtonGroup exclusive fullWidth size="small" value={field.value} onChange={(_, v) => v && field.onChange(v)} aria-label="Account type">
+          <ToggleButtonGroup exclusive fullWidth size="small" value={field.value} aria-label="Account type"
+            onChange={(_, v) => { if (v === 'BusinessOwner') navigate('/register?type=business'); else if (v) field.onChange(v); }}>
             <ToggleButton value="Customer">I'm looking for services</ToggleButton>
             <ToggleButton value="BusinessOwner">I own a business</ToggleButton>
           </ToggleButtonGroup>

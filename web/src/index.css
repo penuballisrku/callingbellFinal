@@ -25,7 +25,20 @@
   /* Brand navy surfaces (hero, footer, sidebar) stay dark in both modes. */
   --cb-navy: #0b1220;
   --cb-navy-2: #021223;
+  --cb-navy-line: rgba(255, 255, 255, 0.08);
+  /* Text on navy surfaces (identical in both modes, since navy surfaces stay dark). */
+  --cb-on-navy: #e2e8f0;
+  --cb-on-navy-muted: #bac5d4;
+  --cb-on-navy-faint: #74839a;
   --cb-shadow: rgba(16, 24, 40, 0.06);
+
+  /* Elevation: hairline-soft, layered shadows - never heavy. */
+  --cb-shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --cb-shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+  --cb-shadow-md: 0 2px 4px -2px rgba(16, 24, 40, 0.05), 0 6px 16px -4px rgba(16, 24, 40, 0.08);
+  --cb-shadow-lg: 0 4px 8px -4px rgba(16, 24, 40, 0.06), 0 16px 32px -8px rgba(16, 24, 40, 0.12);
+  /* Focus ring halo (paired with an accent border/outline). */
+  --cb-ring: color-mix(in srgb, var(--cb-accent) 28%, transparent);
 
   --cb-success: #067647;
   --cb-success-soft: #ecfdf3;
@@ -45,20 +58,25 @@
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --cb-canvas: #0a0e15;
-  --cb-surface: #111723;
-  --cb-subtle: #1a2130;
+  --cb-canvas: #080c14;
+  --cb-surface: #0f1522;
+  --cb-subtle: #171f2e;
   --cb-ink: #f2f4f7;
   --cb-ink-2: #cdd5df;
   --cb-muted: #98a2b3;
   --cb-faint: #6b778a;
-  --cb-line: #232c3b;
-  --cb-line-strong: #364256;
+  --cb-line: #1f2838;
+  --cb-line-strong: #334056;
   --cb-inverse: #f2f4f7;
   --cb-on-inverse: #0b1220;
-  --cb-navy: #070a10;
-  --cb-navy-2: #05080d;
+  --cb-navy: #060a11;
+  --cb-navy-2: #04070d;
   --cb-shadow: rgba(0, 0, 0, 0.35);
+  --cb-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --cb-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.25);
+  --cb-shadow-md: 0 2px 4px -2px rgba(0, 0, 0, 0.4), 0 8px 20px -4px rgba(0, 0, 0, 0.45);
+  --cb-shadow-lg: 0 4px 8px -4px rgba(0, 0, 0, 0.45), 0 20px 40px -8px rgba(0, 0, 0, 0.55);
+  --cb-ring: color-mix(in srgb, var(--cb-accent) 35%, transparent);
 
   --cb-success: #75e0a7;
   --cb-success-soft: #0c2a1d;
@@ -97,6 +115,14 @@
   --color-on-inverse: var(--cb-on-inverse);
   --color-navy: var(--cb-navy);
   --color-navy-2: var(--cb-navy-2);
+  --color-navy-line: var(--cb-navy-line);
+  --color-on-navy: var(--cb-on-navy);
+  --color-on-navy-muted: var(--cb-on-navy-muted);
+  --color-on-navy-faint: var(--cb-on-navy-faint);
+  --shadow-xs: var(--cb-shadow-xs);
+  --shadow-sm: var(--cb-shadow-sm);
+  --shadow-md: var(--cb-shadow-md);
+  --shadow-lg: var(--cb-shadow-lg);
   --color-accent: var(--cb-accent);
   --color-accent-soft: var(--cb-accent-soft);
   --color-accent-ink: var(--cb-accent-ink);
@@ -112,15 +138,26 @@
 }
 
 @layer base {
-  html { -webkit-text-size-adjust: 100%; }
+  html { -webkit-text-size-adjust: 100%; text-rendering: optimizeLegibility; }
   body {
     background: var(--cb-canvas);
     color: var(--cb-ink);
     font-family: var(--font-sans);
     font-feature-settings: 'cv11', 'ss01';
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
+  ::selection { background: color-mix(in srgb, var(--cb-accent) 30%, transparent); color: var(--cb-ink); }
   :focus-visible { outline: 2px solid var(--cb-accent); outline-offset: 2px; }
+  /* MUI inputs draw their own focus ring; avoid a doubled outline. */
+  .MuiInputBase-input:focus-visible { outline: none; }
+  * { scrollbar-width: thin; scrollbar-color: var(--cb-line-strong) transparent; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--cb-line-strong); border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
   /* Light artwork is toned down slightly so it doesn't glare on dark surfaces. */
   :root[data-theme='dark'] img { filter: brightness(0.92); }
 }
@@ -128,9 +165,30 @@
 @layer components {
   .container-page { width: 100%; max-width: 1240px; margin-inline: auto; padding-inline: 16px; }
   @media (min-width: 768px) { .container-page { padding-inline: 24px; } }
-  .card { background: var(--cb-surface); border: 1px solid var(--cb-line); border-radius: 12px; }
-  .scroll-row { display: grid; grid-auto-flow: column; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; scrollbar-width: thin; }
+  .card { background: var(--cb-surface); border: 1px solid var(--cb-line); border-radius: 12px; box-shadow: var(--cb-shadow-xs); }
+  /* Clickable cards lift slightly on hover - border + soft shadow, no movement (avoids layout shift). */
+  a.card, button.card { transition: border-color 150ms ease, box-shadow 150ms ease; }
+  a.card:hover, button.card:hover { border-color: var(--cb-line-strong); box-shadow: var(--cb-shadow-md); }
+  .eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--cb-muted); }
+  .tabular { font-variant-numeric: tabular-nums; }
+  /* Rails get a little vertical room so card hover shadows aren't clipped. */
+  .scroll-row { display: grid; grid-auto-flow: column; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory; padding-block: 4px 12px; margin-block: -4px -12px; scrollbar-width: thin; }
   .scroll-row > * { scroll-snap-align: start; }
   .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 }
+
+/* Toasts (notistack) follow the design system instead of the library defaults. */
+.notistack-MuiContent {
+  border-radius: 10px !important;
+  font-family: var(--font-sans) !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  padding: 8px 16px !important;
+  box-shadow: var(--cb-shadow-lg) !important;
+}
+.notistack-MuiContent-default { background: var(--cb-inverse) !important; color: var(--cb-on-inverse) !important; }
+.notistack-MuiContent-success { background: #067647 !important; }
+.notistack-MuiContent-error { background: #b42318 !important; }
+.notistack-MuiContent-warning { background: #b54708 !important; }
+.notistack-MuiContent-info { background: #175cd3 !important; }

@@ -9,6 +9,7 @@ import { useNotificationStream } from '@/lib/realtime';
 import { homeFor, isAdmin, isOwner, useAuth } from '@/stores/auth';
 import { useCity } from '@/stores/city';
 import { Logo, NotificationBell, ThemeMenu, UserMenu } from './Shared';
+import { CountryCode, GeoAttribution } from '@/components/VisitorCountry';
 
 export function CitySelect({ size = 'small' }: { size?: 'small' | 'medium' }) {
   const { data: cities } = useCities();
@@ -32,7 +33,7 @@ function HeaderSearch() {
     <form className="relative mx-4 hidden max-w-md flex-1 md:block" onSubmit={(e) => { e.preventDefault(); navigate(`/search?q=${encodeURIComponent(q)}`); }}>
       <SearchRounded sx={{ position: 'absolute', left: 10, top: 9, fontSize: 20, color: 'var(--cb-faint)' }} />
       <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search electricians, doctors, salons…" aria-label="Search"
-        className="h-[38px] w-full rounded-lg border border-line bg-surface pl-9 pr-3 text-sm outline-none focus:border-line-strong" />
+        className="h-[38px] w-full rounded-lg border border-line bg-subtle pl-9 pr-3 text-sm outline-none transition-[border-color,box-shadow,background-color] placeholder:text-faint hover:border-line-strong focus:border-accent focus:bg-surface focus:shadow-[0_0_0_3px_var(--cb-ring)]" />
     </form>
   );
 }
@@ -40,7 +41,7 @@ function HeaderSearch() {
 const nav = [
   { to: '/categories', label: 'Categories' },
   { to: '/search?availability=now', label: 'Available now' },
-  { to: '/pricing', label: 'For business' },
+  { to: '/list-your-business', label: 'For business' },
 ];
 
 export default function CustomerLayout() {
@@ -52,13 +53,16 @@ export default function CustomerLayout() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-40 border-b border-line bg-surface/95 backdrop-blur">
+      <header className="sticky top-0 z-40 border-b border-line bg-surface/85 backdrop-blur-md backdrop-saturate-150">
         <div className="container-page flex h-16 items-center gap-3">
-          <Logo />
+          <div className="flex shrink-0 items-start gap-1">
+            <Logo />
+            <CountryCode />
+          </div>
           <HeaderSearch />
           <nav className="hidden items-center gap-1 lg:flex" aria-label="Main">
             {nav.map((n) => (
-              <NavLink key={n.to} to={n.to} className={({ isActive }) => `rounded-lg px-3 py-2 text-sm font-medium hover:bg-subtle ${isActive ? 'text-ink' : 'text-ink-2'}`}>{n.label}</NavLink>
+              <NavLink key={n.to} to={n.to} className={({ isActive }) => `rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-subtle hover:text-ink ${isActive ? 'bg-subtle text-ink' : 'text-muted'}`}>{n.label}</NavLink>
             ))}
           </nav>
           <div className="hidden sm:block"><CitySelect /></div>
@@ -101,11 +105,11 @@ export default function CustomerLayout() {
 function Footer() {
   const cols = [
     { title: 'Discover', links: [['Electricians', '/search?sub=electrical'], ['Doctors', '/search?sub=doctors'], ['Salons', '/search?sub=beauty-salons'], ['Lawyers', '/search?sub=lawyers'], ['All categories', '/categories']] },
-    { title: 'For business', links: [['List your business', '/register?type=business'], ['Plans & pricing', '/pricing'], ['Business sign in', '/login']] },
+    { title: 'For business', links: [['List your business', '/list-your-business'], ['Plans & pricing', '/pricing'], ['Business sign in', '/login']] },
     { title: 'Company', links: [['About Calling Bell', '/'], ['Trust & safety', '/'], ['Contact support', '/']] },
   ];
   return (
-    <footer className="mt-16 bg-navy text-[#CBD5E1]">
+    <footer className="mt-16 bg-navy text-on-navy-muted">
       <div className="container-page grid gap-10 py-12 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
         <div>
           <Logo light />
@@ -114,14 +118,14 @@ function Footer() {
         {cols.map((c) => (
           <div key={c.title}>
             <h3 className="mb-3 text-sm font-semibold text-white">{c.title}</h3>
-            <ul className="space-y-2 text-sm">{c.links.map(([label, to]) => <li key={label}><Link to={to!} className="hover:text-white">{label}</Link></li>)}</ul>
+            <ul className="space-y-2 text-sm">{c.links.map(([label, to]) => <li key={label}><Link to={to!} className="transition-colors hover:text-white">{label}</Link></li>)}</ul>
           </div>
         ))}
       </div>
-      <div className="border-t border-white/10">
+      <div className="border-t border-navy-line">
         <div className="container-page flex flex-col gap-2 py-5 text-xs sm:flex-row sm:justify-between">
           <span>© {new Date().getFullYear()} Calling Bell Technologies Pvt. Ltd.</span>
-          <span>Privacy · Terms · Grievance officer</span>
+          <span className="flex flex-wrap gap-x-3 gap-y-1"><span>Privacy · Terms · Grievance officer</span><GeoAttribution className="hover:text-white" /></span>
         </div>
       </div>
     </footer>

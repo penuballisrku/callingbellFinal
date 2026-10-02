@@ -76,7 +76,20 @@ USING (VALUES
     (N'PaymentType', N'Subscription',      N'Subscription',       NULL, N'#0B1220', 1),
     (N'PaymentType', N'Advertisement',     N'Advertising',        NULL, N'#F4A62C', 2),
     (N'PaymentType', N'BookingCommission', N'Booking Commission', NULL, N'#2E90FA', 3),
-    (N'PaymentType', N'LeadCredits',       N'Lead Credits',       NULL, N'#12B76A', 4)
+    (N'PaymentType', N'LeadCredits',       N'Lead Credits',       NULL, N'#12B76A', 4),
+
+    (N'PaymentOrderStatus', N'Created',   N'Awaiting payment', N'Checkout started, payment not completed', N'#F79009', 1),
+    (N'PaymentOrderStatus', N'Paid',      N'Paid',             N'Payment received and verified',           N'#12B76A', 2),
+    (N'PaymentOrderStatus', N'Failed',    N'Failed',           N'The payment was declined or failed',      N'#F04438', 3),
+    (N'PaymentOrderStatus', N'Cancelled', N'Cancelled',        N'Checkout was closed before paying',       N'#98A2B3', 4),
+
+    -- Social profiles a business can link. Description = example URL; its host is also the allowed domain.
+    (N'SocialPlatform', N'Instagram', N'Instagram',   N'https://www.instagram.com/yourbusiness',        N'#E4405F', 1),
+    (N'SocialPlatform', N'Facebook',  N'Facebook',    N'https://www.facebook.com/yourbusiness',         N'#1877F2', 2),
+    (N'SocialPlatform', N'YouTube',   N'YouTube',     N'https://www.youtube.com/@yourbusiness',         N'#FF0000', 3),
+    (N'SocialPlatform', N'LinkedIn',  N'LinkedIn',    N'https://www.linkedin.com/company/yourbusiness', N'#0A66C2', 4),
+    (N'SocialPlatform', N'X',         N'X (Twitter)', N'https://x.com/yourbusiness',                    N'#0F1419', 5),
+    (N'SocialPlatform', N'Pinterest', N'Pinterest',   N'https://www.pinterest.com/yourbusiness',        N'#BD081C', 6)
 ) AS s (LookupType, Code, Name, Description, ColorHex, SortOrder)
 ON t.LookupType = s.LookupType AND t.Code = s.Code
 WHEN MATCHED AND (t.Name <> s.Name OR ISNULL(t.Description, N'') <> ISNULL(s.Description, N'') OR ISNULL(t.ColorHex, N'') <> ISNULL(s.ColorHex, N'') OR t.SortOrder <> s.SortOrder)

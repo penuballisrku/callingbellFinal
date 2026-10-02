@@ -47,6 +47,7 @@ public static class LookupTypes
     public const string AdStatus = "AdStatus";
     public const string SubscriptionStatus = "SubscriptionStatus";
     public const string ServiceType = "ServiceType";
+    public const string SocialPlatform = "SocialPlatform";
 }
 
 public static class BusinessStatuses
@@ -116,4 +117,28 @@ public static class SubscriptionStatuses
 {
     public const string Active = "Active";
     public const string Trial = "Trial";
+    public const string Cancelled = "Cancelled";
+}
+
+public static class PaymentOrderStatuses
+{
+    public const string Created = "Created";
+    public const string Paid = "Paid";
+    public const string Failed = "Failed";
+    public const string Cancelled = "Cancelled";
+}
+
+public static class PlanCodes
+{
+    public const string Free = "FREE";
+}
+
+/// <summary>dbo.Media.EntityType values for business media.</summary>
+public static class MediaEntityTypes
+{
+    public const string BusinessLogo = "BusinessLogo";
+    public const string BusinessCover = "BusinessCover";
+    public const string BusinessGallery = "BusinessGallery";
+    public const string BusinessVideo = "BusinessVideo";
+    public const string BusinessVideoPoster = "BusinessVideoPoster";
 }

@@ -238,6 +238,47 @@ CREATE TABLE dbo.BusinessImages (
 );
 GO
 
+/* Promotional videos uploaded by the business (bytes in dbo.Media, EntityType 'BusinessVideo'; poster 'BusinessVideoPoster'). */
+IF OBJECT_ID('dbo.BusinessVideos','U') IS NULL
+CREATE TABLE dbo.BusinessVideos (
+    Id              uniqueidentifier NOT NULL CONSTRAINT PK_BusinessVideos PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    BusinessId      uniqueidentifier NOT NULL CONSTRAINT FK_BusinessVideos_Businesses REFERENCES dbo.Businesses(Id),
+    Title           nvarchar(150)    NOT NULL,
+    VideoUrl        nvarchar(500)    NOT NULL,
+    PosterUrl       nvarchar(500)    NULL,
+    ContentType     nvarchar(100)    NOT NULL,
+    FileSize        bigint           NOT NULL,
+    DurationSeconds int              NULL,
+    SortOrder       int              NOT NULL DEFAULT 0,
+    CreatedBy       nvarchar(450)    NULL,
+    CreatedOn       datetimeoffset   NOT NULL DEFAULT SYSDATETIMEOFFSET(),
+    ModifiedBy      nvarchar(450)    NULL,
+    ModifiedOn      datetimeoffset   NULL,
+    IsDeleted       bit              NOT NULL DEFAULT 0
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_BusinessVideos_Business' AND object_id = OBJECT_ID('dbo.BusinessVideos'))
+    CREATE INDEX IX_BusinessVideos_Business ON dbo.BusinessVideos (BusinessId, SortOrder) WHERE IsDeleted = 0;
+GO
+
+/* Social media profiles (Platform = LookupValues 'SocialPlatform'). */
+IF OBJECT_ID('dbo.BusinessSocialLinks','U') IS NULL
+CREATE TABLE dbo.BusinessSocialLinks (
+    Id          uniqueidentifier NOT NULL CONSTRAINT PK_BusinessSocialLinks PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    BusinessId  uniqueidentifier NOT NULL CONSTRAINT FK_BusinessSocialLinks_Businesses REFERENCES dbo.Businesses(Id),
+    Platform    nvarchar(32)     NOT NULL,
+    Url         nvarchar(300)    NOT NULL,
+    CreatedBy   nvarchar(450)    NULL,
+    CreatedOn   datetimeoffset   NOT NULL DEFAULT SYSDATETIMEOFFSET(),
+    ModifiedBy  nvarchar(450)    NULL,
+    ModifiedOn  datetimeoffset   NULL,
+    IsDeleted   bit              NOT NULL DEFAULT 0
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_BusinessSocialLinks_Platform' AND object_id = OBJECT_ID('dbo.BusinessSocialLinks'))
+    CREATE UNIQUE INDEX UX_BusinessSocialLinks_Platform ON dbo.BusinessSocialLinks (BusinessId, Platform) WHERE IsDeleted = 0;
+GO
+
 /* ---------- 7. Engagement: reviews, leads, bookings, favourites ---------- */
 IF OBJECT_ID('dbo.Reviews','U') IS NULL
 CREATE TABLE dbo.Reviews (
@@ -451,6 +492,81 @@ CREATE TABLE dbo.Banners (
     IsDeleted       bit              NOT NULL DEFAULT 0,
     CONSTRAINT UQ_Banners_Code UNIQUE (Code)
 );
+GO
+
+/* Online checkout attempts (Razorpay). A paid order activates a BusinessSubscription and writes a Payments ledger row. */
+IF OBJECT_ID('dbo.PaymentOrders','U') IS NULL
+CREATE TABLE dbo.PaymentOrders (
+    Id               uniqueidentifier NOT NULL CONSTRAINT PK_PaymentOrders PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    OrderNumber      nvarchar(40)     NOT NULL,
+    BusinessId       uniqueidentifier NOT NULL CONSTRAINT FK_PaymentOrders_Businesses REFERENCES dbo.Businesses(Id),
+    PlanId           uniqueidentifier NOT NULL CONSTRAINT FK_PaymentOrders_Plans REFERENCES dbo.SubscriptionPlans(Id),
+    BillingCycle     nvarchar(16)     NOT NULL,
+    Amount           decimal(12,2)    NOT NULL,
+    TaxAmount        decimal(12,2)    NOT NULL,
+    TotalAmount      decimal(12,2)    NOT NULL,
+    Currency         nvarchar(3)      NOT NULL DEFAULT N'INR',
+    Gateway          nvarchar(20)     NOT NULL,
+    GatewayOrderId   nvarchar(64)     NULL,
+    GatewayPaymentId nvarchar(64)     NULL,
+    PaymentMethod    nvarchar(32)     NULL,
+    Status           nvarchar(20)     NOT NULL DEFAULT N'Created',
+    FailureReason    nvarchar(500)    NULL,
+    Gstin            nvarchar(15)     NULL,
+    PaidOn           datetimeoffset   NULL,
+    SubscriptionId   uniqueidentifier NULL CONSTRAINT FK_PaymentOrders_Subscriptions REFERENCES dbo.BusinessSubscriptions(Id),
+    InvoiceNumber    nvarchar(32)     NULL,
+    RowVersion       rowversion       NOT NULL,
+    CreatedBy        nvarchar(450)    NULL,
+    CreatedOn        datetimeoffset   NOT NULL DEFAULT SYSDATETIMEOFFSET(),
+    ModifiedBy       nvarchar(450)    NULL,
+    ModifiedOn       datetimeoffset   NULL,
+    IsDeleted        bit              NOT NULL DEFAULT 0,
+    CONSTRAINT UQ_PaymentOrders_OrderNumber UNIQUE (OrderNumber)
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_PaymentOrders_GatewayOrder' AND object_id = OBJECT_ID('dbo.PaymentOrders'))
+    CREATE UNIQUE INDEX UX_PaymentOrders_GatewayOrder ON dbo.PaymentOrders (GatewayOrderId) WHERE GatewayOrderId IS NOT NULL;
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_PaymentOrders_Business' AND object_id = OBJECT_ID('dbo.PaymentOrders'))
+    CREATE INDEX IX_PaymentOrders_Business ON dbo.PaymentOrders (BusinessId, CreatedOn DESC);
+GO
+
+/* Marketing page content (e.g. "List your business"): text blocks, photos, videos and testimonials,
+   grouped by page and section so every word and image on marketing pages is database-driven. */
+IF OBJECT_ID('dbo.MarketingContent','U') IS NULL
+CREATE TABLE dbo.MarketingContent (
+    Id              uniqueidentifier NOT NULL CONSTRAINT PK_MarketingContent PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    Code            nvarchar(60)     NOT NULL,
+    PageKey         nvarchar(40)     NOT NULL,
+    SectionKey      nvarchar(40)     NOT NULL,
+    Eyebrow         nvarchar(80)     NULL,
+    Title           nvarchar(200)    NOT NULL,
+    Subtitle        nvarchar(400)    NULL,
+    Body            nvarchar(max)    NULL,
+    IconKey         nvarchar(40)     NULL,
+    ImageUrl        nvarchar(500)    NULL,
+    ThumbnailUrl    nvarchar(500)    NULL,
+    MobileImageUrl  nvarchar(500)    NULL,
+    DesktopImageUrl nvarchar(500)    NULL,
+    AltText         nvarchar(300)    NULL,
+    VideoUrl        nvarchar(500)    NULL,
+    MediaCredit     nvarchar(200)    NULL,
+    MediaCreditUrl  nvarchar(500)    NULL,
+    CtaText         nvarchar(60)     NULL,
+    LinkUrl         nvarchar(300)    NULL,
+    BusinessId      uniqueidentifier NULL CONSTRAINT FK_MarketingContent_Businesses REFERENCES dbo.Businesses(Id),
+    SortOrder       int              NOT NULL DEFAULT 0,
+    IsActive        bit              NOT NULL DEFAULT 1,
+    CreatedBy       nvarchar(450)    NULL,
+    CreatedOn       datetimeoffset   NOT NULL DEFAULT SYSDATETIMEOFFSET(),
+    ModifiedBy      nvarchar(450)    NULL,
+    ModifiedOn      datetimeoffset   NULL,
+    IsDeleted       bit              NOT NULL DEFAULT 0,
+    CONSTRAINT UQ_MarketingContent_Code UNIQUE (Code)
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_MarketingContent_Page' AND object_id = OBJECT_ID('dbo.MarketingContent'))
+    CREATE INDEX IX_MarketingContent_Page ON dbo.MarketingContent (PageKey, SectionKey, SortOrder) WHERE IsDeleted = 0;
 GO
 
 IF OBJECT_ID('dbo.Payments','U') IS NULL

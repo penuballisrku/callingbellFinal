@@ -108,7 +108,7 @@ export function PageHeader({ title, subtitle, actions, crumbs }: {
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }}>
         <div>
           <Typography variant="h4" component="h1">{title}</Typography>
-          {subtitle && <Typography color="text.secondary" mt={0.5}>{subtitle}</Typography>}
+          {subtitle && <Typography color="text.secondary" mt={0.75} maxWidth={720}>{subtitle}</Typography>}
         </div>
         {actions && <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>{actions}</Stack>}
       </Stack>
@@ -118,12 +118,12 @@ export function PageHeader({ title, subtitle, actions, crumbs }: {
 
 export function SectionHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
   return (
-    <div className="mb-4 flex items-end justify-between gap-4">
-      <div>
-        <h2 className="text-xl font-bold tracking-tight md:text-2xl">{title}</h2>
-        {subtitle && <p className="mt-1 text-sm text-muted md:text-base">{subtitle}</p>}
+    <div className="mb-5 flex items-end justify-between gap-4">
+      <div className="min-w-0">
+        <h2 className="text-xl font-bold tracking-[-0.02em] md:text-[26px] md:leading-tight">{title}</h2>
+        {subtitle && <p className="mt-1 text-sm text-muted md:text-[15px]">{subtitle}</p>}
       </div>
-      {action}
+      {action && <div className="shrink-0 text-ink-2 [&_a]:rounded-md [&_a]:transition-colors [&_a:hover]:text-accent-ink">{action}</div>}
     </div>
   );
 }
@@ -131,7 +131,7 @@ export function SectionHeader({ title, subtitle, action }: { title: string; subt
 export function EmptyState({ title, message, action, icon }: { title: string; message?: string; action?: ReactNode; icon?: ReactNode }) {
   return (
     <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
-      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-accent-soft text-accent-ink">{icon ?? <InboxRounded />}</div>
+      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-line bg-surface text-muted shadow-xs">{icon ?? <InboxRounded />}</div>
       <h3 className="text-base font-semibold">{title}</h3>
       {message && <p className="mt-1 max-w-md text-sm text-muted">{message}</p>}
       {action && <div className="mt-4">{action}</div>}
@@ -182,15 +182,15 @@ export function KpiCard({ kpi, hint }: { kpi: Kpi; hint?: string }) {
   const change = kpi.changePercent;
   const up = (change ?? 0) >= 0;
   return (
-    <Card>
-      <CardContent sx={{ p: 2.25, '&:last-child': { pb: 2.25 } }}>
-        <Typography variant="body2" color="text.secondary" fontWeight={500} noWrap>{kpi.label}</Typography>
-        <Typography fontSize={26} fontWeight={700} letterSpacing="-0.02em" mt={0.5}>{formatKpi(kpi)}</Typography>
-        <div className="mt-1 flex h-5 items-center gap-1 text-xs">
+    <Card sx={{ height: '100%' }}>
+      <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.25 } }}>
+        <Typography variant="body2" color="text.secondary" fontWeight={500} noWrap title={kpi.label}>{kpi.label}</Typography>
+        <Typography fontSize={28} fontWeight={700} letterSpacing="-0.025em" lineHeight={1.2} mt={1} className="tabular">{formatKpi(kpi)}</Typography>
+        <div className="mt-2 flex h-5 items-center gap-1.5 text-xs">
           {change !== null && change !== undefined ? (
             <>
-              <span className={`inline-flex items-center gap-0.5 font-semibold ${up ? 'text-success' : 'text-danger'}`}>
-                {up ? <TrendingUpRounded sx={{ fontSize: 16 }} /> : <TrendingDownRounded sx={{ fontSize: 16 }} />}
+              <span className={`tabular inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 font-semibold ${up ? 'bg-success-soft text-success' : 'bg-danger-soft text-danger'}`}>
+                {up ? <TrendingUpRounded sx={{ fontSize: 14 }} /> : <TrendingDownRounded sx={{ fontSize: 14 }} />}
                 {up ? '+' : ''}{change.toFixed(1)}%
               </span>
               <span className="hidden truncate text-muted sm:inline">{hint ?? 'vs previous 30 days'}</span>
@@ -203,7 +203,7 @@ export function KpiCard({ kpi, hint }: { kpi: Kpi; hint?: string }) {
 }
 
 export function KpiSkeletons({ count = 4 }: { count?: number }) {
-  return <>{Array.from({ length: count }, (_, i) => <Skeleton key={i} variant="rounded" height={112} />)}</>;
+  return <>{Array.from({ length: count }, (_, i) => <Skeleton key={i} variant="rounded" height={124} />)}</>;
 }
 
 export function Panel({ title, subtitle, action, children, className, noPad }: {
@@ -213,8 +213,8 @@ export function Panel({ title, subtitle, action, children, className, noPad }: {
     <section className={`card min-w-0 ${className ?? ''}`}>
       {title && (
         <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
-          <div>
-            <h3 className="text-[15px] font-semibold">{title}</h3>
+          <div className="min-w-0">
+            <h3 className="text-[15px] font-semibold tracking-[-0.005em]">{title}</h3>
             {subtitle && <p className="mt-0.5 text-xs text-muted">{subtitle}</p>}
           </div>
           {action}

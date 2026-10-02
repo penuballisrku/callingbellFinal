@@ -14,7 +14,7 @@ export function useChartTheme() {
   const mode = useResolvedMode();
   const c = chartColors(mode);
   const pick = (color: number | string | undefined, i: number) => (typeof color === 'string' ? color : c.series[color ?? i]!);
-  return { ...c, pick, surface: mode === 'dark' ? '#111723' : '#FFFFFF' };
+  return { ...c, pick };
 }
 
 function TooltipBox({ active, payload, label, money }: { active?: boolean; payload?: { name: string; value: number; color: string }[]; label?: string; money?: boolean }) {

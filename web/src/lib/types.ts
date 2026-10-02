@@ -33,11 +33,29 @@ export interface City { id: string; name: string; slug: string; state: string; i
 export interface Plan {
   id: string; code: string; name: string; tagline?: string | null; monthlyPrice: number; annualPrice: number; leadCredits: number;
   includesFeaturedListing: boolean; includesPrioritySupport: boolean; features: string[]; imageUrl?: string | null; badgeColor?: string | null; isPopular: boolean;
+  maxServices: number; maxImages: number;
 }
 export interface Banner {
   id: string; title: string; subtitle?: string | null; ctaText?: string | null; linkUrl?: string | null; imageUrl: string;
   mobileImageUrl?: string | null; desktopImageUrl?: string | null; altText?: string | null; placement: string;
 }
+
+/** Marketing page content (e.g. "List your business"), grouped by `section`. */
+export interface ContentBusiness {
+  name: string; slug: string; city: string; logoUrl?: string | null; categoryName?: string | null; averageRating: number; reviewCount: number;
+  isVerified: boolean; leads: number; bookings: number; planName?: string | null;
+}
+export interface ContentBlock {
+  code: string; section: string; eyebrow?: string | null; title: string; subtitle?: string | null; body?: string | null; iconKey?: string | null;
+  imageUrl?: string | null; thumbnailUrl?: string | null; mobileImageUrl?: string | null; desktopImageUrl?: string | null; altText?: string | null;
+  videoUrl?: string | null; mediaCredit?: string | null; mediaCreditUrl?: string | null; ctaText?: string | null; linkUrl?: string | null;
+  business?: ContentBusiness | null;
+}
+export interface BusinessGrowthStats {
+  activeBusinesses: number; verifiedBusinesses: number; cities: number; categories: number; leadsLast30Days: number;
+  bookingsCompleted: number; reviews: number; averageRating: number;
+}
+export interface MarketingPage { pageKey: string; blocks: ContentBlock[]; stats: BusinessGrowthStats }
 
 export interface BusinessCard {
   id: string; slug: string; name: string; tagline?: string | null; logoUrl?: string | null; coverImageUrl?: string | null;
@@ -68,6 +86,7 @@ export interface BusinessDetail {
   latitude?: number | null; longitude?: number | null; phoneNumber?: string | null; whatsAppNumber?: string | null; email?: string | null; website?: string | null;
   yearEstablished?: number | null; teamSize?: number | null; languages?: string | null; verifiedOn?: string | null; categoryColor?: string | null; citySlug?: string | null;
   planName?: string | null; isFavorite: boolean; services: Service[]; hours: Hours[]; images: BusinessImage[]; ratingBreakdown: Record<string, number>;
+  videos: BusinessVideo[]; socialLinks: SocialLink[];
   recentReviews: Review[]; similar: BusinessCard[];
 }
 export interface Slot { time: string; start: string; available: boolean }
@@ -102,6 +121,54 @@ export interface SubscriptionHistory { subscriptionNumber: string; planName: str
 export interface Invoice { invoiceNumber: string; paymentType: string; amount: number; taxAmount: number; totalAmount: number; paymentMode: string; status: string; paidOn: string }
 export interface OwnerSubscription { current?: SubscriptionHistory | null; currentPlanCode?: string | null; plans: Plan[]; history: SubscriptionHistory[]; invoices: Invoice[] }
 export interface OwnerAd { id: string; campaignCode: string; adType: string; title: string; description?: string | null; startDate: string; endDate: string; budget: number; amountSpent: number; impressions: number; clicks: number; ctr: number; status: string; targetCity?: string | null; targetCategory?: string | null }
+
+// ---------- Media, social links & onboarding ----------
+export interface BusinessVideo { id: string; title: string; videoUrl: string; posterUrl?: string | null; durationSeconds?: number | null }
+export interface SocialLink { platform: string; url: string }
+export type MediaKind = 'logo' | 'cover' | 'photo' | 'video';
+export interface OwnerMediaItem {
+  id: string; kind: MediaKind; url: string; thumbnailUrl?: string | null; title?: string | null; contentType?: string | null; fileSize?: number | null;
+  durationSeconds?: number | null; isPrimary: boolean; createdOn: string;
+}
+export interface MediaLimits { planName: string; maxPhotos: number; maxVideos: number; maxImageMb: number; maxVideoMb: number }
+export interface OwnerMedia { logoUrl?: string | null; coverImageUrl?: string | null; photos: OwnerMediaItem[]; videos: OwnerMediaItem[]; limits: MediaLimits }
+export interface CreatedBusiness {
+  businessId: string; slug: string; status: string; planName: string; subscriptionStatus: string;
+  /** Set when a paid plan was chosen: the business starts on Free and checkout follows. */
+  requestedPlanCode?: string | null; requestedPlanName?: string | null; billingCycle: string;
+}
+export interface PaymentConfig { enabled: boolean; gateway: string; keyId?: string | null; gstRatePercent: number }
+export interface CheckoutOrder {
+  orderId: string; orderNumber: string; gateway: string; keyId: string; gatewayOrderId: string; amountInPaise: number; currency: string;
+  planCode: string; planName: string; billingCycle: string; subtotal: number; tax: number; total: number; businessName: string;
+  prefill: { name: string; email: string; contact: string };
+}
+export interface PaymentResult {
+  orderId: string; orderNumber: string; status: 'Created' | 'Paid' | 'Failed' | 'Cancelled'; planName: string; billingCycle: string;
+  activeFrom?: string | null; activeUntil?: string | null; invoiceNumber?: string | null; total: number; paymentMethod?: string | null; failureReason?: string | null;
+}
+export interface PendingPayment { orderId: string; planCode: string; planName: string; billingCycle: string; total: number; status: string; failureReason?: string | null; createdOn: string }
+export interface BusinessRegistrationResult { auth: AuthResult; business: CreatedBusiness }
+
+export interface OwnerBusinessCard {
+  id: string; name: string; slug: string; tagline?: string | null; logoUrl?: string | null; coverImageUrl?: string | null; categoryName: string;
+  subCategoryName?: string | null; city: string; area?: string | null; status: string; verificationStatus: string; phoneNumber?: string | null;
+  email?: string | null; website?: string | null; serviceCount: number; createdOn: string;
+}
+export interface CompletionItem { key: string; label: string; hint: string; done: boolean; linkUrl: string }
+export interface ActivePlan {
+  code: string; name: string; status: string; billingCycle: string; startDate: string; endDate: string; amount: number; leadCredits: number;
+  leadsThisMonth: number; maxServices: number; maxImages: number; features: string[]; trialDaysLeft?: number | null;
+}
+export interface Activity { type: string; title: string; description: string; occurredOn: string; linkUrl?: string | null }
+export interface OwnerOverview {
+  business: OwnerBusinessCard; completion: { percent: number; completed: number; total: number; items: CompletionItem[] }; plan?: ActivePlan | null;
+  recentPhotos: OwnerMediaItem[]; videos: OwnerMediaItem[]; photoCount: number; activities: Activity[]; pendingPayment?: PendingPayment | null;
+}
+export interface AccountSettings {
+  displayName: string; email: string; phoneNumber?: string | null; hasPassword: boolean; googleLinked: boolean; createdOn: string;
+  lastLoginOn?: string | null; activeSessions: number;
+}
 
 // ---------- Admin ----------
 export interface MonthlyPoint { month: string; monthStart: string; values: Record<string, number> }

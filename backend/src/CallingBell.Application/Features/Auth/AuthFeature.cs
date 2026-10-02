@@ -9,6 +9,9 @@ public sealed record CurrentUserDto(
     string Id, string Email, string DisplayName, string? PhoneNumber, string? AvatarUrl, string UserType,
     string? CitySlug, IReadOnlyList<string> Roles, IReadOnlyList<string> Permissions);
 
+public sealed record AccountSettingsDto(string DisplayName, string Email, string? PhoneNumber, bool HasPassword, bool GoogleLinked,
+    DateTimeOffset CreatedOn, DateTimeOffset? LastLoginOn, int ActiveSessions);
+
 public sealed record AuthResultDto(string AccessToken, DateTimeOffset AccessTokenExpiresAt, string RefreshToken, CurrentUserDto User);
 
 public sealed record RegisterRequest(string DisplayName, string Email, string PhoneNumber, string Password, string AccountType, string? CitySlug);

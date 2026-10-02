@@ -1,4 +1,5 @@
 using CallingBell.Application.Common.Models;
+using CallingBell.Application.Features.Auth;
 using CallingBell.Application.Features.Businesses;
 using CallingBell.Application.Features.Engagement;
 using CallingBell.Application.Features.Notifications;
@@ -47,5 +48,31 @@ public sealed class AccountController : ApiControllerBase
     {
         await Sender.Send(new MarkNotificationsReadCommand(), ct);
         return Done();
+    }
+
+    // ---------- Settings & account management ----------
+
+    public sealed record SessionsRequest(string? CurrentRefreshToken);
+
+    [HttpGet("account")]
+    public async Task<ActionResult<ApiResponse<AccountSettingsDto>>> Account(CancellationToken ct) =>
+        Success(await Sender.Send(new GetAccountSettingsQuery(), ct));
+
+    [HttpPut("account")]
+    public async Task<ActionResult<ApiResponse<CurrentUserDto>>> UpdateAccount(UpdateAccountCommand command, CancellationToken ct) =>
+        Success(await Sender.Send(command, ct), "Account details saved");
+
+    [HttpPost("account/password"), EnableRateLimiting("auth")]
+    public async Task<ActionResult<ApiResponse<object>>> ChangePassword(ChangePasswordCommand command, CancellationToken ct)
+    {
+        await Sender.Send(command, ct);
+        return Done("Password updated");
+    }
+
+    [HttpPost("account/sessions/revoke")]
+    public async Task<ActionResult<ApiResponse<int>>> RevokeOtherSessions(SessionsRequest request, CancellationToken ct)
+    {
+        var revoked = await Sender.Send(new RevokeOtherSessionsCommand(request.CurrentRefreshToken), ct);
+        return Success(revoked, revoked == 0 ? "No other active sessions" : $"Signed out of {revoked} other session{(revoked == 1 ? "" : "s")}");
     }
 }

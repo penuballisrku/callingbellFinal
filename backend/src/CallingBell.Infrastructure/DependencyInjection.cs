@@ -1,6 +1,8 @@
 using CallingBell.Application.Common.Interfaces;
 using CallingBell.Domain.Entities;
+using CallingBell.Infrastructure.Geo;
 using CallingBell.Infrastructure.Identity;
+using CallingBell.Infrastructure.Payments;
 using CallingBell.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -46,6 +48,12 @@ public static class DependencyInjection
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.Section));
         services.Configure<GoogleAuthOptions>(configuration.GetSection(GoogleAuthOptions.Section));
         services.AddScoped<IIdentityService, IdentityService>();
+
+        services.Configure<GeoIpOptions>(configuration.GetSection(GeoIpOptions.Section));
+        services.AddSingleton<IGeoLocationService, MaxMindGeoLocationService>();
+
+        services.Configure<RazorpayOptions>(configuration.GetSection(RazorpayOptions.Section));
+        services.AddHttpClient<IPaymentGateway, RazorpayGateway>(c => c.Timeout = TimeSpan.FromSeconds(20));
 
         return services;
     }

@@ -1,14 +1,18 @@
-import { Link } from 'react-router';
+import { useState } from 'react';
+import { Link, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { Button, LinearProgress, Skeleton } from '@mui/material';
 import { api } from '@/lib/api';
-import { ago, date, dateTime, money, number } from '@/lib/format';
+import { ago, dateTime, money, moneyPrecise, number } from '@/lib/format';
 import { useDocumentTitle } from '@/lib/hooks';
-import type { OwnerDashboard as Dashboard } from '@/lib/types';
+import type { OwnerDashboard as Dashboard, OwnerOverview } from '@/lib/types';
 import { TrendChart, BarsChart, RankedBars } from '@/components/charts';
 import { EmptyState, ErrorState, KpiCard, KpiSkeletons, PageHeader, Panel, StatusBadge } from '@/components/ui';
 import { useBusiness } from './OwnerPortal';
 import { useAuth } from '@/stores/auth';
+import { ActivityPanel, BusinessOverviewCard, CompletionPanel, MediaPanel, PlanPanel, WelcomeBanner } from './OwnerOverviewPanels';
+import { PlanCheckoutDialog } from './PlanCheckoutDialog';
+import type { Plan } from '@/lib/types';
 
 export default function OwnerDashboard() {
   const business = useBusiness();
@@ -19,6 +23,16 @@ export default function OwnerDashboard() {
     queryFn: () => api.get<Dashboard>(`/api/owner/businesses/${business.id}/dashboard`),
   });
 
+  const overview = useQuery({
+    queryKey: ['owner', 'overview', business.id],
+    queryFn: () => api.get<OwnerOverview>(`/api/owner/businesses/${business.id}/overview`),
+  });
+  const [params, setParams] = useSearchParams();
+  const plans = useQuery({ queryKey: ['plans'], queryFn: () => api.get<Plan[]>('/api/plans'), staleTime: 600_000 });
+  const [payOpen, setPayOpen] = useState(false);
+  const pending = overview.data?.pendingPayment;
+  const pendingPlan = plans.data?.find((p) => p.code === pending?.planCode) ?? null;
+
   if (isError) return <ErrorState onRetry={() => refetch()} />;
   const primary = data?.kpis.filter((k) => ['views', 'leads', 'bookings', 'revenue'].includes(k.key)) ?? [];
   const secondary = data?.kpis.filter((k) => ['conversion', 'contacts', 'newLeads', 'pendingBookings'].includes(k.key)) ?? [];
@@ -28,6 +42,21 @@ export default function OwnerDashboard() {
     <>
       <PageHeader title={`Good ${greeting()}, ${firstName}`} subtitle="Here's how your business performed in the last 30 days."
         actions={<><Button variant="outlined" component={Link} to="/business/leads">View leads</Button><Button variant="contained" component={Link} to="/business/bookings">Manage bookings</Button></>} />
+
+      {params.get('welcome') && <WelcomeBanner name={business.name} onDismiss={() => setParams({}, { replace: true })} />}
+      {pending && pendingPlan && (
+        <div className="mb-6 flex flex-col gap-3 rounded-xl border border-accent/40 bg-accent-soft p-4 sm:flex-row sm:items-center" role="status">
+          <div className="min-w-0 flex-1 text-sm">
+            <div className="font-semibold text-ink">Complete your {pending.planName} payment</div>
+            <div className="text-ink-2">{pending.status === 'Failed' && pending.failureReason ? `Your last attempt failed: ${pending.failureReason} ` : 'Your payment was not completed. '}
+              You are on the Free plan until you pay {moneyPrecise(pending.total)} ({pending.billingCycle.toLowerCase()}).</div>
+          </div>
+          <Button variant="contained" color="secondary" onClick={() => setPayOpen(true)}>Pay {moneyPrecise(pending.total)}</Button>
+        </div>
+      )}
+      <PlanCheckoutDialog businessId={business.id} plan={pendingPlan} cycle={pending?.billingCycle === 'Annual' ? 'Annual' : 'Monthly'} open={payOpen}
+        onClose={() => setPayOpen(false)} />
+      {overview.isLoading ? <Skeleton variant="rounded" height={190} sx={{ mb: 3 }} /> : overview.data && <BusinessOverviewCard data={overview.data} />}
 
       {business.status !== 'Active' && (
         <div className="mb-6 rounded-xl border border-warning-line bg-warning-soft px-4 py-3 text-sm">
@@ -50,6 +79,18 @@ export default function OwnerDashboard() {
           )}
         </Panel>
       </div>
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
+        {overview.isLoading || !overview.data ? [0, 1, 2].map((i) => <Skeleton key={i} variant="rounded" height={380} />) : (
+          <>
+            <CompletionPanel data={overview.data.completion} />
+            <ActivityPanel items={overview.data.activities} />
+            <PlanPanel plan={overview.data.plan} />
+          </>
+        )}
+      </div>
+
+      {overview.data && <div className="mt-6"><MediaPanel data={overview.data} /></div>}
 
       <div className="mt-6 grid gap-6 xl:grid-cols-3">
         <Panel title="Leads & bookings" subtitle="Weekly, last 12 weeks" className="xl:col-span-2">
@@ -111,22 +152,6 @@ export default function OwnerDashboard() {
         </Panel>
       </div>
 
-      {data?.plan && (
-        <Panel title="Your plan" className="mt-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-            <div className="flex-1">
-              <div className="text-lg font-bold">{data.plan.name} <span className="text-sm font-normal text-muted">· {data.plan.billingCycle}</span></div>
-              <div className="text-sm text-muted">{data.plan.renewsOn ? `Renews on ${date(data.plan.renewsOn)}` : 'Free forever'}</div>
-            </div>
-            <div className="flex-1">
-              <div className="mb-1 flex justify-between text-sm"><span>Lead credits used this month</span><span className="font-semibold">{data.plan.leadsThisMonth} / {data.plan.leadCredits}</span></div>
-              <LinearProgress variant="determinate" value={Math.min(100, (data.plan.leadsThisMonth / Math.max(1, data.plan.leadCredits)) * 100)}
-                sx={{ height: 8, borderRadius: 4, bgcolor: 'var(--cb-subtle)', '& .MuiLinearProgress-bar': { bgcolor: data.plan.leadsThisMonth > data.plan.leadCredits ? '#D92D20' : '#F4A62C', borderRadius: 4 } }} />
-            </div>
-            <Button variant="outlined" component={Link} to="/business/plan">Manage plan</Button>
-          </div>
-        </Panel>
-      )}
     </>
   );
 }

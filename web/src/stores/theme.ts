@@ -55,7 +55,7 @@ export function useApplyTheme() {
     const root = document.documentElement;
     root.dataset.theme = resolved;
     root.dataset.accent = accent;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', resolved === 'dark' ? '#070A10' : '#0B1220');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', resolved === 'dark' ? '#060A11' : '#0B1220');
   }, [resolved, accent]);
   return { resolved, accent };
 }

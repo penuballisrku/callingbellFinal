@@ -3,7 +3,8 @@
    Runs every database script in dependency order. Requires SQLCMD mode:
      * SSMS:            Query > SQLCMD Mode, then execute
      * Azure Data Studio: enable "SQLCMD" in the query toolbar
-     * Command line:    sqlcmd -S .\SQLEXPRESS -E -C -d CallingBell -i RunAll.sql
+     * Command line:    sqlcmd -S .\SQLEXPRESS -E -C -f 65001 -d CallingBell -i RunAll.sql
+                        (-f 65001 reads the scripts as UTF-8 so text such as "Cafés" or "24×7" is stored correctly)
    Run from this folder (or set :setvar ScriptDir to an absolute path).
 
    Order note: 08_Users runs before 04-07 because reviews, enquiries and bookings
@@ -26,3 +27,5 @@
 :r $(ScriptDir)\11_Advertisements.sql
 :r $(ScriptDir)\12_Subscriptions.sql
 :r $(ScriptDir)\13_DashboardDemoData.sql
+:r $(ScriptDir)\14_MarketingContent.sql
+:r $(ScriptDir)\15_MarketingMedia.sql

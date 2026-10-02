@@ -1,6 +1,9 @@
 using CallingBell.Application.Common.Models;
 using CallingBell.Application.Features.Engagement;
+using CallingBell.Application.Features.Businesses;
+using CallingBell.Application.Features.Onboarding;
 using CallingBell.Application.Features.Owner;
+using CallingBell.Application.Features.Payments;
 using CallingBell.Domain.Constants;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -19,6 +22,15 @@ public sealed class OwnerController : ApiControllerBase
     [HttpGet("businesses")]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<OwnerBusinessDto>>>> Businesses(CancellationToken ct) =>
         Success(await Sender.Send(new GetOwnerBusinessesQuery(), ct));
+
+    /// <summary>Creates a business for a signed-in owner who has none yet (e.g. signed up with Google).</summary>
+    [HttpPost("businesses")]
+    public async Task<ActionResult<ApiResponse<CreatedBusinessDto>>> CreateBusiness(CreateOwnerBusinessCommand command, CancellationToken ct) =>
+        Success(await Sender.Send(command, ct), "Your business has been created");
+
+    [HttpGet("businesses/{id:guid}/overview")]
+    public async Task<ActionResult<ApiResponse<OwnerOverviewDto>>> Overview(Guid id, CancellationToken ct) =>
+        Success(await Sender.Send(new GetOwnerOverviewQuery(id), ct));
 
     [HttpGet("businesses/{id:guid}/dashboard")]
     public async Task<ActionResult<ApiResponse<OwnerDashboardDto>>> Dashboard(Guid id, CancellationToken ct) =>
@@ -89,4 +101,82 @@ public sealed class OwnerController : ApiControllerBase
     [HttpPost("businesses/{id:guid}/advertisements")]
     public async Task<ActionResult<ApiResponse<CreatedReferenceDto>>> CreateAd(Guid id, CreateAdCampaignCommand command, CancellationToken ct) =>
         Success(await Sender.Send(command with { BusinessId = id }, ct), "Campaign submitted for approval");
+
+    // ---------- Media ----------
+
+    public sealed class MediaUploadForm
+    {
+        public string Kind { get; set; } = string.Empty;
+        public IFormFile? File { get; set; }
+        /// <summary>Smaller rendition for images, or the poster frame for videos.</summary>
+        public IFormFile? Thumbnail { get; set; }
+        public string? Title { get; set; }
+        public int? DurationSeconds { get; set; }
+    }
+
+    private const long UploadLimit = MediaRules.MaxVideoBytes + MediaRules.MaxThumbnailBytes + 1024 * 1024;
+
+    [HttpGet("businesses/{id:guid}/media")]
+    public async Task<ActionResult<ApiResponse<OwnerMediaDto>>> Media(Guid id, CancellationToken ct) =>
+        Success(await Sender.Send(new GetOwnerMediaQuery(id), ct));
+
+    [HttpPost("businesses/{id:guid}/media"), RequestSizeLimit(UploadLimit), RequestFormLimits(MultipartBodyLengthLimit = UploadLimit)]
+    public async Task<ActionResult<ApiResponse<OwnerMediaItemDto>>> UploadMedia(Guid id, [FromForm] MediaUploadForm form, CancellationToken ct)
+    {
+        var data = form.File is null ? [] : await ReadAsync(form.File, ct);
+        var thumbnail = form.Thumbnail is null ? null : await ReadAsync(form.Thumbnail, ct);
+        var item = await Sender.Send(new UploadBusinessMediaCommand(id, form.Kind, form.File?.FileName ?? "upload", data, thumbnail, form.Title, form.DurationSeconds), ct);
+        return Success(item, "Uploaded");
+    }
+
+    [HttpDelete("businesses/{id:guid}/media/{kind}/{itemId:guid?}")]
+    public async Task<ActionResult<ApiResponse<object>>> DeleteMedia(Guid id, string kind, Guid? itemId, CancellationToken ct)
+    {
+        await Sender.Send(new DeleteBusinessMediaCommand(id, kind, itemId), ct);
+        return Done("Removed");
+    }
+
+    [HttpPut("businesses/{id:guid}/media/photos/{photoId:guid}/primary")]
+    public async Task<ActionResult<ApiResponse<object>>> SetPrimaryPhoto(Guid id, Guid photoId, CancellationToken ct)
+    {
+        await Sender.Send(new SetPrimaryPhotoCommand(id, photoId), ct);
+        return Done("Main photo updated");
+    }
+
+    // ---------- Social links ----------
+
+    public sealed record SocialLinksRequest(IReadOnlyList<OnboardingSocialLinkInput> Links);
+
+    [HttpGet("businesses/{id:guid}/social-links")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<SocialLinkDto>>>> SocialLinks(Guid id, CancellationToken ct) =>
+        Success(await Sender.Send(new GetSocialLinksQuery(id), ct));
+
+    [HttpPut("businesses/{id:guid}/social-links")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<SocialLinkDto>>>> UpdateSocialLinks(Guid id, SocialLinksRequest request, CancellationToken ct) =>
+        Success(await Sender.Send(new UpdateSocialLinksCommand(id, request.Links ?? []), ct), "Social links saved");
+
+    private static async Task<byte[]> ReadAsync(IFormFile file, CancellationToken ct)
+    {
+        using var buffer = new MemoryStream((int)Math.Min(file.Length, int.MaxValue));
+        await file.CopyToAsync(buffer, ct);
+        return buffer.ToArray();
+    }
+
+    // ---------- Plan payments (Razorpay) ----------
+
+    public sealed record PlanOrderRequest(string PlanCode, string BillingCycle, string? Gstin);
+    public sealed record VerifyPaymentRequest(string GatewayOrderId, string GatewayPaymentId, string Signature);
+    public sealed record CheckoutOutcomeRequest(string Outcome, string? Reason);
+
+    [HttpPost("businesses/{id:guid}/payments/orders")]
+    public async Task<ActionResult<ApiResponse<CheckoutOrderDto>>> CreatePlanOrder(Guid id, PlanOrderRequest request, CancellationToken ct) =>
+        Success(await Sender.Send(new CreatePlanOrderCommand(id, request.PlanCode, request.BillingCycle, request.Gstin), ct));
+
+    [HttpPost("businesses/{id:guid}/payments/orders/{orderId:guid}/verify")]
+    public async Task<ActionResult<ApiResponse<PaymentResultDto>>> VerifyPayment(Guid id, Guid orderId, VerifyPaymentRequest request, CancellationToken ct) =>
+        Success(await Sender.Send(new VerifyPlanPaymentCommand(id, orderId, request.GatewayOrderId, request.GatewayPaymentId, request.Signature), ct), "Payment successful");
+
+    [HttpPost("businesses/{id:guid}/payments/orders/{orderId:guid}/outcome")]
+    public async Task<ActionResult<ApiResponse<PaymentResultDto>>> CheckoutOutcome(Guid id, Guid orderId, CheckoutOutcomeRequest request, CancellationToken ct) =>
+        Success(await Sender.Send(new RecordCheckoutOutcomeCommand(id, orderId, request.Outcome, request.Reason), ct));
 }
