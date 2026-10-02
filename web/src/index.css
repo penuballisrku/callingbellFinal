@@ -1,0 +1,136 @@
+/* MUI styles go into the "mui" layer so Tailwind utilities can override them predictably. */
+@layer theme, base, mui, components, utilities;
+@import 'tailwindcss';
+
+/* `dark:` utilities follow the app's theme setting (data-theme on <html>), not only the OS. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* ---------------------------------------------------------------------------
+   Design tokens. Every colour used by components is a semantic token whose
+   value switches with data-theme (light/dark) and data-accent (colour theme).
+   --------------------------------------------------------------------------- */
+:root {
+  color-scheme: light;
+  --cb-canvas: #f7f8fa;
+  --cb-surface: #ffffff;
+  --cb-subtle: #f2f4f7;
+  --cb-ink: #161616;
+  --cb-ink-2: #344054;
+  --cb-muted: #667085;
+  --cb-faint: #98a2b3;
+  --cb-line: #e5e7eb;
+  --cb-line-strong: #cbd2dc;
+  --cb-inverse: #0b1220;
+  --cb-on-inverse: #ffffff;
+  /* Brand navy surfaces (hero, footer, sidebar) stay dark in both modes. */
+  --cb-navy: #0b1220;
+  --cb-navy-2: #021223;
+  --cb-shadow: rgba(16, 24, 40, 0.06);
+
+  --cb-success: #067647;
+  --cb-success-soft: #ecfdf3;
+  --cb-danger: #b42318;
+  --cb-danger-soft: #fef3f2;
+  --cb-warning: #f79009;
+  --cb-warning-ink: #93370d;
+  --cb-warning-soft: #fffaeb;
+  --cb-warning-line: #fedf89;
+
+  /* Accent theme (default: Calling Bell amber) */
+  --cb-accent: #f4a62c;
+  --cb-accent-soft: #fef4e2;
+  --cb-accent-ink: #93530a;
+  --cb-on-accent: #0b1220;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --cb-canvas: #0a0e15;
+  --cb-surface: #111723;
+  --cb-subtle: #1a2130;
+  --cb-ink: #f2f4f7;
+  --cb-ink-2: #cdd5df;
+  --cb-muted: #98a2b3;
+  --cb-faint: #6b778a;
+  --cb-line: #232c3b;
+  --cb-line-strong: #364256;
+  --cb-inverse: #f2f4f7;
+  --cb-on-inverse: #0b1220;
+  --cb-navy: #070a10;
+  --cb-navy-2: #05080d;
+  --cb-shadow: rgba(0, 0, 0, 0.35);
+
+  --cb-success: #75e0a7;
+  --cb-success-soft: #0c2a1d;
+  --cb-danger: #fda29b;
+  --cb-danger-soft: #3a1512;
+  --cb-warning: #fdb022;
+  --cb-warning-ink: #fec84b;
+  --cb-warning-soft: #2e2208;
+  --cb-warning-line: #5c4310;
+
+  --cb-accent-soft: #3a2a10;
+  --cb-accent-ink: #fbc66e;
+}
+
+:root[data-accent='ocean'] { --cb-accent: #2e90fa; --cb-accent-soft: #eaf3ff; --cb-accent-ink: #175cd3; --cb-on-accent: #ffffff; }
+:root[data-accent='emerald'] { --cb-accent: #079455; --cb-accent-soft: #e6f6ee; --cb-accent-ink: #05603a; --cb-on-accent: #ffffff; }
+:root[data-accent='violet'] { --cb-accent: #7a5af8; --cb-accent-soft: #f1edff; --cb-accent-ink: #5925dc; --cb-on-accent: #ffffff; }
+:root[data-accent='rose'] { --cb-accent: #e31b54; --cb-accent-soft: #fff0f3; --cb-accent-ink: #c01048; --cb-on-accent: #ffffff; }
+:root[data-theme='dark'][data-accent='ocean'] { --cb-accent: #53b1fd; --cb-accent-soft: #10233d; --cb-accent-ink: #84caff; --cb-on-accent: #0b1220; }
+:root[data-theme='dark'][data-accent='emerald'] { --cb-accent: #3ccb7f; --cb-accent-soft: #0c2a1d; --cb-accent-ink: #75e0a7; --cb-on-accent: #0b1220; }
+:root[data-theme='dark'][data-accent='violet'] { --cb-accent: #9b8afb; --cb-accent-soft: #221a45; --cb-accent-ink: #bdb4fe; --cb-on-accent: #0b1220; }
+:root[data-theme='dark'][data-accent='rose'] { --cb-accent: #fd6f8e; --cb-accent-soft: #3d1220; --cb-accent-ink: #fea3b4; --cb-on-accent: #0b1220; }
+
+@theme inline {
+  --font-sans: 'Inter Variable', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --color-canvas: var(--cb-canvas);
+  --color-surface: var(--cb-surface);
+  --color-subtle: var(--cb-subtle);
+  --color-ink: var(--cb-ink);
+  --color-ink-2: var(--cb-ink-2);
+  --color-muted: var(--cb-muted);
+  --color-faint: var(--cb-faint);
+  --color-line: var(--cb-line);
+  --color-line-strong: var(--cb-line-strong);
+  --color-inverse: var(--cb-inverse);
+  --color-on-inverse: var(--cb-on-inverse);
+  --color-navy: var(--cb-navy);
+  --color-navy-2: var(--cb-navy-2);
+  --color-accent: var(--cb-accent);
+  --color-accent-soft: var(--cb-accent-soft);
+  --color-accent-ink: var(--cb-accent-ink);
+  --color-on-accent: var(--cb-on-accent);
+  --color-success: var(--cb-success);
+  --color-success-soft: var(--cb-success-soft);
+  --color-danger: var(--cb-danger);
+  --color-danger-soft: var(--cb-danger-soft);
+  --color-warning: var(--cb-warning);
+  --color-warning-ink: var(--cb-warning-ink);
+  --color-warning-soft: var(--cb-warning-soft);
+  --color-warning-line: var(--cb-warning-line);
+}
+
+@layer base {
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--cb-canvas);
+    color: var(--cb-ink);
+    font-family: var(--font-sans);
+    font-feature-settings: 'cv11', 'ss01';
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible { outline: 2px solid var(--cb-accent); outline-offset: 2px; }
+  /* Light artwork is toned down slightly so it doesn't glare on dark surfaces. */
+  :root[data-theme='dark'] img { filter: brightness(0.92); }
+}
+
+@layer components {
+  .container-page { width: 100%; max-width: 1240px; margin-inline: auto; padding-inline: 16px; }
+  @media (min-width: 768px) { .container-page { padding-inline: 24px; } }
+  .card { background: var(--cb-surface); border: 1px solid var(--cb-line); border-radius: 12px; }
+  .scroll-row { display: grid; grid-auto-flow: column; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; scrollbar-width: thin; }
+  .scroll-row > * { scroll-snap-align: start; }
+  .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+}

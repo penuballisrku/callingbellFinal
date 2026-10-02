@@ -1,0 +1,266 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
+using CallingBell.Application.Common.Exceptions;
+using CallingBell.Application.Common.Interfaces;
+using CallingBell.Application.Features.Auth;
+using CallingBell.Domain.Constants;
+using CallingBell.Domain.Entities;
+using CallingBell.Infrastructure.Persistence;
+using Google.Apis.Auth;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
+
+namespace CallingBell.Infrastructure.Identity;
+
+public sealed class JwtOptions
+{
+    public const string Section = "Jwt";
+    public string Issuer { get; set; } = "CallingBell";
+    public string Audience { get; set; } = "CallingBell.Clients";
+    public string Key { get; set; } = string.Empty;
+    public int AccessTokenMinutes { get; set; } = 60;
+    public int RefreshTokenDays { get; set; } = 14;
+}
+
+public sealed class GoogleAuthOptions
+{
+    public const string Section = "Authentication:Google";
+    /// <summary>OAuth 2.0 Web client id from Google Cloud Console. Empty disables Google sign-in.</summary>
+    public string ClientId { get; set; } = string.Empty;
+}
+
+internal sealed class IdentityService(
+    UserManager<ApplicationUser> userManager,
+    ApplicationDbContext db,
+    IOptions<JwtOptions> jwtOptions,
+    IOptions<GoogleAuthOptions> googleOptions) : IIdentityService
+{
+    private const string GoogleProvider = "Google";
+    private readonly JwtOptions _jwt = jwtOptions.Value;
+    private readonly GoogleAuthOptions _google = googleOptions.Value;
+
+    public async Task<AuthResultDto> ExternalGoogleAsync(string idToken, string accountType, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(_google.ClientId)) throw new BadRequestException("Google sign-in is not configured.");
+
+        GoogleJsonWebSignature.Payload payload;
+        try
+        {
+            // Verifies Google's signature, expiry, issuer and that the token was issued for our client id.
+            payload = await GoogleJsonWebSignature.ValidateAsync(idToken,
+                new GoogleJsonWebSignature.ValidationSettings { Audience = [_google.ClientId] });
+        }
+        catch (InvalidJwtException)
+        {
+            throw new BadRequestException("Google sign-in failed. Please try again.");
+        }
+
+        if (!payload.EmailVerified || string.IsNullOrWhiteSpace(payload.Email))
+            throw new BadRequestException("Your Google account email is not verified.");
+
+        var user = await userManager.FindByLoginAsync(GoogleProvider, payload.Subject)
+                   ?? await userManager.FindByEmailAsync(payload.Email);
+
+        if (user is null)
+        {
+            user = new ApplicationUser
+            {
+                UserName = payload.Email,
+                Email = payload.Email,
+                EmailConfirmed = true,
+                DisplayName = string.IsNullOrWhiteSpace(payload.Name) ? payload.Email : payload.Name,
+                AvatarUrl = payload.Picture,
+                UserType = accountType == Roles.BusinessOwner ? Roles.BusinessOwner : Roles.Customer,
+                IsActive = true
+            };
+            var created = await userManager.CreateAsync(user); // no local password - Google is the credential
+            if (!created.Succeeded) throw new BadRequestException(created.Errors.First().Description);
+            await userManager.AddToRoleAsync(user, user.UserType);
+        }
+        else
+        {
+            if (user.IsDeleted) throw new BadRequestException("This account no longer exists.");
+            if (!user.IsActive) throw new ForbiddenAccessException("This account has been deactivated. Please contact support.");
+            if (await userManager.IsLockedOutAsync(user)) throw new ForbiddenAccessException("This account is temporarily locked. Try again later.");
+        }
+
+        // Link the Google identity the first time it is used (also links existing email/password accounts).
+        if (await userManager.FindByLoginAsync(GoogleProvider, payload.Subject) is null)
+        {
+            var linked = await userManager.AddLoginAsync(user, new UserLoginInfo(GoogleProvider, payload.Subject, GoogleProvider));
+            if (!linked.Succeeded) throw new BadRequestException(linked.Errors.First().Description);
+        }
+
+        user.AvatarUrl ??= payload.Picture;
+        user.LastLoginOn = DateTimeOffset.UtcNow;
+        await userManager.UpdateAsync(user);
+        return await IssueTokensAsync(user, ct);
+    }
+
+    public async Task<AuthResultDto> LoginAsync(string email, string password, CancellationToken ct)
+    {
+        var user = await userManager.FindByEmailAsync(email);
+        if (user is null || user.IsDeleted) throw new BadRequestException("Invalid email or password.");
+        if (!user.IsActive) throw new ForbiddenAccessException("This account has been deactivated. Please contact support.");
+        if (await userManager.IsLockedOutAsync(user)) throw new ForbiddenAccessException("Too many failed attempts. Try again in 15 minutes.");
+
+        if (!await userManager.CheckPasswordAsync(user, password))
+        {
+            await userManager.AccessFailedAsync(user);
+            throw new BadRequestException("Invalid email or password.");
+        }
+
+        await userManager.ResetAccessFailedCountAsync(user);
+        user.LastLoginOn = DateTimeOffset.UtcNow;
+        await userManager.UpdateAsync(user);
+        return await IssueTokensAsync(user, ct);
+    }
+
+    public async Task<AuthResultDto> RegisterAsync(RegisterRequest request, CancellationToken ct)
+    {
+        if (await userManager.FindByEmailAsync(request.Email) is not null)
+        {
+            throw new ConflictException("An account with this email already exists.");
+        }
+
+        var cityId = string.IsNullOrWhiteSpace(request.CitySlug)
+            ? null
+            : await db.Cities.Where(c => c.Slug == request.CitySlug).Select(c => (Guid?)c.Id).FirstOrDefaultAsync(ct);
+
+        var user = new ApplicationUser
+        {
+            UserName = request.Email,
+            Email = request.Email,
+            DisplayName = request.DisplayName,
+            PhoneNumber = NormalizePhone(request.PhoneNumber),
+            UserType = request.AccountType,
+            CityId = cityId,
+            IsActive = true,
+            EmailConfirmed = true,
+            LastLoginOn = DateTimeOffset.UtcNow
+        };
+
+        var result = await userManager.CreateAsync(user, request.Password);
+        if (!result.Succeeded)
+        {
+            throw new ValidationException(new Dictionary<string, string[]>
+            {
+                ["password"] = result.Errors.Select(e => e.Description).ToArray()
+            });
+        }
+
+        await userManager.AddToRoleAsync(user, request.AccountType == Roles.BusinessOwner ? Roles.BusinessOwner : Roles.Customer);
+        return await IssueTokensAsync(user, ct);
+    }
+
+    public async Task<AuthResultDto> RefreshAsync(string refreshToken, CancellationToken ct)
+    {
+        var hash = Hash(refreshToken);
+        var stored = await db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == hash, ct)
+                     ?? throw new ForbiddenAccessException("Session expired. Please sign in again.");
+
+        var now = DateTimeOffset.UtcNow;
+        if (stored.RevokedAt is not null)
+        {
+            // Reuse of a rotated token: treat as theft and revoke every session of the user.
+            var active = await db.RefreshTokens.Where(t => t.UserId == stored.UserId && t.RevokedAt == null).ToListAsync(ct);
+            active.ForEach(t => t.RevokedAt = now);
+            await db.SaveChangesAsync(ct);
+            throw new ForbiddenAccessException("Session expired. Please sign in again.");
+        }
+        if (!stored.IsActive(now)) throw new ForbiddenAccessException("Session expired. Please sign in again.");
+
+        var user = await userManager.FindByIdAsync(stored.UserId);
+        if (user is null || !user.IsActive) throw new ForbiddenAccessException("Session expired. Please sign in again.");
+
+        var result = await IssueTokensAsync(user, ct, persist: false);
+        stored.RevokedAt = now;
+        stored.ReplacedByTokenHash = Hash(result.RefreshToken);
+        db.RefreshTokens.Add(NewToken(user.Id, result.RefreshToken, now));
+        await db.SaveChangesAsync(ct);
+        return result;
+    }
+
+    public async Task RevokeAsync(string refreshToken, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(refreshToken)) return;
+        var hash = Hash(refreshToken);
+        var stored = await db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == hash && t.RevokedAt == null, ct);
+        if (stored is null) return;
+        stored.RevokedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<CurrentUserDto> GetCurrentUserAsync(string userId, CancellationToken ct)
+    {
+        var user = await userManager.FindByIdAsync(userId) ?? throw new NotFoundException("User", userId);
+        var (roles, permissions) = await GetRolesAndPermissionsAsync(user, ct);
+        return await ToDtoAsync(user, roles, permissions, ct);
+    }
+
+    private async Task<AuthResultDto> IssueTokensAsync(ApplicationUser user, CancellationToken ct, bool persist = true)
+    {
+        var (roles, permissions) = await GetRolesAndPermissionsAsync(user, ct);
+        var now = DateTimeOffset.UtcNow;
+        var expires = now.AddMinutes(_jwt.AccessTokenMinutes);
+
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, user.Id),
+            new(JwtRegisteredClaimNames.Email, user.Email ?? string.Empty),
+            new(JwtRegisteredClaimNames.Name, user.DisplayName),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("N")),
+            new("user_type", user.UserType)
+        };
+        claims.AddRange(roles.Select(r => new Claim(ClaimTypes.Role, r)));
+        claims.AddRange(permissions.Select(p => new Claim(Permissions.ClaimType, p)));
+
+        var credentials = new SigningCredentials(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwt.Key)), SecurityAlgorithms.HmacSha256);
+        var token = new JwtSecurityToken(_jwt.Issuer, _jwt.Audience, claims, now.UtcDateTime, expires.UtcDateTime, credentials);
+        var accessToken = new JwtSecurityTokenHandler().WriteToken(token);
+
+        var refreshToken = Base64UrlEncoder.Encode(RandomNumberGenerator.GetBytes(64));
+        if (persist)
+        {
+            db.RefreshTokens.Add(NewToken(user.Id, refreshToken, now));
+            await db.SaveChangesAsync(ct);
+        }
+
+        return new AuthResultDto(accessToken, expires, refreshToken, await ToDtoAsync(user, roles, permissions, ct));
+    }
+
+    private RefreshToken NewToken(string userId, string token, DateTimeOffset now) => new()
+    {
+        UserId = userId, TokenHash = Hash(token), CreatedAt = now, ExpiresAt = now.AddDays(_jwt.RefreshTokenDays)
+    };
+
+    private async Task<(IReadOnlyList<string> Roles, IReadOnlyList<string> Permissions)> GetRolesAndPermissionsAsync(ApplicationUser user, CancellationToken ct)
+    {
+        var roles = (await userManager.GetRolesAsync(user)).ToList();
+        var permissions = await (from ur in db.UserRoles
+                                 join rc in db.RoleClaims on ur.RoleId equals rc.RoleId
+                                 where ur.UserId == user.Id && rc.ClaimType == Permissions.ClaimType
+                                 select rc.ClaimValue!).Distinct().ToListAsync(ct);
+        return (roles, permissions);
+    }
+
+    private async Task<CurrentUserDto> ToDtoAsync(ApplicationUser user, IReadOnlyList<string> roles, IReadOnlyList<string> permissions, CancellationToken ct)
+    {
+        var citySlug = user.CityId is null ? null : await db.Cities.Where(c => c.Id == user.CityId).Select(c => c.Slug).FirstOrDefaultAsync(ct);
+        return new CurrentUserDto(user.Id, user.Email ?? string.Empty, user.DisplayName, user.PhoneNumber, user.AvatarUrl, user.UserType,
+            citySlug, roles, permissions);
+    }
+
+    private static string Hash(string token) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
+
+    private static string NormalizePhone(string phone)
+    {
+        var digits = new string(phone.Where(char.IsDigit).ToArray());
+        if (digits.Length == 12 && digits.StartsWith("91")) digits = digits[2..];
+        return digits.Length == 10 ? $"+91 {digits[..5]} {digits[5..]}" : phone;
+    }
+}

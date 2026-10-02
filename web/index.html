@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en-IN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#070A10" />
+    <meta name="description" content="Calling Bell - discover trusted local businesses, see who is available right now, request quotes and book services." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Calling Bell - Discover. Connect. Book. Grow.</title>
+    <script>
+      // Apply the saved theme before first paint to avoid a light/dark flash (mirrors stores/theme.ts).
+      (function () {
+        try {
+          var saved = JSON.parse(localStorage.getItem('cb-theme') || '{}');
+          var s = saved.state || {};
+          // Dark is the default; v0 stored "system" as the old default.
+          var mode = !s.mode || ((saved.version || 0) < 1 && s.mode === 'system') ? 'dark' : s.mode;
+          var dark = mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+          // Paint the canvas colour immediately, before any stylesheet has loaded.
+          document.documentElement.style.backgroundColor = dark ? '#0A0E15' : '#F7F8FA';
+          document.documentElement.dataset.accent = s.accent || 'amber';
+        } catch (e) { document.documentElement.dataset.theme = 'dark'; }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

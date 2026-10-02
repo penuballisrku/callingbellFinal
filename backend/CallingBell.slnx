@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CallingBell.Api/CallingBell.Api.csproj" />
+    <Project Path="src/CallingBell.Application/CallingBell.Application.csproj" />
+    <Project Path="src/CallingBell.Domain/CallingBell.Domain.csproj" />
+    <Project Path="src/CallingBell.Infrastructure/CallingBell.Infrastructure.csproj" />
+  </Folder>
+</Solution>
