@@ -1,25 +1,125 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
-import { Button, Drawer, IconButton, MenuItem, Select } from '@mui/material';
+import { Button, Drawer, IconButton, InputAdornment, ListSubheader, MenuItem, Select, TextField } from '@mui/material';
 import MenuRounded from '@mui/icons-material/MenuRounded';
+import NearMeOutlined from '@mui/icons-material/NearMeOutlined';
 import PlaceOutlined from '@mui/icons-material/PlaceOutlined';
 import SearchRounded from '@mui/icons-material/SearchRounded';
-import { useCities } from '@/lib/hooks';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+import { useCategories, useCities } from '@/lib/hooks';
+import type { CityArea, CityAreas, SearchSuggestion } from '@/lib/types';
 import { useNotificationStream } from '@/lib/realtime';
 import { homeFor, isAdmin, isOwner, useAuth } from '@/stores/auth';
 import { useCity } from '@/stores/city';
 import { Logo, NotificationBell, ThemeMenu, UserMenu } from './Shared';
-import { CountryCode, GeoAttribution } from '@/components/VisitorCountry';
+import { CountryCode, useDistrictAutoSelect, useVisitorDistrict } from '@/components/VisitorCountry';
+import { SearchSuggest, searchHref } from '@/components/SearchSuggest';
 
-export function CitySelect({ size = 'small' }: { size?: 'small' | 'medium' }) {
+const AREA = 'area:';
+
+/**
+ * City picker. Lists every area of the selected city (or of the visitor's IP-detected city while none is selected), loaded from
+ * /api/locations/cities/{slug}/areas, which the area-discovery agent keeps complete. A search box filters by area name, PIN code,
+ * alternate spelling or sub-locality ("Hydernagar" finds Kukatpally); picking an area opens search filtered to it.
+ */
+export function CitySelect({ size = 'small', fullWidth = false, height }: { size?: 'small' | 'medium'; fullWidth?: boolean; height?: number }) {
   const { data: cities } = useCities();
-  const { citySlug, setCity } = useCity();
+  const { data: district } = useVisitorDistrict();
+  const { citySlug, areaId, setCity } = useCity();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [areaFilter, setAreaFilter] = useState('');
+
+  const areaCity = cities?.find((c) => c.slug === (citySlug ?? district?.citySlug));
+  const isDistrict = !!areaCity && areaCity.slug === district?.citySlug;
+  const { data: cityAreas } = useQuery({
+    queryKey: ['city-areas', areaCity?.slug],
+    queryFn: () => api.get<CityAreas>(`/api/locations/cities/${areaCity!.slug}/areas`),
+    enabled: !!areaCity,
+    staleTime: 30 * 60_000,
+    // While the agent is discovering this city, check back so new areas appear without a reload.
+    refetchInterval: (q) => (q.state.data?.discovering ? 10_000 : false),
+  });
+  // The full list once loaded; the cities payload's areas meanwhile.
+  const areas: CityArea[] = cityAreas?.areas ?? areaCity?.areas.map((a) => ({ ...a, areaType: null, altNames: [], subLocalities: [] })) ?? [];
+  const term = areaFilter.trim().toLowerCase();
+  // `via` names the alias or sub-locality that matched, shown under the area name.
+  const filteredAreas: { a: CityArea; via: string | null }[] = !term ? areas.map((a) => ({ a, via: null })) : areas.flatMap((a): { a: CityArea; via: string | null }[] => {
+    if (a.name.toLowerCase().includes(term) || a.pincode.startsWith(term)) return [{ a, via: null }];
+    const alias = a.altNames.find((n) => n.toLowerCase().includes(term)) ?? a.subLocalities.find((n) => n.toLowerCase().includes(term));
+    return alias ? [{ a, via: alias }] : [];
+  });
+  const value = !cities ? '' : areaId && areas.some((a) => a.id === areaId) ? AREA + areaId : citySlug ?? '';
+
+  const onChange = (v: string) => {
+    if (!v.startsWith(AREA) || !areaCity) { setCity(v || null); return; }
+    const id = v.slice(AREA.length);
+    setCity(areaCity.slug, id);
+    // Choosing a location only remembers it; results load when the visitor presses Search. On the results page the
+    // current search is refined in place for the new area.
+    if (location.pathname !== '/search') return;
+    const params = new URLSearchParams(location.search);
+    params.set('city', areaCity.slug);
+    params.set('area', id);
+    params.delete('page');
+    navigate(`/search?${params}`, { replace: true });
+  };
+
+  const label = (v: string) => {
+    if (!v) return 'All cities';
+    if (v.startsWith(AREA)) return `${areas.find((a) => AREA + a.id === v)?.name}, ${areaCity?.name}`;
+    return cities?.find((c) => c.slug === v)?.name ?? '';
+  };
+
   return (
-    <Select value={cities ? citySlug ?? '' : ''} displayEmpty onChange={(e) => setCity(e.target.value || null)} size={size}
-      startAdornment={<PlaceOutlined sx={{ fontSize: 18, mr: 0.5, color: 'text.secondary' }} />}
-      sx={{ minWidth: 150, '& .MuiSelect-select': { py: size === 'small' ? '7px' : undefined } }} inputProps={{ 'aria-label': 'Choose city' }}>
+    <Select value={value} displayEmpty onChange={(e) => onChange(e.target.value)} size={size} renderValue={label} fullWidth={fullWidth}
+      startAdornment={<PlaceOutlined sx={{ fontSize: 18, mr: 0.5, color: 'text.secondary', flexShrink: 0 }} />}
+      // autoFocus off so the area search box keeps focus; the filter resets each time the menu closes.
+      MenuProps={{ autoFocus: false, slotProps: { paper: { sx: { maxHeight: 480 } } } }} onClose={() => setAreaFilter('')}
+      title={label(value)}
+      sx={{
+        minWidth: fullWidth ? 0 : 150, maxWidth: size === 'small' ? 230 : undefined, height,
+        '& .MuiSelect-select': { py: size === 'small' ? '7px' : undefined, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+      }}
+      inputProps={{ 'aria-label': 'Choose city or area' }}>
       <MenuItem value="">All cities</MenuItem>
-      {cities?.map((c) => <MenuItem key={c.slug} value={c.slug}>{c.name}</MenuItem>)}
+      {areaCity && [
+        <ListSubheader key="areas-h" sx={{ lineHeight: '32px', fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          {isDistrict && <NearMeOutlined sx={{ fontSize: 14 }} />}
+          {isDistrict ? `Near you · ${areaCity.name}` : `Areas in ${areaCity.name}`}
+          <span className="ml-auto font-normal text-faint">
+            {cityAreas?.discovering ? 'Finding more areas…' : `${areas.length}${cityAreas?.subLocalityCount ? ` · ${cityAreas.subLocalityCount} localities` : ''}`}
+          </span>
+        </ListSubheader>,
+        areas.length > 8 && (
+          <ListSubheader key="areas-search" sx={{ py: 1, lineHeight: 'normal' }}>
+            <TextField size="small" fullWidth autoFocus value={areaFilter} placeholder="Search area, locality or PIN code"
+              onChange={(e) => setAreaFilter(e.target.value)}
+              // Keep typing in the box instead of triggering the menu's own type-ahead; Escape still closes the menu.
+              onKeyDown={(e) => { if (e.key !== 'Escape') e.stopPropagation(); }}
+              slotProps={{
+                htmlInput: { 'aria-label': `Search areas in ${areaCity.name}` },
+                input: { startAdornment: <InputAdornment position="start"><SearchRounded fontSize="small" /></InputAdornment> },
+              }} />
+          </ListSubheader>
+        ),
+        <MenuItem key={areaCity.slug} value={areaCity.slug}>All of {areaCity.name}</MenuItem>,
+        ...filteredAreas.map(({ a, via }) => (
+          <MenuItem key={a.id} value={AREA + a.id} sx={{ pl: 3.5, justifyContent: 'space-between', gap: 2 }}>
+            <span className="min-w-0">
+              <span className="block truncate">{a.name}</span>
+              {via && <span className="block truncate text-xs text-muted">includes {via}</span>}
+            </span>
+            <span className="shrink-0 text-xs text-faint">{a.pincode}</span>
+          </MenuItem>
+        )),
+        areaFilter && filteredAreas.length === 0 && (
+          <MenuItem key="areas-none" disabled sx={{ pl: 3.5, fontSize: 14 }}>No areas match “{areaFilter}”</MenuItem>
+        ),
+        <ListSubheader key="cities-h" sx={{ lineHeight: '32px', fontSize: 12, fontWeight: 600 }}>Other cities</ListSubheader>,
+      ]}
+      {cities?.filter((c) => c.slug !== areaCity?.slug).map((c) => <MenuItem key={c.slug} value={c.slug}>{c.name}</MenuItem>)}
     </Select>
   );
 }
@@ -27,13 +127,25 @@ export function CitySelect({ size = 'small' }: { size?: 'small' | 'medium' }) {
 function HeaderSearch() {
   const navigate = useNavigate();
   const location = useLocation();
+  const citySlug = useCity((s) => s.citySlug);
+  const areaId = useCity((s) => s.areaId);
   const [q, setQ] = useState('');
-  if (location.pathname === '/' || location.pathname === '/search') return <div className="flex-1" />;
+  const [picked, setPicked] = useState<SearchSuggestion | null>(null);
+  // Pages with their own search box don't repeat it in the header.
+  if (['/', '/search', '/categories'].includes(location.pathname)) return <div className="flex-1" />;
+  // Searches the picked category (or typed text) within the location chosen in the city/area selector.
+  const submit = () => navigate(searchHref(q, picked, citySlug, areaId));
+  const pick = (s: SearchSuggestion) => {
+    if (s.kind === 'Business') { navigate(`/b/${s.slug}`); return; }
+    setQ(s.label);
+    setPicked(s);
+  };
   return (
-    <form className="relative mx-4 hidden max-w-md flex-1 md:block" onSubmit={(e) => { e.preventDefault(); navigate(`/search?q=${encodeURIComponent(q)}`); }}>
-      <SearchRounded sx={{ position: 'absolute', left: 10, top: 9, fontSize: 20, color: 'var(--cb-faint)' }} />
-      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search electricians, doctors, salons…" aria-label="Search"
-        className="h-[38px] w-full rounded-lg border border-line bg-subtle pl-9 pr-3 text-sm outline-none transition-[border-color,box-shadow,background-color] placeholder:text-faint hover:border-line-strong focus:border-accent focus:bg-surface focus:shadow-[0_0_0_3px_var(--cb-ring)]" />
+    <form role="search" className="relative mx-4 hidden max-w-md flex-1 md:block" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+      <SearchRounded sx={{ position: 'absolute', left: 10, top: 9, fontSize: 20, color: 'var(--cb-faint)', zIndex: 1, pointerEvents: 'none' }} />
+      <SearchSuggest value={q} onChange={setQ} citySlug={citySlug} onSelect={pick} ariaLabel="Search" placeholder="Search electricians, doctors, salons…"
+        panelClassName="min-w-[380px]"
+        inputClassName="h-[38px] w-full rounded-lg border border-line bg-subtle pl-9 pr-3 text-sm outline-none transition-[border-color,box-shadow,background-color] placeholder:text-faint hover:border-line-strong focus:border-accent focus:bg-surface focus:shadow-[0_0_0_3px_var(--cb-ring)]" />
     </form>
   );
 }
@@ -49,6 +161,7 @@ export default function CustomerLayout() {
   const [open, setOpen] = useState(false);
   const location = useLocation();
   useNotificationStream();
+  useDistrictAutoSelect();
   useEffect(() => { window.scrollTo({ top: 0 }); setOpen(false); }, [location.pathname]);
 
   return (
@@ -103,8 +216,13 @@ export default function CustomerLayout() {
 }
 
 function Footer() {
+  const { data: categories } = useCategories();
+  // Most-listed featured services, straight from the category tree.
+  const discover = (categories ?? []).flatMap((c) => c.subCategories).filter((s) => s.isFeatured)
+    .sort((a, b) => b.businessCount - a.businessCount).slice(0, 6)
+    .map((s) => [s.name, `/search?sub=${s.slug}`]);
   const cols = [
-    { title: 'Discover', links: [['Electricians', '/search?sub=electrical'], ['Doctors', '/search?sub=doctors'], ['Salons', '/search?sub=beauty-salons'], ['Lawyers', '/search?sub=lawyers'], ['All categories', '/categories']] },
+    { title: 'Discover', links: [...discover, ['All categories', '/categories']] },
     { title: 'For business', links: [['List your business', '/list-your-business'], ['Plans & pricing', '/pricing'], ['Business sign in', '/login']] },
     { title: 'Company', links: [['About Calling Bell', '/'], ['Trust & safety', '/'], ['Contact support', '/']] },
   ];
@@ -124,8 +242,8 @@ function Footer() {
       </div>
       <div className="border-t border-navy-line">
         <div className="container-page flex flex-col gap-2 py-5 text-xs sm:flex-row sm:justify-between">
-          <span>© {new Date().getFullYear()} Calling Bell Technologies Pvt. Ltd.</span>
-          <span className="flex flex-wrap gap-x-3 gap-y-1"><span>Privacy · Terms · Grievance officer</span><GeoAttribution className="hover:text-white" /></span>
+          <span>© {new Date().getFullYear()} TekOrtus Pvt., Ltd.</span>
+          <span>Privacy · Terms · Grievance officer</span>
         </div>
       </div>
     </footer>

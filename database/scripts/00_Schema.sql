@@ -158,6 +158,8 @@ IF COL_LENGTH('dbo.SubCategories','IconUrl')    IS NULL ALTER TABLE dbo.SubCateg
 IF COL_LENGTH('dbo.SubCategories','AltText')    IS NULL ALTER TABLE dbo.SubCategories ADD AltText nvarchar(300) NULL;
 IF COL_LENGTH('dbo.SubCategories','SortOrder')  IS NULL ALTER TABLE dbo.SubCategories ADD SortOrder int NOT NULL CONSTRAINT DF_SubCategories_SortOrder DEFAULT (0);
 IF COL_LENGTH('dbo.SubCategories','IsFeatured') IS NULL ALTER TABLE dbo.SubCategories ADD IsFeatured bit NOT NULL CONSTRAINT DF_SubCategories_IsFeatured DEFAULT (0);
+-- OpenStreetMap tags for finding nearby places outside the platform (search results, see 18_ExternalSearch.sql).
+IF COL_LENGTH('dbo.SubCategories','OsmTags')    IS NULL ALTER TABLE dbo.SubCategories ADD OsmTags nvarchar(400) NULL;
 GO
 
 /* ---------- 6. Business profile extensions ---------- */
@@ -653,6 +655,54 @@ CREATE TABLE dbo.AuditLogs (
     IpAddress   nvarchar(64)     NULL,
     CreatedOn   datetimeoffset   NOT NULL DEFAULT SYSDATETIMEOFFSET()
 );
+GO
+
+/* Curated home-page "Popular services". ServiceName matches BusinessServices.Name inside the sub-category;
+   price, provider and booking figures are computed live by the API. */
+IF OBJECT_ID('dbo.PopularServices','U') IS NULL
+CREATE TABLE dbo.PopularServices (
+    Id            uniqueidentifier NOT NULL CONSTRAINT PK_PopularServices PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    SubCategoryId uniqueidentifier NOT NULL CONSTRAINT FK_PopularServices_SubCategories REFERENCES dbo.SubCategories(Id),
+    Code          nvarchar(60)     NOT NULL,
+    Title         nvarchar(160)    NOT NULL,
+    ServiceName   nvarchar(160)    NOT NULL,
+    Tagline       nvarchar(200)    NULL,
+    BadgeText     nvarchar(30)     NULL,
+    ImageUrl      nvarchar(500)    NULL,
+    ThumbnailUrl  nvarchar(500)    NULL,
+    AltText       nvarchar(300)    NULL,
+    SortOrder     int              NOT NULL DEFAULT 0,
+    IsActive      bit              NOT NULL DEFAULT 1,
+    CreatedBy     nvarchar(450)    NULL,
+    CreatedOn     datetimeoffset   NOT NULL DEFAULT SYSDATETIMEOFFSET(),
+    ModifiedBy    nvarchar(450)    NULL,
+    ModifiedOn    datetimeoffset   NULL,
+    IsDeleted     bit              NOT NULL DEFAULT 0,
+    CONSTRAINT UQ_PopularServices_Code UNIQUE (Code)
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_PopularServices_Sort' AND object_id = OBJECT_ID('dbo.PopularServices'))
+    CREATE INDEX IX_PopularServices_Sort ON dbo.PopularServices (SortOrder) INCLUDE (SubCategoryId, IsActive) WHERE IsDeleted = 0;
+GO
+
+/* Area discovery (background agent: OpenStreetMap + India Post + local AI normalisation).
+   Areas.AreaType   : Area | Locality | Suburb | Town | Village | Neighbourhood (sub-locality)
+   Areas.ParentAreaId: sub-localities point at the area they belong to (top-level areas have NULL)
+   Areas.AltNames   : alternate / old spellings, '|' separated, used by search
+   Areas.Source     : NULL for curated rows, 'osm' for agent-discovered rows; Areas.ExternalRef = OSM element (e.g. node/123) */
+IF COL_LENGTH('dbo.Areas', 'AreaType') IS NULL       ALTER TABLE dbo.Areas ADD AreaType nvarchar(24) NULL;
+IF COL_LENGTH('dbo.Areas', 'ParentAreaId') IS NULL   ALTER TABLE dbo.Areas ADD ParentAreaId uniqueidentifier NULL CONSTRAINT FK_Areas_ParentArea REFERENCES dbo.Areas(Id);
+IF COL_LENGTH('dbo.Areas', 'AltNames') IS NULL       ALTER TABLE dbo.Areas ADD AltNames nvarchar(600) NULL;
+IF COL_LENGTH('dbo.Areas', 'Source') IS NULL         ALTER TABLE dbo.Areas ADD Source nvarchar(40) NULL;
+IF COL_LENGTH('dbo.Areas', 'ExternalRef') IS NULL    ALTER TABLE dbo.Areas ADD ExternalRef nvarchar(40) NULL;
+IF COL_LENGTH('dbo.Areas', 'LastVerifiedOn') IS NULL ALTER TABLE dbo.Areas ADD LastVerifiedOn datetimeoffset NULL;
+IF COL_LENGTH('dbo.Cities', 'AreasDiscoveredOn') IS NULL ALTER TABLE dbo.Cities ADD AreasDiscoveredOn datetimeoffset NULL;
+IF COL_LENGTH('dbo.Cities', 'AreaDiscoveryNote') IS NULL ALTER TABLE dbo.Cities ADD AreaDiscoveryNote nvarchar(400) NULL;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Areas_City_Parent' AND object_id = OBJECT_ID('dbo.Areas'))
+    CREATE INDEX IX_Areas_City_Parent ON dbo.Areas (CityId, ParentAreaId) INCLUDE (Name, Pincode, IsActive) WHERE IsDeleted = 0;
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Areas_ExternalRef' AND object_id = OBJECT_ID('dbo.Areas'))
+    CREATE INDEX IX_Areas_ExternalRef ON dbo.Areas (CityId, ExternalRef) WHERE ExternalRef IS NOT NULL;
 GO
 
 PRINT '00_Schema.sql completed';

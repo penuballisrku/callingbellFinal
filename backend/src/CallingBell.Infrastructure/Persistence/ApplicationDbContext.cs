@@ -19,6 +19,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<Area> Areas => Set<Area>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<SubCategory> SubCategories => Set<SubCategory>();
+    public DbSet<PopularService> PopularServices => Set<PopularService>();
     public DbSet<LookupValue> LookupValues => Set<LookupValue>();
     public DbSet<Media> Media => Set<Media>();
     public DbSet<Business> Businesses => Set<Business>();

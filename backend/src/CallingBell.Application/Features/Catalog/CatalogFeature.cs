@@ -84,7 +84,8 @@ public sealed class GetCitiesHandler(IUnitOfWork uow) : IRequestHandler<GetCitie
             .OrderBy(c => c.SortOrder)
             .Select(c => new CityDto(c.Id, c.Name, c.Slug, c.State.Name, c.ImageUrl, c.IsPopular,
                 businesses.Count(b => b.CityId == c.Id && b.Status == BusinessStatuses.Active),
-                c.Areas.Where(a => a.IsActive).OrderBy(a => a.Name).Select(a => new AreaDto(a.Id, a.Name, a.Slug, a.Pincode)).ToList()))
+                // Top-level areas only; sub-localities come with GET /api/locations/cities/{slug}/areas.
+                c.Areas.Where(a => a.IsActive && a.ParentAreaId == null).OrderBy(a => a.Name).Select(a => new AreaDto(a.Id, a.Name, a.Slug, a.Pincode)).ToList()))
             .ToListAsync(ct);
     }
 }

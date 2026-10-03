@@ -46,8 +46,8 @@ export function AdminCategories() {
                     <TableRow hover>
                       <TableCell padding="checkbox"><IconButton size="small" onClick={() => setOpen(open === c.id ? null : c.id)} aria-label={`Show ${c.name} sub-categories`} aria-expanded={open === c.id}>
                         <ExpandMoreRounded sx={{ transform: open === c.id ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} /></IconButton></TableCell>
-                      <TableCell><div className="flex items-center gap-3"><Img src={c.iconUrl} alt="" className="h-9 w-9 p-1.5" fit="contain" fallbackText={c.name} />
-                        <div><div className="font-semibold">{c.name}</div><div className="text-xs text-muted">{c.subCategories.length} sub-categories · /{c.slug}</div></div></div></TableCell>
+                      <TableCell sx={{ minWidth: 180 }}><div className="flex items-center gap-3"><Img src={c.iconUrl} alt="" className="h-9 w-9 shrink-0 p-1.5" fit="contain" fallbackText={c.name} />
+                        <div className="min-w-0"><div className="font-semibold">{c.name}</div><div className="text-xs text-muted">{c.subCategories.length} sub-categories<span className="hidden sm:inline"> · /{c.slug}</span></div></div></div></TableCell>
                       <TableCell align="right">{number(c.businessCount)}</TableCell>
                       <TableCell align="right" sx={{ display: { xs: 'none', sm: 'table-cell' } }}>{number(c.leadCount30)}</TableCell>
                       <TableCell><Switch size="small" checked={c.isActive} onChange={(e) => saveCategory.mutate({ ...c, isActive: e.target.checked })} slotProps={{ input: { 'aria-label': `${c.name} active` } }} /></TableCell>

@@ -24,6 +24,10 @@ public class City : AuditableEntity
     public bool IsPopular { get; set; }
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
+    /// <summary>When the area-discovery agent last completed for this city (null = never).</summary>
+    public DateTimeOffset? AreasDiscoveredOn { get; set; }
+    /// <summary>Short summary or error from the last discovery run.</summary>
+    public string? AreaDiscoveryNote { get; set; }
 
     public State State { get; set; } = null!;
     public ICollection<Area> Areas { get; set; } = new List<Area>();
@@ -38,8 +42,20 @@ public class Area : AuditableEntity
     public decimal? Latitude { get; set; }
     public decimal? Longitude { get; set; }
     public bool IsActive { get; set; } = true;
+    /// <summary>Area | Locality | Suburb | Town | Village | Neighbourhood (sub-locality, see <see cref="ParentAreaId"/>).</summary>
+    public string? AreaType { get; set; }
+    /// <summary>The area a sub-locality belongs to; null for top-level areas.</summary>
+    public Guid? ParentAreaId { get; set; }
+    /// <summary>Alternate and old spellings, '|' separated (used by search).</summary>
+    public string? AltNames { get; set; }
+    /// <summary>Null for curated areas; "osm" for areas maintained by the discovery agent.</summary>
+    public string? Source { get; set; }
+    /// <summary>Source record, e.g. the OpenStreetMap element "node/123".</summary>
+    public string? ExternalRef { get; set; }
+    public DateTimeOffset? LastVerifiedOn { get; set; }
 
     public City City { get; set; } = null!;
+    public Area? ParentArea { get; set; }
 }
 
 public class Category : AuditableEntity
@@ -72,9 +88,35 @@ public class SubCategory : AuditableEntity
     public int SortOrder { get; set; }
     public bool IsFeatured { get; set; }
     public bool IsActive { get; set; } = true;
+    /// <summary>
+    /// OpenStreetMap selectors for finding places of this kind outside the platform, separated by "|":
+    /// "key=value" tags (e.g. "craft=electrician") or "name~words" (name contains the words).
+    /// </summary>
+    public string? OsmTags { get; set; }
 
     public Category Category { get; set; } = null!;
     public ICollection<Business> Businesses { get; set; } = new List<Business>();
+}
+
+/// <summary>
+/// Curated "Popular services" entry for the home page. <see cref="ServiceName"/> matches BusinessServices.Name within the
+/// sub-category, so starting price, provider count and booking count are computed live from listings and bookings.
+/// </summary>
+public class PopularService : AuditableEntity
+{
+    public Guid SubCategoryId { get; set; }
+    public string Code { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string ServiceName { get; set; } = string.Empty;
+    public string? Tagline { get; set; }
+    public string? BadgeText { get; set; }
+    public string? ImageUrl { get; set; }
+    public string? ThumbnailUrl { get; set; }
+    public string? AltText { get; set; }
+    public int SortOrder { get; set; }
+    public bool IsActive { get; set; } = true;
+
+    public SubCategory SubCategory { get; set; } = null!;
 }
 
 /// <summary>Generic, database-driven lookup list (statuses, types) with display metadata.</summary>

@@ -34,8 +34,10 @@ public sealed record SearchBusinessesQuery : PagedRequest, IRequest<SearchResult
     public double? MaxDistanceKm { get; init; }
 }
 
+/// <param name="AreaName">Selected area; its businesses are listed first and distances are measured from it.</param>
+/// <param name="AreaMatches">How many results are in the selected area. They come first; the rest of the city follows, nearest first.</param>
 public sealed record AppliedFiltersDto(string? Q, string? CategorySlug, string? CategoryName, string? SubSlug, string? SubName,
-    string? CitySlug, string? CityName, bool OpenNow, string? Availability);
+    string? CitySlug, string? CityName, bool OpenNow, string? Availability, string? AreaName = null, int? AreaMatches = null);
 
 public sealed record SearchResultDto(IReadOnlyList<BusinessCardDto> Items, PaginationMeta Pagination, AppliedFiltersDto Applied);
 
@@ -86,13 +88,22 @@ public sealed class SearchBusinessesHandler(IUnitOfWork uow) : IRequestHandler<S
             subName = await uow.Repository<SubCategory>().QueryNoTracking().Where(s => s.Slug == r.Sub).Select(s => s.Name).FirstOrDefaultAsync(ct);
             query = query.Where(b => b.SubCategory != null && b.SubCategory.Slug == r.Sub);
         }
+        // The selected area comes first (its businesses top the list, distances are measured from it); the rest of its city follows.
+        string? areaName = null;
+        decimal? areaLat = null, areaLng = null;
+        if (r.AreaId is { } areaId)
+        {
+            var area = await uow.Repository<Area>().QueryNoTracking().Where(a => a.Id == areaId)
+                .Select(a => new { a.Name, a.Latitude, a.Longitude, a.CityId }).FirstOrDefaultAsync(ct);
+            (areaName, areaLat, areaLng) = (area?.Name, area?.Latitude, area?.Longitude);
+            if (area is not null && citySlug is null) citySlug = cities.FirstOrDefault(c => c.Id == area.CityId)?.Slug;
+        }
         var city = citySlug is null ? null : cities.FirstOrDefault(c => c.Slug == citySlug);
         if (city is not null)
         {
             cityName = city.Name;
             query = query.Where(b => b.CityId == city.Id);
         }
-        if (r.AreaId is { } areaId) query = query.Where(b => b.AreaId == areaId);
 
         foreach (var term in terms)
         {
@@ -118,7 +129,8 @@ public sealed class SearchBusinessesHandler(IUnitOfWork uow) : IRequestHandler<S
                                                              && s.StartDate <= today && s.EndDate >= today));
         }
 
-        BusinessCards.Origin? origin = r is { Lat: not null, Lng: not null } ? new(r.Lat.Value, r.Lng.Value) : null;
+        BusinessCards.Origin? origin = r is { Lat: not null, Lng: not null } ? new(r.Lat.Value, r.Lng.Value)
+            : areaLat is not null && areaLng is not null ? new((double)areaLat, (double)areaLng) : null;
         if (origin is null && city is { Latitude: not null, Longitude: not null } && r.Sort == "distance")
         {
             origin = new((double)city.Latitude, (double)city.Longitude);
@@ -135,29 +147,58 @@ public sealed class SearchBusinessesHandler(IUnitOfWork uow) : IRequestHandler<S
         var total = await query.CountAsync(ct);
 
         var sponsored = BusinessCards.IsSponsoredOn(today);
-        IOrderedQueryable<Business> ordered = r.Sort switch
+        IOrderedQueryable<Business> Order(IQueryable<Business> q) => r.Sort switch
         {
-            "rating" => query.OrderByDescending(b => b.AverageRating).ThenByDescending(b => b.ReviewCount),
-            "reviews" => query.OrderByDescending(b => b.ReviewCount),
-            "newest" => query.OrderByDescending(b => b.CreatedOn),
-            "price" => query.OrderBy(b => b.Services.Where(s => s.IsActive && s.Price > 0).Min(s => (decimal?)s.Price) ?? decimal.MaxValue),
-            "distance" when origin is not null => query.OrderBy(b =>
+            "rating" => q.OrderByDescending(b => b.AverageRating).ThenByDescending(b => b.ReviewCount),
+            "reviews" => q.OrderByDescending(b => b.ReviewCount),
+            "newest" => q.OrderByDescending(b => b.CreatedOn),
+            "price" => q.OrderBy(b => b.Services.Where(s => s.IsActive && s.Price > 0).Min(s => (decimal?)s.Price) ?? decimal.MaxValue),
+            "distance" when origin is not null => q.OrderBy(b =>
                 Math.Pow((double)(b.Latitude ?? 0) - origin.Latitude, 2) + Math.Pow(((double)(b.Longitude ?? 0) - origin.Longitude) * Math.Cos(origin.Latitude * Math.PI / 180), 2)),
-            // Relevance: paid placement first (clearly labelled "Sponsored" in the UI), then quality signals.
-            _ => query.OrderByDescending(sponsored).ThenByDescending(b => b.IsFeatured)
+            // Relevance: paid placement first (clearly labelled "Sponsored" in the UI), then the subscription plan, quality signals and distance.
+            _ => ByDistance(q.OrderByDescending(sponsored).ThenByDescending(b => b.IsFeatured)
+                      .ThenByDescending(b => b.Subscriptions
+                          .Where(s => (s.Status == SubscriptionStatuses.Active || s.Status == SubscriptionStatuses.Trial) && s.StartDate <= today && s.EndDate >= today)
+                          .Max(s => (decimal?)s.Plan.MonthlyPrice) ?? 0)
                       .ThenByDescending(b => !Unavailable.Contains(b.AvailabilityStatus))
-                      .ThenByDescending(b => b.AverageRating).ThenByDescending(b => b.ReviewCount)
+                      .ThenByDescending(b => b.AverageRating).ThenByDescending(b => b.ReviewCount), origin)
         };
 
-        var items = await ordered.ThenBy(b => b.Name)
-            .Skip(r.Skip).Take(r.PageSize)
-            .Select(BusinessCards.ToCard(now, origin))
-            .ToListAsync(ct);
+        List<BusinessCardDto> items;
+        int? areaMatches = null;
+        if (r.AreaId is { } selectedArea && areaName is not null)
+        {
+            // Pages run through the area's results first, then the rest of the city: nearest to the area first, unless another sort was chosen.
+            var inArea = query.Where(b => b.AreaId == selectedArea);
+            var elsewhere = query.Where(b => b.AreaId == null || b.AreaId != selectedArea);
+            areaMatches = await inArea.CountAsync(ct);
+            items = r.Skip < areaMatches
+                ? await Order(inArea).ThenBy(b => b.Name).Skip(r.Skip).Take(r.PageSize).Select(BusinessCards.ToCard(now, origin)).ToListAsync(ct)
+                : [];
+            var room = r.PageSize - items.Count;
+            if (room > 0)
+            {
+                var rest = (r.Sort is null or "relevance") && origin is not null
+                    ? ByDistance(elsewhere.OrderBy(b => b.Latitude == null), origin).ThenByDescending(b => b.AverageRating)
+                    : Order(elsewhere);
+                items.AddRange(await rest.ThenBy(b => b.Name).Skip(Math.Max(0, r.Skip - areaMatches.Value)).Take(room)
+                    .Select(BusinessCards.ToCard(now, origin)).ToListAsync(ct));
+            }
+        }
+        else
+        {
+            items = await Order(query).ThenBy(b => b.Name).Skip(r.Skip).Take(r.PageSize).Select(BusinessCards.ToCard(now, origin)).ToListAsync(ct);
+        }
 
         var meta = PagedResult<BusinessCardDto>.Create(items, r.Page, r.PageSize, total).Meta;
         return new SearchResultDto(items, meta,
-            new AppliedFiltersDto(string.Join(' ', terms), r.Category, categoryName, r.Sub, subName, city?.Slug, cityName, openNow, availability));
+            new AppliedFiltersDto(string.Join(' ', terms), r.Category, categoryName, r.Sub, subName, city?.Slug, cityName, openNow, availability, areaName, areaMatches));
     }
+
+    /// <summary>Nearest first among otherwise equal results, when there is a point to measure from.</summary>
+    private static IOrderedQueryable<Business> ByDistance(IOrderedQueryable<Business> ordered, BusinessCards.Origin? origin) =>
+        origin is null ? ordered : ordered.ThenBy(b =>
+            Math.Pow((double)(b.Latitude ?? 0) - origin.Latitude, 2) + Math.Pow(((double)(b.Longitude ?? 0) - origin.Longitude) * Math.Cos(origin.Latitude * Math.PI / 180), 2));
 }
 
 // ===================== Detail =====================

@@ -36,13 +36,13 @@ export default function OwnerSettings() {
     <>
       <PageHeader title="Settings" subtitle="Manage your account, security and business preferences." crumbs={[{ label: 'Dashboard', to: '/business' }, { label: 'Settings' }]} />
       {isLoading || !data ? <Skeleton variant="rounded" height={520} /> : (
-        <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_360px]">
           <div className="min-w-0 space-y-6">
             <AccountDetails data={data} />
             <PasswordPanel hasPassword={data.hasPassword} />
             <SessionsPanel data={data} />
           </div>
-          <aside className="space-y-6">
+          <aside className="min-w-0 space-y-6">
             <Panel title="Business settings" noPad>
               <ul className="divide-y divide-line">
                 {[

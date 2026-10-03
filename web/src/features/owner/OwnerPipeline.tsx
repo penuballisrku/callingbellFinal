@@ -15,7 +15,6 @@ import type { OwnerBooking, OwnerLead, OwnerList } from '@/lib/types';
 import { ConfirmDialog, EmptyState, ErrorState, PageHeader, StatusBadge } from '@/components/ui';
 import { useBusiness } from './OwnerPortal';
 
-const leadStatuses = ['New', 'Contacted', 'Quoted', 'Converted', 'Lost'];
 
 export function OwnerLeads() {
   useDocumentTitle('Leads');
@@ -34,13 +33,15 @@ export function OwnerLeads() {
     placeholderData: keepPreviousData,
   });
   const total = Object.values(data?.statusCounts ?? {}).reduce((a, n) => a + n, 0);
+  // Lead status tabs come from the EnquiryStatus lookup table.
+  const leadStatuses = [...useLookup('EnquiryStatus')].sort((a, b) => a.sortOrder - b.sortOrder);
 
   return (
     <>
       <PageHeader title="Leads" subtitle="Enquiries, quotation and callback requests from customers. Respond quickly - fast replies win more jobs." />
       <Tabs value={status} onChange={(_, v) => { setStatus(v); setPage(1); }} variant="scrollable" allowScrollButtonsMobile sx={{ borderBottom: '1px solid var(--cb-line)', mb: 2 }}>
         <Tab value="" label={`All (${number(total)})`} />
-        {leadStatuses.map((s) => <Tab key={s} value={s} label={`${s} (${number(data?.statusCounts[s] ?? 0)})`} />)}
+        {leadStatuses.map((s) => <Tab key={s.code} value={s.code} label={`${s.name} (${number(data?.statusCounts[s.code] ?? 0)})`} />)}
       </Tabs>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row">
         <TextField placeholder="Search by name, phone, message or lead number" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }}
@@ -57,18 +58,18 @@ export function OwnerLeads() {
           <EmptyState title="No leads match these filters" message="Try another status or clear the search." />
         ) : (
           <TableContainer className={isFetching ? 'opacity-60' : ''}>
-            <Table size="small">
+            <Table size="small" className="table-stack">
               <TableHead>
                 <TableRow><TableCell>Customer</TableCell><TableCell>Request</TableCell><TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>Service</TableCell><TableCell>Status</TableCell><TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>Received</TableCell></TableRow>
               </TableHead>
               <TableBody>
                 {data!.page.items.map((l) => (
                   <TableRow key={l.id} hover onClick={() => setSelected(l)} sx={{ cursor: 'pointer' }} tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && setSelected(l)}>
-                    <TableCell><div className="font-semibold">{l.customerName}</div><div className="text-xs text-muted">{l.customerPhone}</div></TableCell>
-                    <TableCell sx={{ maxWidth: 360 }}><StatusBadge type="EnquiryType" code={l.enquiryType} /><div className="mt-1 truncate text-[13px] text-muted">{l.message}</div></TableCell>
-                    <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>{l.serviceName ?? 'General'}</TableCell>
-                    <TableCell><StatusBadge type="EnquiryStatus" code={l.status} /></TableCell>
-                    <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' }, whiteSpace: 'nowrap' }}>{ago(l.createdOn)}</TableCell>
+                    <TableCell data-primary><div className="font-semibold">{l.customerName}</div><div className="text-xs text-muted">{l.customerPhone}</div></TableCell>
+                    <TableCell data-label="Request" sx={{ maxWidth: 360 }}><StatusBadge type="EnquiryType" code={l.enquiryType} /><div className="mt-1 truncate text-[13px] text-muted">{l.message}</div></TableCell>
+                    <TableCell data-label="Service" sx={{ display: { xs: 'none', md: 'table-cell' } }}>{l.serviceName ?? 'General'}</TableCell>
+                    <TableCell data-label="Status"><StatusBadge type="EnquiryStatus" code={l.status} /></TableCell>
+                    <TableCell data-label="Received" sx={{ display: { xs: 'none', sm: 'table-cell' }, whiteSpace: 'nowrap' }}>{ago(l.createdOn)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -201,19 +202,19 @@ export function OwnerBookings() {
           <EmptyState title="No bookings here" message={scope === 'today' ? 'Nothing scheduled for today.' : 'Try a different tab or filter.'} />
         ) : (
           <TableContainer className={isFetching ? 'opacity-60' : ''}>
-            <Table size="small">
+            <Table size="small" className="table-stack">
               <TableHead>
                 <TableRow><TableCell>When</TableCell><TableCell>Customer</TableCell><TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>Service</TableCell><TableCell align="right">Amount</TableCell><TableCell>Status</TableCell><TableCell align="right">Actions</TableCell></TableRow>
               </TableHead>
               <TableBody>
                 {data!.page.items.map((b) => (
                   <TableRow key={b.id} hover>
-                    <TableCell sx={{ whiteSpace: 'nowrap' }}><div className="font-semibold">{date(b.scheduledStart)}</div><div className="text-xs text-muted">{new Date(b.scheduledStart).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}</div></TableCell>
-                    <TableCell><div className="font-medium">{b.customerName}</div><div className="text-xs text-muted">{b.customerPhone}</div></TableCell>
-                    <TableCell sx={{ display: { xs: 'none', md: 'table-cell' }, maxWidth: 280 }}><div>{b.serviceName}</div>{b.serviceAddress && <div className="truncate text-xs text-muted">{b.serviceAddress}</div>}</TableCell>
-                    <TableCell align="right"><div className="font-semibold">{money(b.amount)}</div><div className="text-xs text-muted">{b.paymentStatus}</div></TableCell>
-                    <TableCell><StatusBadge type="BookingStatus" code={b.status} /></TableCell>
-                    <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                    <TableCell data-label="When" sx={{ whiteSpace: 'nowrap' }}><div className="font-semibold">{date(b.scheduledStart)}</div><div className="text-xs text-muted">{new Date(b.scheduledStart).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}</div></TableCell>
+                    <TableCell data-label="Customer"><div className="font-medium">{b.customerName}</div><div className="text-xs text-muted">{b.customerPhone}</div></TableCell>
+                    <TableCell data-label="Service" sx={{ display: { xs: 'none', md: 'table-cell' }, maxWidth: 280 }}><div>{b.serviceName}</div>{b.serviceAddress && <div className="truncate text-xs text-muted">{b.serviceAddress}</div>}</TableCell>
+                    <TableCell data-label="Amount" align="right"><div className="font-semibold">{money(b.amount)}</div><div className="text-xs text-muted">{b.paymentStatus}</div></TableCell>
+                    <TableCell data-label="Status"><StatusBadge type="BookingStatus" code={b.status} /></TableCell>
+                    <TableCell data-label="" align="right" sx={{ whiteSpace: 'nowrap' }}>
                       {(bookingActions[b.status] ?? []).map((a) => (
                         <Button key={a.status} size="small" color={a.color ?? 'inherit'} variant={a.color === 'primary' || a.color === 'success' ? 'contained' : 'text'} sx={{ ml: 0.5 }}
                           onClick={() => setAction({ booking: b, status: a.status, label: a.label })}>{a.label}</Button>

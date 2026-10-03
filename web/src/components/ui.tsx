@@ -184,7 +184,8 @@ export function KpiCard({ kpi, hint }: { kpi: Kpi; hint?: string }) {
   return (
     <Card sx={{ height: '100%' }}>
       <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.25 } }}>
-        <Typography variant="body2" color="text.secondary" fontWeight={500} noWrap title={kpi.label}>{kpi.label}</Typography>
+        <Typography variant="body2" color="text.secondary" fontWeight={500} title={kpi.label}
+          sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.35 }}>{kpi.label}</Typography>
         <Typography fontSize={28} fontWeight={700} letterSpacing="-0.025em" lineHeight={1.2} mt={1} className="tabular">{formatKpi(kpi)}</Typography>
         <div className="mt-2 flex h-5 items-center gap-1.5 text-xs">
           {change !== null && change !== undefined ? (

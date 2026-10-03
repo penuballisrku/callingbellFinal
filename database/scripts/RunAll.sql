@@ -29,3 +29,6 @@
 :r $(ScriptDir)\13_DashboardDemoData.sql
 :r $(ScriptDir)\14_MarketingContent.sql
 :r $(ScriptDir)\15_MarketingMedia.sql
+:r $(ScriptDir)\16_PopularServices.sql
+:r $(ScriptDir)\17_HomeContent.sql
+:r $(ScriptDir)\18_ExternalSearch.sql

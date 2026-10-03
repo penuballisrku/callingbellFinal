@@ -1,53 +1,47 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Skeleton } from '@mui/material';
+import { useQuery } from '@tanstack/react-query';
+import { Button, IconButton, Skeleton, useMediaQuery } from '@mui/material';
 import SearchRounded from '@mui/icons-material/SearchRounded';
 import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
-import BoltRounded from '@mui/icons-material/BoltRounded';
-import FormatQuoteRounded from '@mui/icons-material/FormatQuoteRounded';
+import EventAvailableRounded from '@mui/icons-material/EventAvailableRounded';
+import StarRounded from '@mui/icons-material/StarRounded';
+import AutoAwesomeRounded from '@mui/icons-material/AutoAwesomeRounded';
+import ExpandMoreRounded from '@mui/icons-material/ExpandMoreRounded';
+import ChevronLeftRounded from '@mui/icons-material/ChevronLeftRounded';
+import ChevronRightRounded from '@mui/icons-material/ChevronRightRounded';
+import ExpandLessRounded from '@mui/icons-material/ExpandLessRounded';
+import PlaceOutlined from '@mui/icons-material/PlaceOutlined';
 import PhoneIphoneRounded from '@mui/icons-material/PhoneIphoneRounded';
 import { api } from '@/lib/api';
-import { ago, compactNumber, money, number } from '@/lib/format';
-import { useDocumentTitle } from '@/lib/hooks';
-import { usePresence } from '@/lib/realtime';
+import { compactNumber, number, pluralize } from '@/lib/format';
+import { useCategories, useCities, useDocumentTitle } from '@/lib/hooks';
 import { useCity } from '@/stores/city';
-import type { Banner, BusinessCard as Card, HomeData } from '@/lib/types';
-import { BusinessCard, BusinessCardSkeleton } from '@/components/BusinessCard';
-import { ErrorState, Img, SectionHeader, Stars } from '@/components/ui';
+import type { Banner, HomeData, MarketingPage, NearbyService, SearchSuggestion, NearbyServices, PopularService, RelatedCategory, SubCategory, TopPicks } from '@/lib/types';
+import { ErrorState, Img, SectionHeader } from '@/components/ui';
 import { CitySelect } from '@/layouts/CustomerLayout';
+import { SearchSuggest, searchHref } from '@/components/SearchSuggest';
+import { PlaceholderTicker } from '@/components/PlaceholderTicker';
+import { ReviewsSection } from './ReviewsSection';
 
-const quickSearches = [
-  { label: 'Electricians near me', to: '/search?sub=electrical&sort=distance' },
-  { label: 'Available doctors', to: '/search?sub=doctors&availability=now' },
-  { label: 'Online tutors', to: '/search?sub=private-tutors&video=true' },
-  { label: 'Lawyers near me', to: '/search?sub=lawyers&sort=distance' },
-  { label: 'AC repair nearby', to: '/search?sub=ac-repair&sort=distance' },
-  { label: 'Salons open now', to: '/search?sub=beauty-salons&openNow=true' },
-];
+/** Orders featured sub-categories round-robin by parent category, so every category is represented before any repeats. */
+function interleaveByCategory(subs: SubCategory[]): SubCategory[] {
+  const groups = new Map<string, SubCategory[]>();
+  subs.forEach((s) => groups.set(s.categorySlug, [...(groups.get(s.categorySlug) ?? []), s]));
+  const out: SubCategory[] = [];
+  for (let round = 0; out.length < subs.length; round++) groups.forEach((g) => { if (g[round]) out.push(g[round]); });
+  return out;
+}
 
 export default function HomePage() {
   useDocumentTitle();
   const citySlug = useCity((s) => s.citySlug);
-  const queryClient = useQueryClient();
   const queryKey = ['home', citySlug];
   const { data, isLoading, isError, refetch } = useQuery({ queryKey, queryFn: () => api.get<HomeData>('/api/home', { city: citySlug }) });
-
-  // Live availability for every business on the page.
-  const ids = useMemo(() => {
-    if (!data) return [];
-    return [...new Set([...data.nearby, ...data.onlineNow, ...data.featured, ...data.sponsored, ...data.topRated].map((b) => b.id))];
-  }, [data]);
-  usePresence(ids, (e) => {
-    queryClient.setQueryData<HomeData>(queryKey, (old) => {
-      if (!old) return old;
-      const patch = (list: Card[]) => list.map((b) => (b.id === e.businessId ? { ...b, availabilityStatus: e.status, lastSeenOn: e.lastSeenOn } : b));
-      return { ...old, nearby: patch(old.nearby), onlineNow: patch(old.onlineNow), featured: patch(old.featured), sponsored: patch(old.sponsored), topRated: patch(old.topRated) };
-    });
-  });
+  const { data: categoryTree } = useCategories();
+  const popularSubs = useMemo(() => interleaveByCategory(data?.categories ?? []).slice(0, 18), [data]);
 
   if (isError) return <div className="container-page py-16"><ErrorState onRetry={() => refetch()} /></div>;
-  const cityLabel = data?.cityName ?? 'your city';
 
   return (
     <>
@@ -55,11 +49,13 @@ export default function HomePage() {
 
       <div className="container-page space-y-14 py-12 md:space-y-16">
         <section aria-labelledby="cat-h">
-          <SectionHeader title="Popular categories" subtitle="Trusted professionals across 40+ services"
+          <SectionHeader title="Popular categories"
+            subtitle={categoryTree ? `Trusted professionals across ${number(categoryTree.reduce((n, c) => n + c.subCategories.length, 0))} services in ${categoryTree.length} categories` : 'Trusted professionals for every local need'}
             action={<Link to="/categories" className="hidden items-center gap-1 text-sm font-semibold sm:inline-flex">All categories <ArrowForwardRounded sx={{ fontSize: 18 }} /></Link>} />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-            {isLoading ? Array.from({ length: 12 }, (_, i) => <Skeleton key={i} variant="rounded" height={168} />) : data!.categories.map((c) => (
-              <Link key={c.id} to={`/search?sub=${c.slug}`} className="group card overflow-hidden transition-colors hover:border-line-strong">
+            {isLoading ? Array.from({ length: 12 }, (_, i) => <Skeleton key={i} variant="rounded" height={168} />) : popularSubs.map((c, i) => (
+              // 12 cards (whole rows at 2/3/4 columns) below lg, 18 (three rows of six) on desktop.
+              <Link key={c.id} to={`/search?sub=${c.slug}`} className={`group card overflow-hidden transition-colors hover:border-line-strong ${i >= 12 ? 'hidden lg:block' : ''}`}>
                 <Img src={c.imageUrl} alt={c.altText ?? c.name} aspect="16/10" rounded="rounded-none" className="w-full" fallbackText={c.name} />
                 <div className="flex items-center gap-2.5 p-3">
                   <Img src={c.iconUrl} alt="" className="h-8 w-8 shrink-0 p-1" rounded="rounded-lg" fit="contain" fallbackText={c.name} />
@@ -71,62 +67,32 @@ export default function HomePage() {
               </Link>
             ))}
           </div>
-        </section>
-
-        <section aria-labelledby="svc-h">
-          <SectionHeader title="Popular services" subtitle="Most booked on Calling Bell in the last 90 days" />
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {isLoading ? Array.from({ length: 8 }, (_, i) => <Skeleton key={i} variant="rounded" height={84} />) : data!.popularServices.map((s) => (
-              <Link key={`${s.name}-${s.subCategorySlug}`} to={`/search?sub=${s.subCategorySlug}&q=${encodeURIComponent(s.name)}`}
-                className="card flex items-center gap-3 p-3 transition-colors hover:border-line-strong">
-                <Img src={s.imageUrl} alt="" className="h-14 w-14 shrink-0" fallbackText={s.name} />
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold">{s.name}</div>
-                  <div className="truncate text-xs text-muted">{s.subCategoryName} · {s.providerCount} providers</div>
-                  <div className="mt-0.5 text-xs">From <span className="font-semibold">{money(s.startingPrice)}</span> · {number(s.bookingCount)} booked</div>
-                </div>
+          {categoryTree && (
+            <nav aria-label="Browse by category" className="mt-5 flex flex-wrap gap-2">
+              {categoryTree.map((c) => (
+                <Link key={c.id} to={`/categories/${c.slug}`}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface py-1 pl-1.5 pr-3 text-[13px] font-medium text-ink-2 transition-colors hover:border-line-strong hover:text-ink">
+                  <Img src={c.iconUrl} alt="" className="h-5 w-5 p-0.5" rounded="rounded-full" fit="contain" fallbackText={c.name} />
+                  {c.name}
+                </Link>
+              ))}
+              <Link to="/categories" className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-[13px] font-semibold text-ink-2 hover:text-accent-ink">
+                All categories <ArrowForwardRounded sx={{ fontSize: 16 }} />
               </Link>
-            ))}
-          </div>
+            </nav>
+          )}
         </section>
 
-        <BusinessRail title={`Top picks in ${cityLabel}`} subtitle="Highly rated businesses near you" items={data?.nearby} loading={isLoading}
-          link={`/search?${data?.citySlug ? `city=${data.citySlug}&` : ''}sort=rating`} />
+        <ServicesSection items={data?.popularServices} loading={isLoading} />
 
-        <BusinessRail title="Online right now" subtitle="Available to call, chat or book this minute" items={data?.onlineNow} loading={isLoading}
-          link={`/search?availability=now${data?.citySlug ? `&city=${data.citySlug}` : ''}`}
-          badge={<span className="ml-2 inline-flex items-center gap-1 rounded-full bg-success-soft px-2.5 py-1 align-middle text-xs font-semibold text-success"><BoltRounded sx={{ fontSize: 14 }} />{data ? number(data.stats.onlineNow) : '-'} live</span>} />
+        <NearbyServicesSection />
 
-        <BusinessRail title="Featured businesses" subtitle="Verified, top-performing businesses across India" items={data?.featured} loading={isLoading} />
+        <TopPicksSection />
 
-        {data?.promoBanners[0] && <PromoBanner banner={data.promoBanners[0]} />}
+        {!!data?.promoBanners.length && <PromoCarousel banners={data.promoBanners} />}
 
-        {(isLoading || (data?.sponsored.length ?? 0) > 0) && (
-          <BusinessRail title="Sponsored" subtitle="Promoted by businesses on Calling Bell" items={data?.sponsored} loading={isLoading} />
-        )}
+        <ReviewsSection />
 
-        <section aria-labelledby="rev-h">
-          <SectionHeader title="What customers are saying" subtitle="Recent reviews from verified customers" />
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {isLoading ? Array.from({ length: 6 }, (_, i) => <Skeleton key={i} variant="rounded" height={190} />) : data!.recentReviews.map((r) => (
-              <article key={r.id} className="card flex flex-col p-5">
-                <div className="flex items-center justify-between"><Stars value={r.rating} /><span className="text-xs text-muted">{ago(r.createdOn)}</span></div>
-                <FormatQuoteRounded sx={{ color: '#F4A62C', mt: 1 }} />
-                {r.title && <h3 className="text-sm font-semibold">{r.title}</h3>}
-                <p className="mt-1 line-clamp-3 text-sm text-ink-2">{r.comment}</p>
-                <div className="mt-auto flex items-center gap-3 border-t border-line pt-4">
-                  <Img src={r.businessLogoUrl} alt="" className="h-9 w-9" fallbackText={r.businessName} />
-                  <div className="min-w-0 text-xs">
-                    <div className="font-semibold">{r.customerName}</div>
-                    <Link to={`/b/${r.businessSlug}`} className="block truncate text-muted hover:underline">on {r.businessName}, {r.city}</Link>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <BusinessRail title="Top rated" subtitle={`Highest rated with at least 8 reviews${data?.cityName ? ` in ${data.cityName}` : ''}`} items={data?.topRated} loading={isLoading} />
 
         <AppDownload />
       </div>
@@ -137,7 +103,10 @@ export default function HomePage() {
 function Hero({ data }: { data?: HomeData }) {
   const navigate = useNavigate();
   const citySlug = useCity((s) => s.citySlug);
+  const areaId = useCity((s) => s.areaId);
   const [q, setQ] = useState('');
+  // Category / sub-category / service picked from the suggestions; searched (with the chosen location) when Search is pressed.
+  const [picked, setPicked] = useState<SearchSuggestion | null>(null);
   const [index, setIndex] = useState(0);
   const banners = data?.heroBanners ?? [];
   useEffect(() => {
@@ -146,10 +115,19 @@ function Hero({ data }: { data?: HomeData }) {
     return () => clearInterval(t);
   }, [banners.length]);
   const banner = banners[index % Math.max(1, banners.length)];
+  const categoryNames = useMemo(() => data?.categories.map((c) => c.name) ?? [], [data]);
+  // Quick-search chips are page content from the database (MarketingContent, PageKey 'Home', SectionKey 'QuickSearch').
+  const { data: homeContent } = useQuery({ queryKey: ['content', 'Home'], queryFn: () => api.get<MarketingPage>('/api/content/pages/Home'), staleTime: 600_000 });
+  const quickSearches = useMemo(() => homeContent?.blocks.filter((b) => b.section === 'QuickSearch' && b.linkUrl) ?? [], [homeContent]);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    navigate(`/search?q=${encodeURIComponent(q)}${citySlug ? `&city=${citySlug}` : ''}`);
+    navigate(searchHref(q, picked, citySlug, areaId));
+  };
+  const pick = (s: SearchSuggestion) => {
+    if (s.kind === 'Business') { navigate(`/b/${s.slug}`); return; }
+    setQ(s.label);
+    setPicked(s);
   };
 
   return (
@@ -161,19 +139,23 @@ function Hero({ data }: { data?: HomeData }) {
           <p className="mt-4 max-w-xl text-base text-on-navy-muted md:text-lg">Compare verified businesses, see live availability, request quotes and book in minutes.</p>
 
           <form onSubmit={submit} className="mt-7 flex flex-col gap-2 rounded-xl bg-surface p-2 sm:flex-row sm:items-center" role="search">
-            <div className="flex flex-1 items-center gap-2 px-2">
-              <SearchRounded sx={{ color: 'var(--cb-faint)' }} />
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Try “electricians near me” or “salons open now”" aria-label="What are you looking for?"
-                className="h-11 w-full bg-transparent text-[15px] text-ink outline-none placeholder:text-faint" />
+            <div className="flex min-w-0 flex-1 items-center gap-2 px-2">
+              <SearchRounded sx={{ color: 'var(--cb-faint)', flexShrink: 0 }} />
+              <SearchSuggest value={q} onChange={setQ} citySlug={citySlug} onSelect={pick} ariaLabel="What are you looking for?"
+                placeholder={categoryNames.length ? '' : 'Search for services, businesses…'}
+                className="min-w-0 flex-1" panelClassName="-ml-9 mt-3 sm:min-w-[460px]"
+                inputClassName="h-12 w-full truncate bg-transparent text-[15px] text-ink outline-none placeholder:text-faint">
+                {!q && categoryNames.length > 0 && <PlaceholderTicker names={categoryNames} />}
+              </SearchSuggest>
             </div>
-            <div className="sm:w-44"><CitySelect size="medium" /></div>
-            <Button type="submit" variant="contained" color="secondary" size="large" sx={{ height: 48, px: 3 }}>Search</Button>
+            <div className="min-w-0 sm:w-56 sm:shrink-0"><CitySelect size="medium" fullWidth height={48} /></div>
+            <Button type="submit" variant="contained" color="secondary" size="large" sx={{ height: 48, px: 3, flexShrink: 0 }}>Search</Button>
           </form>
 
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-4 flex min-h-[34px] flex-wrap gap-2">
             {quickSearches.map((s) => (
-              <Link key={s.label} to={`${s.to}${citySlug ? `&city=${citySlug}` : ''}`}
-                className="rounded-full border border-white/15 px-3 py-1.5 text-[13px] text-on-navy transition-colors hover:border-accent hover:text-white">{s.label}</Link>
+              <Link key={s.code} to={`${s.linkUrl}${citySlug ? `&city=${citySlug}` : ''}`}
+                className="rounded-full border border-white/15 px-3 py-1.5 text-[13px] text-on-navy transition-colors hover:border-accent hover:text-white">{s.title}</Link>
             ))}
           </div>
 
@@ -214,30 +196,326 @@ function Hero({ data }: { data?: HomeData }) {
   );
 }
 
-function BusinessRail({ title, subtitle, items, loading, link, badge }: {
-  title: string; subtitle?: string; items?: Card[]; loading: boolean; link?: string; badge?: React.ReactNode;
-}) {
+/** Services: category filter chips over service cards (image, category, rating, bookings, starting price); first 8 until expanded. */
+function ServicesSection({ items, loading }: { items?: PopularService[]; loading: boolean }) {
+  const [category, setCategory] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const categories = useMemo(() => {
+    const seen = new Map<string, { slug: string; name: string; colorHex?: string | null }>();
+    items?.forEach((s) => { if (!seen.has(s.categorySlug)) seen.set(s.categorySlug, { slug: s.categorySlug, name: s.categoryName, colorHex: s.colorHex }); });
+    return [...seen.values()];
+  }, [items]);
+  const filtered = category ? (items ?? []).filter((s) => s.categorySlug === category) : items ?? [];
+  const visible = category || expanded ? filtered : filtered.slice(0, 8);
+  const chip = (active: boolean) =>
+    `inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-colors ${
+      active ? 'border-ink bg-ink text-surface' : 'border-line bg-surface text-ink-2 hover:border-line-strong hover:text-ink'}`;
+
   if (!loading && !items?.length) return null;
   return (
-    <section>
-      <SectionHeader title={title} subtitle={subtitle}
-        action={link && <Link to={link} className="hidden items-center gap-1 whitespace-nowrap text-sm font-semibold sm:inline-flex">View all <ArrowForwardRounded sx={{ fontSize: 18 }} /></Link>} />
-      {badge && <div className="-mt-2 mb-4">{badge}</div>}
-      <div className="scroll-row" style={{ gridAutoColumns: 'minmax(260px, 1fr)' }}>
-        {loading ? Array.from({ length: 4 }, (_, i) => <BusinessCardSkeleton key={i} />) : items!.map((b) => <BusinessCard key={b.id} b={b} />)}
+    <section aria-labelledby="svc-h">
+      <SectionHeader title="Services" subtitle="Book trusted local services at upfront prices" />
+      {categories.length > 1 && (
+        <div role="group" aria-label="Filter services by category" className="-mx-4 mb-6 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] md:mx-0 md:flex-wrap md:px-0">
+          <button type="button" aria-pressed={!category} onClick={() => setCategory(null)} className={chip(!category)}>All</button>
+          {categories.map((c) => (
+            <button key={c.slug} type="button" aria-pressed={category === c.slug} onClick={() => setCategory(category === c.slug ? null : c.slug)} className={chip(category === c.slug)}>
+              <span aria-hidden className="h-2 w-2 rounded-full" style={{ background: c.colorHex ?? 'currentColor' }} />{c.name}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 lg:gap-5">
+        {loading
+          ? Array.from({ length: 8 }, (_, i) => <Skeleton key={i} variant="rounded" height={300} sx={{ borderRadius: '18px' }} />)
+          : visible.map((s) => <ServiceCard key={`${s.subCategorySlug}-${s.searchTerm}`} service={s} />)}
       </div>
+      {!category && filtered.length > 8 && (
+        <div className="mt-6 flex justify-center">
+          <Button variant="outlined" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded}>
+            {expanded ? 'Show fewer services' : `View all ${filtered.length} services`}
+          </Button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Popular services near the visitor's IP location (or chosen area). The list renders straight from the database ranking;
+ * a local AI model re-ranks it in the background, so poll while `aiPending` and swap in the AI order and reasons when ready.
+ */
+function NearbyServicesSection() {
+  const citySlug = useCity((st) => st.citySlug);
+  const areaId = useCity((st) => st.areaId);
+  const { data: cities } = useCities();
+  const areaSlug = useMemo(() => cities?.find((c) => c.slug === citySlug)?.areas.find((a) => a.id === areaId)?.slug ?? null, [cities, citySlug, areaId]);
+  const { data, isLoading } = useQuery({
+    queryKey: ['nearby-services', citySlug, areaSlug],
+    queryFn: () => api.get<NearbyServices>('/api/geo/nearby-services', { city: citySlug, area: areaSlug }),
+    refetchInterval: (q) => (q.state.data?.aiPending ? 5000 : false),
+    staleTime: 5 * 60_000,
+  });
+
+  if (!isLoading && !data?.items.length) return null;
+  const place = data?.placeName ?? data?.cityName;
+  return (
+    <section aria-labelledby="near-h">
+      <SectionHeader title={place ? `Popular near ${place}` : 'Popular near you'}
+        subtitle={data?.aiRanked
+          ? 'Picked for your area and the season by our AI assistant, from recent local bookings'
+          : 'What people around you are booking right now'}
+        action={data?.aiPending ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 text-xs font-semibold text-accent-ink" role="status">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent motion-reduce:animate-none" />Personalising with AI
+          </span>
+        ) : data?.aiRanked ? (
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-muted"><AutoAwesomeRounded sx={{ fontSize: 14 }} className="text-accent-ink" />AI picks</span>
+        ) : undefined} />
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 lg:gap-5">
+        {isLoading
+          ? Array.from({ length: 4 }, (_, i) => <Skeleton key={i} variant="rounded" height={300} sx={{ borderRadius: '18px' }} />)
+          : data!.items.map((s) => <ServiceCard key={`${s.subCategorySlug}-${s.searchTerm}`} service={s} />)}
+      </div>
+      {!!data?.relatedCategories.length && (
+        <RelatedCategories items={data.relatedCategories} place={place ?? 'you'} citySlug={data.citySlug} aiRanked={data.aiRanked} />
+      )}
+    </section>
+  );
+}
+
+const RELATED_PREVIEW = 6;
+
+/**
+ * Every sub-category available near the visitor: the AI's related picks first (with reasons once ready), then the rest in database order.
+ * The first {@link RELATED_PREVIEW} show by default; "Show all" expands to the full list.
+ */
+function RelatedCategories({ items, place, citySlug, aiRanked }: { items: RelatedCategory[]; place: string; citySlug?: string | null; aiRanked: boolean }) {
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? items : items.slice(0, RELATED_PREVIEW);
+  const hidden = items.length - RELATED_PREVIEW;
+  return (
+    <div className="mt-8" role="region" aria-labelledby="related-h">
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <h3 id="related-h" className="text-base font-semibold tracking-[-0.01em] md:text-lg">
+          {showAll ? `All categories near ${place}` : `Related categories near ${place}`}
+          <span className="ml-2 text-sm font-normal text-muted">{number(items.length)}</span>
+        </h3>
+        <span className="hidden text-xs text-muted sm:block">{aiRanked ? 'AI picks first, from what people nearby book together' : 'Available around you'}</span>
+      </div>
+      <ul id="related-list" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {visible.map((c) => (
+          <li key={c.slug}>
+            <Link to={`/search?sub=${c.slug}${citySlug ? `&city=${citySlug}` : ''}`}
+              className="group flex h-full items-start gap-3 rounded-2xl border border-line bg-surface p-3 shadow-[var(--cb-shadow-xs)] outline-offset-2 transition-[box-shadow,border-color] duration-200 hover:border-line-strong hover:shadow-[var(--cb-shadow-md)] focus-visible:outline-2 focus-visible:outline-accent md:p-4">
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl" style={{ background: `${c.colorHex ?? '#667085'}14` }}>
+                <Img src={c.iconUrl} alt="" className="h-6 w-6" rounded="rounded" fit="contain" fallbackText={c.name} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center justify-between gap-2">
+                  <span className="truncate text-sm font-semibold text-ink group-hover:underline">{c.name}</span>
+                  <ArrowForwardRounded sx={{ fontSize: 16 }} className="shrink-0 text-faint transition-colors group-hover:text-accent-ink" />
+                </span>
+                <span className="mt-0.5 block truncate text-xs text-muted">
+                  {c.categoryName} · {pluralize(c.businessCount, 'business', 'businesses')}
+                  {c.nearestKm != null && ` · ${c.nearestKm < 1 ? 'under 1 km' : `${c.nearestKm.toFixed(1)} km`}`}
+                </span>
+                {c.reason && (
+                  <span className="mt-1.5 flex gap-1 text-xs leading-5 text-ink-2">
+                    <AutoAwesomeRounded sx={{ fontSize: 13, mt: '3px', flexShrink: 0 }} className="text-accent-ink" />
+                    <span className="line-clamp-2">{c.reason}</span>
+                  </span>
+                )}
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+      {hidden > 0 && (
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+          <Button variant="outlined" onClick={() => setShowAll((v) => !v)} aria-expanded={showAll} aria-controls="related-list"
+            endIcon={showAll ? <ExpandLessRounded /> : <ExpandMoreRounded />}>
+            {showAll ? 'Show fewer categories' : `Show all ${number(items.length)} categories near ${place}`}
+          </Button>
+          <Link to="/categories" className="text-sm font-semibold text-ink-2 hover:text-accent-ink">Browse every category</Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ServiceCard({ service: s }: { service: PopularService | NearbyService }) {
+  const near = 'reason' in s || 'nearestKm' in s ? (s as NearbyService) : null;
+  const color = s.colorHex ?? '#667085';
+  return (
+    <Link to={`/search?sub=${s.subCategorySlug}&q=${encodeURIComponent(s.searchTerm)}`}
+      className="group relative flex flex-col overflow-hidden rounded-[18px] border border-line bg-surface shadow-[var(--cb-shadow-sm)] outline-offset-2 transition-[transform,box-shadow,border-color] duration-200 ease-out hover:-translate-y-1 hover:border-line-strong hover:shadow-[var(--cb-shadow-lg)] focus-visible:outline-2 focus-visible:outline-accent motion-reduce:transition-none motion-reduce:hover:translate-y-0">
+      {/* Category-coloured gradient accent along the top edge */}
+      <span aria-hidden className="absolute inset-x-0 top-0 z-10 h-[3px]" style={{ background: `linear-gradient(90deg, ${color}, ${color}33)` }} />
+      <div className="relative">
+        <div className="overflow-hidden">
+          <Img src={s.imageUrl} alt={s.altText ?? s.name} aspect="16/10" rounded="rounded-none" fallbackText={s.name}
+            className="w-full transition-transform duration-300 ease-out group-hover:scale-[1.04] motion-reduce:transition-none motion-reduce:group-hover:scale-100" />
+        </div>
+        <span aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2" style={{ background: `linear-gradient(to top, ${color}1f, transparent)` }} />
+        <span className="absolute -bottom-5 left-3 grid h-11 w-11 place-items-center rounded-xl bg-surface shadow-[var(--cb-shadow-md)] ring-1 ring-line md:left-4">
+          <Img src={s.iconUrl} alt="" className="h-7 w-7" rounded="rounded-md" fit="contain" fallbackText={s.subCategoryName} />
+        </span>
+        {near?.nearestKm != null && (
+          <span className="absolute right-2.5 top-2.5 inline-flex items-center gap-0.5 rounded-full bg-surface/90 px-2 py-0.5 text-[11px] font-semibold text-ink-2 shadow-[var(--cb-shadow-xs)] backdrop-blur">
+            <PlaceOutlined sx={{ fontSize: 13 }} />{near.nearestKm < 1 ? 'Under 1 km' : `${near.nearestKm.toFixed(1)} km`}
+          </span>
+        )}
+      </div>
+
+      <div className="flex flex-1 flex-col px-3 pb-3 pt-7 md:px-4 md:pb-4">
+        <div className="truncate text-xs font-medium text-muted">{s.categoryName} · {s.subCategoryName}</div>
+        <h3 className="mt-1 line-clamp-2 text-[15px] font-semibold leading-snug tracking-[-0.01em] text-ink md:text-base">{s.name}</h3>
+
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-2">
+          {s.reviewCount > 0 && (
+            <span className="inline-flex items-center gap-1" aria-label={`Rated ${s.rating.toFixed(1)} out of 5 from ${s.reviewCount} reviews`}>
+              <StarRounded sx={{ fontSize: 16, color: '#F4A62C' }} />
+              <span className="font-semibold tabular">{s.rating.toFixed(1)}</span>
+              <span className="text-muted">({compactNumber(s.reviewCount)})</span>
+            </span>
+          )}
+          {s.bookingCount > 0 && (
+            <span className="inline-flex items-center gap-1">
+              <EventAvailableRounded sx={{ fontSize: 15 }} className="text-muted" />
+              <span><span className="font-semibold tabular">{compactNumber(s.bookingCount)}</span> booked</span>
+            </span>
+          )}
+        </div>
+        {near?.reason && (
+          <p className="mt-2 flex gap-1.5 text-xs leading-5 text-muted">
+            <AutoAwesomeRounded sx={{ fontSize: 14, mt: '3px', flexShrink: 0 }} className="text-accent-ink" />
+            <span className="line-clamp-2">{near.reason}</span>
+          </p>
+        )}
+      </div>
+    </Link>
+  );
+}
+
+/**
+ * "Top picks in {city}": categories and sub-categories for the city detected from the visitor's IP address. Database-ranked picks show
+ * immediately; AI additions for that city (marked with a sparkle, with a reason) are appended once ready. The selected city is only a
+ * fallback for when the IP can't be located.
+ */
+function TopPicksSection() {
+  const citySlug = useCity((st) => st.citySlug);
+  const { data: picks, isLoading } = useQuery({
+    queryKey: ['top-picks', citySlug],
+    queryFn: () => api.get<TopPicks>('/api/geo/top-picks', { fallbackCity: citySlug }),
+    refetchInterval: (q) => (q.state.data?.aiPending ? 5000 : false),
+    staleTime: 10 * 60_000,
+  });
+
+  if (!isLoading && !picks?.categories.length) return null;
+  const more = (picks?.totalInCity ?? 0) - (picks?.categories.filter((c) => c.source === 'database').length ?? 0);
+  return (
+    <section aria-labelledby="top-picks-h">
+      <SectionHeader title={picks?.cityName ? `Top picks in ${picks.cityName}` : 'Top picks'}
+        subtitle={picks?.locationSource === 'ip'
+          ? `Based on your IP address location${picks.placeName && picks.placeName !== picks.cityName ? ` (${picks.placeName})` : ''} · most booked here first`
+          : 'Most booked categories in the selected city'}
+        action={picks?.aiPending ? (
+          <span role="status" className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 text-xs font-semibold text-accent-ink">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent motion-reduce:animate-none" />Finding more for {picks.cityName}
+          </span>
+        ) : (
+          <Link to="/categories" className="hidden items-center gap-1 whitespace-nowrap text-sm font-semibold sm:inline-flex">All categories <ArrowForwardRounded sx={{ fontSize: 18 }} /></Link>
+        )} />
+
+      <ul className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+        {isLoading ? Array.from({ length: 8 }, (_, i) => <li key={i}><Skeleton variant="rounded" height={96} sx={{ borderRadius: '16px' }} /></li>) : picks!.categories.map((c) => (
+          <li key={c.slug}>
+            <Link to={`/search?sub=${c.slug}${picks!.citySlug ? `&city=${picks!.citySlug}` : ''}`}
+              className="group flex h-full items-start gap-3 rounded-2xl border border-line bg-surface p-3 shadow-[var(--cb-shadow-xs)] outline-offset-2 transition-[box-shadow,border-color] duration-200 hover:border-line-strong hover:shadow-[var(--cb-shadow-md)] focus-visible:outline-2 focus-visible:outline-accent md:p-4">
+              <span className="relative grid h-11 w-11 shrink-0 place-items-center rounded-xl" style={{ background: `${c.colorHex ?? '#667085'}14` }}>
+                <Img src={c.iconUrl} alt="" className="h-6 w-6" rounded="rounded" fit="contain" fallbackText={c.name} />
+                {c.source === 'ai' && (
+                  <span title="Suggested by AI for this city" className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-surface shadow-[var(--cb-shadow-sm)] ring-1 ring-line">
+                    <AutoAwesomeRounded sx={{ fontSize: 12 }} className="text-accent-ink" />
+                  </span>
+                )}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold text-ink group-hover:underline">{c.name}</span>
+                <span className="block truncate text-xs text-muted">{c.categoryName}</span>
+                <span className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-ink-2">
+                  {c.businessCount > 0 && <span>{pluralize(c.businessCount, 'business', 'businesses')}</span>}
+                  {c.rating > 0 && <span className="inline-flex items-center gap-0.5"><StarRounded sx={{ fontSize: 13, color: '#F4A62C' }} />{c.rating.toFixed(1)}</span>}
+                </span>
+                {c.reason && <span className="mt-1.5 hidden text-xs leading-5 text-muted sm:line-clamp-2">{c.reason}</span>}
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+      {more > 0 && (
+        <div className="mt-4 text-center">
+          <Link to="/categories" className="text-sm font-semibold text-ink-2 hover:text-accent-ink">+{more} more categories in {picks?.cityName}</Link>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Mid-page promotions from the database (HomeMid banners). Slides are stacked in one grid cell so the carousel keeps the tallest
+ * slide's height (no layout shift); auto-advances every 8s, pauses on hover or keyboard focus, and never auto-rotates for reduced motion.
+ */
+function PromoCarousel({ banners }: { banners: Banner[] }) {
+  const [index, setIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
+  useEffect(() => {
+    if (banners.length < 2 || paused || reduceMotion) return;
+    const t = setInterval(() => setIndex((i) => (i + 1) % banners.length), 8000);
+    return () => clearInterval(t);
+  }, [banners.length, paused, reduceMotion]);
+  const current = index % banners.length;
+  const go = (step: number) => setIndex((i) => (i + step + banners.length) % banners.length);
+
+  return (
+    <section aria-roledescription="carousel" aria-label="Promotions"
+      onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)} onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
+      <div className="grid">
+        {banners.map((b, i) => (
+          <div key={b.id} role="group" aria-roledescription="slide" aria-label={`${i + 1} of ${banners.length}`} aria-hidden={i !== current}
+            inert={i !== current} className={`[grid-area:1/1] transition-opacity duration-500 motion-reduce:transition-none ${i === current ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
+            <PromoBanner banner={b} />
+          </div>
+        ))}
+      </div>
+      {banners.length > 1 && (
+        <div className="mt-3 flex items-center justify-center gap-2">
+          <IconButton size="small" aria-label="Previous promotion" onClick={() => go(-1)}><ChevronLeftRounded /></IconButton>
+          <div className="flex items-center gap-1.5">
+            {banners.map((b, i) => (
+              <button key={b.id} type="button" aria-label={`Show promotion ${i + 1}: ${b.title}`} aria-current={i === current} onClick={() => setIndex(i)}
+                className={`h-2 rounded-full transition-all duration-300 ${i === current ? 'w-6 bg-accent' : 'w-2 bg-line-strong hover:bg-muted'}`} />
+            ))}
+          </div>
+          <IconButton size="small" aria-label="Next promotion" onClick={() => go(1)}><ChevronRightRounded /></IconButton>
+        </div>
+      )}
     </section>
   );
 }
 
 function PromoBanner({ banner }: { banner: Banner }) {
   return (
-    <Link to={banner.linkUrl ?? '/'} className="group relative block overflow-hidden rounded-2xl bg-navy text-white">
-      <picture>
+    <Link to={banner.linkUrl ?? '/'} className="group relative block h-full overflow-hidden rounded-2xl bg-navy text-white">
+      {/* Artwork sits behind the text; the text block sets the height so long copy is never clipped. */}
+      <picture className="absolute inset-0">
         <source media="(max-width: 767px)" srcSet={banner.mobileImageUrl ?? banner.imageUrl} />
-        <Img src={banner.desktopImageUrl ?? banner.imageUrl} alt={banner.altText ?? banner.title} className="h-full min-h-[220px] w-full md:min-h-[240px]" rounded="rounded-none" eager />
+        <Img src={banner.desktopImageUrl ?? banner.imageUrl} alt={banner.altText ?? banner.title} className="h-full w-full" rounded="rounded-none" eager />
       </picture>
-      <div className="absolute inset-0 flex flex-col justify-center bg-gradient-to-r from-[#0B1220] via-[#0B1220]/85 to-transparent p-6 md:p-10">
+      {/* Phones: a near-solid wash so artwork never sits behind the headline. Wider screens: fade to reveal the artwork on the right. */}
+      <div className="relative flex h-full min-h-[220px] flex-col justify-center bg-gradient-to-t from-[#0B1220] via-[#0B1220]/90 to-[#0B1220]/70 p-6 md:min-h-[240px] md:bg-gradient-to-r md:from-[#0B1220] md:via-[#0B1220]/85 md:to-transparent md:p-10">
         <h2 className="max-w-lg text-2xl font-bold md:text-3xl">{banner.title}</h2>
         {banner.subtitle && <p className="mt-2 max-w-lg text-sm text-on-navy-muted md:text-base">{banner.subtitle}</p>}
         {banner.ctaText && <span className="mt-5 inline-flex w-fit items-center gap-1 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-on-accent">{banner.ctaText} <ArrowForwardRounded sx={{ fontSize: 18 }} /></span>}

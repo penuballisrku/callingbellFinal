@@ -10,6 +10,8 @@ using CallingBell.Infrastructure;
 using CallingBell.Infrastructure.Identity;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.ResponseCompression;
+using System.IO.Compression;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
@@ -94,6 +96,10 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("submissions", context => RateLimitPartition.GetFixedWindowLimiter(
         context.User.Identity?.Name ?? context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 20, Window = TimeSpan.FromMinutes(10) }));
+    // Search beyond the platform calls OpenStreetMap and (when configured) the paid Google Places API.
+    options.AddPolicy("public-search", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1) }));
     options.OnRejected = async (context, ct) =>
     {
         context.HttpContext.Response.ContentType = "application/json";
@@ -124,9 +130,27 @@ builder.Services.AddSwaggerGen(options =>
     options.AddSecurityRequirement(new OpenApiSecurityRequirement { [scheme] = [] });
 });
 
+// Performance: compress JSON and SVG responses, and cache public catalogue responses briefly (see CachePolicies).
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+    options.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(["image/svg+xml", "application/problem+json"]);
+});
+builder.Services.Configure<BrotliCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
+builder.Services.Configure<GzipCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
+builder.Services.AddOutputCache(options =>
+{
+    // Anonymous, non-personalised GET responses only (the default policy already skips requests with an Authorization header).
+    options.AddPolicy(CachePolicies.PublicCatalog, b => b.Expire(TimeSpan.FromSeconds(60)).SetVaryByQuery("*"));
+});
+builder.Services.AddHostedService<StartupWarmup>();
+
 var app = builder.Build();
 
 app.UseExceptionHandler();
+app.UseResponseCompression();
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -142,6 +166,7 @@ app.UseCors();
 app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();
+app.UseOutputCache();
 
 app.MapControllers();
 app.MapHub<PresenceHub>("/hubs/presence");

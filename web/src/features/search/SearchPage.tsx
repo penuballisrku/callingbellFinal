@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Button, Checkbox, Chip, Drawer, FormControlLabel, MenuItem, Pagination, Radio, RadioGroup, TextField, ToggleButton, ToggleButtonGroup,
@@ -9,12 +9,17 @@ import SearchRounded from '@mui/icons-material/SearchRounded';
 import ViewListRounded from '@mui/icons-material/ViewListRounded';
 import GridViewRounded from '@mui/icons-material/GridViewRounded';
 import { api } from '@/lib/api';
-import { useCities, useDebounced, useDocumentTitle, useLookup } from '@/lib/hooks';
+import { useCategories, useCities, useDebounced, useDocumentTitle, useLookup } from '@/lib/hooks';
 import { usePresence } from '@/lib/realtime';
 import { number } from '@/lib/format';
-import type { AppliedFilters, Banner, BusinessCard as Card, Category, Pagination as Meta, Plan } from '@/lib/types';
+import type { AppliedFilters, Banner, BusinessCard as Card, Pagination as Meta, Plan, SearchSuggestion } from '@/lib/types';
 import { BusinessCard, BusinessCardSkeleton } from '@/components/BusinessCard';
 import { EmptyState, ErrorState, Img, PageHeader } from '@/components/ui';
+import { useVisitorDistrict } from '@/components/VisitorCountry';
+import { useCity } from '@/stores/city';
+import { SearchSuggest } from '@/components/SearchSuggest';
+import { ExternalResults, SourceSummary, useExternalSearch } from './ExternalResults';
+import InfoOutlined from '@mui/icons-material/InfoOutlined';
 
 interface SearchResponse { data: Card[]; pagination: Meta; applied: AppliedFilters }
 
@@ -37,11 +42,36 @@ const flags = [
 
 export default function SearchPage() {
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const [text, setText] = useState(params.get('q') ?? '');
   const debounced = useDebounced(text);
   const [drawer, setDrawer] = useState(false);
   const [layout, setLayout] = useState<'row' | 'grid'>('row');
   const queryClient = useQueryClient();
+
+  // Location: the city/area chosen in the header dropdown applies to every search that doesn't name its own, and any change
+  // made here (filters, chips) is reflected back in the dropdown, so the two always agree.
+  const storeCity = useCity((s) => s.citySlug);
+  const storeArea = useCity((s) => s.areaId);
+  const setLocation = useCity((s) => s.setCity);
+  const city = params.get('city') ?? storeCity;
+  const areaId = params.get('area') ?? (city && city === storeCity ? storeArea : null);
+  // Runs when the URL changes only (store changes made here are followed by a URL change), reading the store's latest values.
+  useEffect(() => {
+    const { citySlug: selCity, areaId: selArea } = useCity.getState();
+    const urlCity = params.get('city');
+    const urlArea = params.get('area');
+    if (!urlCity || (urlCity === selCity && !urlArea && selArea)) {
+      if (!selCity) return;
+      const next = new URLSearchParams(params);
+      next.set('city', selCity);
+      if (selArea) next.set('area', selArea);
+      setParams(next, { replace: true });
+    } else if (urlCity !== selCity || (urlArea && urlArea !== selArea)) {
+      setLocation(urlCity, urlArea);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
 
   // Keep debounced text in the URL (search debounce).
   useEffect(() => {
@@ -54,11 +84,35 @@ export default function SearchPage() {
     const next = new URLSearchParams(params);
     Object.entries(patch).forEach(([k, v]) => (v === null || v === '' ? next.delete(k) : next.set(k, v)));
     if (resetPage) next.delete('page');
+    if ('city' in patch || 'area' in patch) {
+      const nextCity = 'city' in patch ? patch.city || null : city;
+      const nextArea = 'area' in patch ? patch.area || null : 'city' in patch ? null : areaId;
+      setLocation(nextCity, nextArea);
+      if (!nextArea) next.delete('area');
+    }
     setParams(next, { replace: true });
   };
 
+  /** Clears the search and filters but keeps the selected location. */
+  const clearAll = () => {
+    setText('');
+    const next = new URLSearchParams();
+    if (city) next.set('city', city);
+    if (areaId) next.set('area', areaId);
+    setParams(next, { replace: true });
+  };
+
+  // On this page suggestions refine the current results instead of navigating away (businesses still open their profile).
+  const applySuggestion = (s: SearchSuggestion) => {
+    if (s.kind === 'Business') { navigate(`/b/${s.slug}`); return; }
+    const q = s.kind === 'Service' ? s.label : '';
+    setText(q);
+    if (s.kind === 'Category') update({ category: s.slug, sub: null, q: null });
+    else update({ category: null, sub: s.subCategorySlug ?? s.slug, q: q || null });
+  };
+
   const query = {
-    q: params.get('q'), category: params.get('category'), sub: params.get('sub'), city: params.get('city'), areaId: params.get('area'),
+    q: params.get('q'), category: params.get('category'), sub: params.get('sub'), city, areaId,
     minRating: params.get('minRating'), availability: params.get('availability'), openNow: params.get('openNow') === 'true',
     verifiedOnly: params.get('verifiedOnly') === 'true', homeService: params.get('homeService') === 'true',
     videoConsultation: params.get('video') === 'true', onlineBooking: params.get('onlineBooking') === 'true',
@@ -74,12 +128,22 @@ export default function SearchPage() {
     },
     placeholderData: keepPreviousData,
   });
+  // Beyond the platform: AI-recommended real places and Google Maps businesses near the selected area, always after registered ones.
+  const external = useExternalSearch({ q: query.q, category: query.category, sub: query.sub, city: query.city, areaId: query.areaId });
+  const searchesExternal = !!(query.q?.trim() || query.category || query.sub);
   const { data: banners } = useQuery({ queryKey: ['banners', 'SearchTop'], queryFn: () => api.get<Banner[]>('/api/banners', { placement: 'SearchTop' }), staleTime: 600_000 });
+  // Promote the banner for the sub-category being searched; otherwise one picked per visit, so every campaign gets seen.
+  const [bannerSeed] = useState(() => Math.floor(Math.random() * 1000));
+  const banner = useMemo(() => {
+    if (!banners?.length) return undefined;
+    return banners.find((b) => query.sub && b.linkUrl?.includes(`sub=${query.sub}`)) ?? banners[bannerSeed % banners.length];
+  }, [banners, query.sub, bannerSeed]);
 
   const applied = data?.applied;
   const title = useMemo(() => {
     const what = applied?.subName ?? applied?.categoryName ?? (applied?.q ? `“${applied.q}”` : 'Local businesses');
-    return `${what}${applied?.cityName ? ` in ${applied.cityName}` : ''}`;
+    const where = [applied?.areaName, applied?.cityName].filter(Boolean).join(', ');
+    return `${what}${where ? ` in ${where}` : ''}`;
   }, [applied]);
   useDocumentTitle(title);
 
@@ -89,10 +153,25 @@ export default function SearchPage() {
     });
   });
 
+  // Area first, then the rest of the city: split this page where the area's results end.
+  const areaMatches = applied?.areaName ? applied.areaMatches ?? null : null;
+  const items = data?.data ?? [];
+  const split = areaMatches == null ? null : Math.max(0, Math.min(items.length, areaMatches - (query.page - 1) * query.pageSize));
+  const groups = split == null
+    ? [{ key: 'all', label: null as string | null, items }]
+    : [
+        { key: 'area', label: `In ${applied!.areaName}`, items: items.slice(0, split) },
+        { key: 'city', label: `More in ${applied!.cityName ?? 'the city'}, nearest to ${applied!.areaName}`, items: items.slice(split) },
+      ].filter((g) => g.items.length > 0);
+  const areaNotice = areaMatches === 0 && items.length > 0 && query.page === 1
+    ? `No registered businesses in ${applied!.areaName} yet. Showing the nearest in ${applied!.cityName ?? 'the city'}.`
+    : null;
+
   const activeChips = [
     applied?.subName && { key: 'sub', label: applied.subName },
     !applied?.subName && applied?.categoryName && { key: 'category', label: applied.categoryName },
     applied?.cityName && { key: 'city', label: applied.cityName },
+    applied?.areaName && { key: 'area', label: applied.areaName },
     query.minRating && { key: 'minRating', label: `${query.minRating}★ & above` },
     query.availability && { key: 'availability', label: query.availability === 'now' ? 'Available now' : 'Availability' },
     ...flags.filter((f) => params.get(f.key) === 'true').map((f) => ({ key: f.key, label: f.label })),
@@ -114,9 +193,10 @@ export default function SearchPage() {
         <div className="min-w-0">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="relative flex-1">
-              <SearchRounded sx={{ position: 'absolute', left: 10, top: 9, fontSize: 20, color: 'var(--cb-faint)' }} />
-              <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Search by name, service or locality" aria-label="Search"
-                className="h-[40px] w-full rounded-lg border border-line bg-surface pl-9 pr-3 text-sm outline-none focus:border-line-strong" />
+              <SearchRounded sx={{ position: 'absolute', left: 10, top: 9, fontSize: 20, color: 'var(--cb-faint)', zIndex: 1, pointerEvents: 'none' }} />
+              <SearchSuggest value={text} onChange={setText} citySlug={query.city} onSelect={applySuggestion}
+                placeholder="Search by name, service or locality" ariaLabel="Search"
+                inputClassName="h-[40px] w-full rounded-lg border border-line bg-surface pl-9 pr-3 text-sm outline-none focus:border-line-strong" />
             </div>
             <div className="flex gap-2">
               <Button className="lg:!hidden" variant="outlined" startIcon={<TuneRounded />} onClick={() => setDrawer(true)}>Filters{activeChips.length ? ` (${activeChips.length})` : ''}</Button>
@@ -133,18 +213,20 @@ export default function SearchPage() {
 
           {activeChips.length > 0 && (
             <div className="mb-4 flex flex-wrap items-center gap-2">
-              {activeChips.map((c) => <Chip key={c.key} label={c.label} onDelete={() => update({ [c.key]: null, ...(c.key === 'city' ? { area: null } : {}) })} variant="outlined" sx={{ bgcolor: '#fff' }} />)}
-              <Button size="small" onClick={() => { setText(''); setParams(new URLSearchParams(), { replace: true }); }}>Clear all</Button>
+              {activeChips.map((c) => <Chip key={c.key} label={c.label} onDelete={() => update({ [c.key]: null, ...(c.key === 'city' ? { area: null } : {}) })} variant="outlined" sx={{ bgcolor: 'background.paper' }} />)}
+              <Button size="small" onClick={clearAll}>Clear all</Button>
             </div>
           )}
 
-          {banners?.[0] && query.page === 1 && (
-            <Link to={banners[0].linkUrl ?? '/search'} className="card mb-4 flex items-center gap-4 overflow-hidden p-0 hover:border-line-strong">
-              <Img src={banners[0].mobileImageUrl ?? banners[0].imageUrl} alt={banners[0].altText ?? ''} className="h-20 w-20 shrink-0 sm:h-24 sm:w-24" rounded="rounded-none" />
+          {searchesExternal && <SourceSummary dbCount={data?.pagination.totalCount} ext={external.data} loading={external.isLoading} />}
+
+          {banner && query.page === 1 && (
+            <Link to={banner.linkUrl ?? '/search'} className="card mb-4 flex items-center gap-4 overflow-hidden p-0 hover:border-line-strong">
+              <Img src={banner.mobileImageUrl ?? banner.imageUrl} alt={banner.altText ?? ''} className="h-20 w-20 shrink-0 sm:h-24 sm:w-24" rounded="rounded-none" />
               <div className="min-w-0 py-3 pr-4">
                 <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">Promoted</span>
-                <div className="truncate font-semibold">{banners[0].title}</div>
-                <div className="line-clamp-2 text-sm text-muted">{banners[0].subtitle}</div>
+                <div className="truncate font-semibold">{banner.title}</div>
+                <div className="line-clamp-2 text-sm text-muted">{banner.subtitle}</div>
               </div>
             </Link>
           )}
@@ -153,13 +235,33 @@ export default function SearchPage() {
             <div className={`transition-opacity ${isFetching && !isLoading ? 'opacity-60' : ''}`} aria-busy={isFetching}>
               {isLoading ? (
                 <div className="space-y-3">{Array.from({ length: 6 }, (_, i) => <BusinessCardSkeleton key={i} layout="row" />)}</div>
+              ) : data!.data.length === 0 && searchesExternal ? (
+                <div role="status" className="card flex items-start gap-3 border-accent/40 bg-accent-soft/40 p-4 text-sm">
+                  <InfoOutlined fontSize="small" className="mt-0.5 shrink-0 text-accent-ink" />
+                  <div>
+                    <p className="font-medium text-ink">No registered businesses found in our database for {applied?.areaName ?? applied?.cityName ?? 'this area'}. Showing AI and Google Maps recommendations.</p>
+                    <p className="mt-0.5 text-muted">Filters such as rating and availability apply to registered businesses only.</p>
+                  </div>
+                </div>
               ) : data!.data.length === 0 ? (
                 <div className="card"><EmptyState title="No businesses match these filters" message="Try removing a filter, searching a nearby city or browsing all categories."
-                  action={<Button variant="contained" onClick={() => { setText(''); setParams(new URLSearchParams(), { replace: true }); }}>Reset filters</Button>} /></div>
-              ) : layout === 'row' ? (
-                <div className="space-y-3">{data!.data.map((b) => <BusinessCard key={b.id} b={b} layout="row" />)}</div>
+                  action={<Button variant="contained" onClick={clearAll}>Reset filters</Button>} /></div>
               ) : (
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{data!.data.map((b) => <BusinessCard key={b.id} b={b} />)}</div>
+                <div className="space-y-6">
+                  {areaNotice && (
+                    <p role="status" className="flex items-start gap-2 rounded-xl border border-line bg-surface px-4 py-3 text-sm text-muted">
+                      <InfoOutlined fontSize="small" className="mt-0.5 shrink-0 text-accent-ink" />{areaNotice}
+                    </p>
+                  )}
+                  {groups.map((g) => (
+                    <section key={g.key} aria-label={g.label ?? 'Results'}>
+                      {g.label && <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">{g.label}</h2>}
+                      {layout === 'row'
+                        ? <div className="space-y-3">{g.items.map((b) => <BusinessCard key={b.id} b={b} layout="row" />)}</div>
+                        : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{g.items.map((b) => <BusinessCard key={b.id} b={b} />)}</div>}
+                    </section>
+                  ))}
+                </div>
               )}
             </div>
           )}
@@ -169,6 +271,11 @@ export default function SearchPage() {
               <Pagination count={data.pagination.totalPages} page={query.page} shape="rounded"
                 onChange={(_, p) => { update({ page: p === 1 ? null : String(p) }, false); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
             </div>
+          )}
+
+          {/* Registered businesses always come first: the other sources follow their last page. */}
+          {searchesExternal && data && query.page >= data.pagination.totalPages && (
+            <ExternalResults ext={external.data} loading={external.isLoading} isError={external.isError} />
           )}
         </div>
       </div>
@@ -182,13 +289,16 @@ export default function SearchPage() {
 }
 
 function Filters({ params, update }: { params: URLSearchParams; update: (p: Record<string, string | null>) => void }) {
-  const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: () => api.get<Category[]>('/api/categories'), staleTime: 600_000 });
+  const { data: categories } = useCategories();
   const { data: cities } = useCities();
   const { data: plans } = useQuery({ queryKey: ['plans'], queryFn: () => api.get<Plan[]>('/api/plans'), staleTime: 600_000 });
   const availability = useLookup('AvailabilityStatus').filter((a) => a.code !== 'Offline' && a.code !== 'Busy');
 
   const categorySlug = params.get('category') ?? categories?.find((c) => c.subCategories.some((s) => s.slug === params.get('sub')))?.slug ?? '';
   const city = cities?.find((c) => c.slug === params.get('city'));
+  // With no city chosen, offer the areas of the visitor's IP-detected district.
+  const { data: district } = useVisitorDistrict();
+  const areaCity = city ?? cities?.find((c) => c.slug === district?.citySlug);
 
   return (
     <div className="space-y-5">
@@ -210,10 +320,12 @@ function Filters({ params, update }: { params: URLSearchParams; update: (p: Reco
           <MenuItem value="">All cities</MenuItem>
           {cities?.map((c) => <MenuItem key={c.slug} value={c.slug}>{c.name}</MenuItem>)}
         </TextField>
-        {city && (
-          <TextField select value={params.get('area') ?? ''} onChange={(e) => update({ area: e.target.value || null })} sx={{ mt: 1 }} slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Area' } }}>
-            <MenuItem value="">All areas in {city.name}</MenuItem>
-            {city.areas.map((a) => <MenuItem key={a.id} value={a.id}>{a.name} · {a.pincode}</MenuItem>)}
+        {areaCity && (
+          <TextField select value={city ? (params.get('area') ?? '').toLowerCase() : ''} sx={{ mt: 1, minWidth: 0, '& .MuiSelect-select': { overflow: 'hidden', textOverflow: 'ellipsis' } }}
+            onChange={(e) => update(city ? { area: e.target.value || null } : { city: areaCity.slug, area: e.target.value || null })}
+            slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Area' } }}>
+            <MenuItem value="">{city ? `All areas in ${city.name}` : `Areas near you · ${areaCity.name}`}</MenuItem>
+            {areaCity.areas.map((a) => <MenuItem key={a.id} value={a.id}>{a.name} · {a.pincode}</MenuItem>)}
           </TextField>
         )}
       </FilterGroup>
@@ -255,7 +367,7 @@ function Filters({ params, update }: { params: URLSearchParams; update: (p: Reco
 
 function FilterGroup({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <fieldset>
+    <fieldset className="min-w-0">
       <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{title}</legend>
       {children}
     </fieldset>

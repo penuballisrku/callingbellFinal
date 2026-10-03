@@ -145,20 +145,20 @@ export function OwnerServices() {
           <EmptyState title="No services yet" message="Add your first service with a price so customers can book or request a quote." />
         ) : (
           <TableContainer>
-            <Table size="small">
+            <Table size="small" className="table-stack">
               <TableHead><TableRow><TableCell>Service</TableCell><TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>Type</TableCell><TableCell align="right">Price</TableCell><TableCell align="right" sx={{ display: { xs: 'none', sm: 'table-cell' } }}>Bookings</TableCell><TableCell>Visible</TableCell><TableCell /></TableRow></TableHead>
               <TableBody>
                 {data!.map((s) => (
                   <TableRow key={s.id} hover sx={{ opacity: s.isActive ? 1 : 0.6 }}>
-                    <TableCell sx={{ maxWidth: 380 }}>
+                    <TableCell data-primary sx={{ maxWidth: 380 }}>
                       <div className="font-semibold">{s.name} {s.isPopular && <span className="ml-1 rounded bg-accent-soft px-1.5 py-0.5 text-[11px] font-semibold text-accent-ink">Popular</span>}</div>
                       <div className="truncate text-xs text-muted">{s.description}</div>
                     </TableCell>
-                    <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>{types.find((t) => t.code === s.type)?.name ?? s.type}<div className="text-xs text-muted">{s.durationMinutes} min</div></TableCell>
-                    <TableCell align="right"><div className="font-semibold">{money(s.price)}</div><div className="text-xs text-muted">{s.price > 0 ? s.priceUnit : ''}</div></TableCell>
-                    <TableCell align="right" sx={{ display: { xs: 'none', sm: 'table-cell' } }}>{number(s.bookingCount)}</TableCell>
-                    <TableCell><Switch size="small" checked={s.isActive} onChange={() => toggle.mutate(s)} slotProps={{ input: { 'aria-label': `Show ${s.name}` } }} /></TableCell>
-                    <TableCell align="right"><Button size="small" onClick={() => setEditing(s)}>Edit</Button></TableCell>
+                    <TableCell data-label="Type" sx={{ display: { xs: 'none', md: 'table-cell' } }}>{types.find((t) => t.code === s.type)?.name ?? s.type}<div className="text-xs text-muted">{s.durationMinutes} min</div></TableCell>
+                    <TableCell data-label="Price" align="right"><div className="font-semibold">{money(s.price)}</div><div className="text-xs text-muted">{s.price > 0 ? s.priceUnit : ''}</div></TableCell>
+                    <TableCell data-label="Bookings" align="right" sx={{ display: { xs: 'none', sm: 'table-cell' } }}>{number(s.bookingCount)}</TableCell>
+                    <TableCell data-label="Visible"><Switch size="small" checked={s.isActive} onChange={() => toggle.mutate(s)} slotProps={{ input: { 'aria-label': `Show ${s.name}` } }} /></TableCell>
+                    <TableCell data-label="" align="right"><Button size="small" onClick={() => setEditing(s)}>Edit</Button></TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -351,16 +351,16 @@ export function OwnerSubscription() {
           <Panel title="Invoices" subtitle="Subscriptions, advertising, booking commission and lead credits" noPad>
             {!data!.invoices.length ? <EmptyState title="No invoices yet" /> : (
               <TableContainer>
-                <Table size="small">
+                <Table size="small" className="table-stack">
                   <TableHead><TableRow><TableCell>Invoice</TableCell><TableCell>Type</TableCell><TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>Date</TableCell><TableCell align="right">Amount</TableCell><TableCell align="right">Total (incl. GST)</TableCell></TableRow></TableHead>
                   <TableBody>
                     {data!.invoices.map((i) => (
                       <TableRow key={i.invoiceNumber} hover>
-                        <TableCell sx={{ fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>{i.invoiceNumber}</TableCell>
-                        <TableCell><StatusBadge type="PaymentType" code={i.paymentType} /></TableCell>
-                        <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>{date(i.paidOn)}</TableCell>
-                        <TableCell align="right">{moneyPrecise(i.amount)}</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 600 }}>{moneyPrecise(i.totalAmount)}</TableCell>
+                        <TableCell data-primary sx={{ fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>{i.invoiceNumber}</TableCell>
+                        <TableCell data-label="Type"><StatusBadge type="PaymentType" code={i.paymentType} /></TableCell>
+                        <TableCell data-label="Date" sx={{ display: { xs: 'none', sm: 'table-cell' } }}>{date(i.paidOn)}</TableCell>
+                        <TableCell data-label="Amount" align="right">{moneyPrecise(i.amount)}</TableCell>
+                        <TableCell data-label="Total (incl. GST)" align="right" sx={{ fontWeight: 600 }}>{moneyPrecise(i.totalAmount)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -425,17 +425,17 @@ export function OwnerAds() {
           <EmptyState title="No campaigns yet" message="Start a sponsored listing to appear above competitors in your area." />
         ) : (
           <TableContainer>
-            <Table size="small">
+            <Table size="small" className="table-stack">
               <TableHead><TableRow><TableCell>Campaign</TableCell><TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>Dates</TableCell><TableCell align="right">Budget</TableCell><TableCell align="right" sx={{ display: { xs: 'none', sm: 'table-cell' } }}>Impressions</TableCell><TableCell align="right" sx={{ display: { xs: 'none', sm: 'table-cell' } }}>CTR</TableCell><TableCell>Status</TableCell></TableRow></TableHead>
               <TableBody>
                 {data!.map((a) => (
                   <TableRow key={a.id} hover>
-                    <TableCell sx={{ maxWidth: 320 }}><div className="truncate font-semibold">{a.title}</div><div className="text-xs text-muted">{a.campaignCode} · <StatusBadge type="AdType" code={a.adType} /></div></TableCell>
-                    <TableCell sx={{ display: { xs: 'none', md: 'table-cell' }, whiteSpace: 'nowrap' }}>{date(a.startDate)} - {date(a.endDate)}</TableCell>
-                    <TableCell align="right"><div className="font-semibold">{moneyExact(a.budget)}</div><div className="text-xs text-muted">{moneyExact(a.amountSpent)} spent</div></TableCell>
-                    <TableCell align="right" sx={{ display: { xs: 'none', sm: 'table-cell' } }}>{number(a.impressions)}<div className="text-xs text-muted">{number(a.clicks)} clicks</div></TableCell>
-                    <TableCell align="right" sx={{ display: { xs: 'none', sm: 'table-cell' } }}>{a.ctr.toFixed(2)}%</TableCell>
-                    <TableCell><StatusBadge type="AdStatus" code={a.status} /></TableCell>
+                    <TableCell data-primary sx={{ maxWidth: 320 }}><div className="truncate font-semibold">{a.title}</div><div className="text-xs text-muted">{a.campaignCode} · <StatusBadge type="AdType" code={a.adType} /></div></TableCell>
+                    <TableCell data-label="Dates" sx={{ display: { xs: 'none', md: 'table-cell' }, whiteSpace: 'nowrap' }}>{date(a.startDate)} - {date(a.endDate)}</TableCell>
+                    <TableCell data-label="Budget" align="right"><div className="font-semibold">{moneyExact(a.budget)}</div><div className="text-xs text-muted">{moneyExact(a.amountSpent)} spent</div></TableCell>
+                    <TableCell data-label="Impressions" align="right" sx={{ display: { xs: 'none', sm: 'table-cell' } }}>{number(a.impressions)}<div className="text-xs text-muted">{number(a.clicks)} clicks</div></TableCell>
+                    <TableCell data-label="CTR" align="right" sx={{ display: { xs: 'none', sm: 'table-cell' } }}>{a.ctr.toFixed(2)}%</TableCell>
+                    <TableCell data-label="Status"><StatusBadge type="AdStatus" code={a.status} /></TableCell>
                   </TableRow>
                 ))}
               </TableBody>

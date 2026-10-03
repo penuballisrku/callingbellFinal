@@ -9,10 +9,10 @@ import OpenInNewRounded from '@mui/icons-material/OpenInNewRounded';
 import { useSnackbar } from 'notistack';
 import { api, errorMessage } from '@/lib/api';
 import { ago, date, dateTime, hhmm, money, moneyExact, number } from '@/lib/format';
-import { useCities, useDebounced, useDocumentTitle, useLookup } from '@/lib/hooks';
-import type { AdminBusinessDetail as Detail, AdminBusinessRow, Category, Plan } from '@/lib/types';
+import { useCategories, useCities, useDebounced, useDocumentTitle, useLookup } from '@/lib/hooks';
+import type { AdminBusinessDetail as Detail, AdminBusinessRow, Plan } from '@/lib/types';
 import { AvailabilityBadge, ConfirmDialog, EmptyState, ErrorState, Img, PageHeader, Panel, Rating, StatusBadge, Stars } from '@/components/ui';
-import { useGridTheme } from '@/components/grid';
+import { useGridTheme, useResponsiveColumns } from '@/components/grid';
 
 
 
@@ -26,7 +26,7 @@ export function AdminBusinesses() {
   const search = useDebounced(q);
   const statuses = useLookup('BusinessStatus');
   const verifications = useLookup('VerificationStatus');
-  const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: () => api.get<Category[]>('/api/categories'), staleTime: 600_000 });
+  const { data: categories } = useCategories();
   const { data: cities } = useCities();
   const { data: plans } = useQuery({ queryKey: ['plans'], queryFn: () => api.get<Plan[]>('/api/plans'), staleTime: 600_000 });
 
@@ -68,6 +68,7 @@ export function AdminBusinesses() {
     { headerName: 'Live ads', field: 'liveAds', width: 95, sortable: false, type: 'rightAligned' },
     { headerName: 'Listed', field: 'createdOn', colId: 'newest', width: 120, sortable: true, valueFormatter: (p) => date(p.value) },
   ], []);
+  const responsiveColumns = useResponsiveColumns(columns);
 
   const onSort = (e: SortChangedEvent<AdminBusinessRow>) => {
     const s = e.api.getColumnState().find((c) => c.sort);
@@ -103,12 +104,11 @@ export function AdminBusinesses() {
         {isError ? <ErrorState onRetry={() => refetch()} /> : isLoading ? <div className="p-4"><Skeleton variant="rounded" height={480} /></div> : !data!.items.length ? (
           <EmptyState title="No businesses match these filters" action={<Button onClick={() => setParams(new URLSearchParams())}>Clear filters</Button>} />
         ) : (
-          <div className={`w-full overflow-x-auto ${isFetching ? 'opacity-60' : ''}`}>
-            <div style={{ minWidth: 1180 }}>
-              <AgGridReact<AdminBusinessRow> theme={gridTheme} rowData={data!.items} columnDefs={columns} domLayout="autoHeight" getRowId={(p) => p.data.id}
-                onRowClicked={(e) => e.data && navigate(`/admin/businesses/${e.data.id}`)} rowStyle={{ cursor: 'pointer' }} onSortChanged={onSort}
-                suppressCellFocus suppressMultiSort defaultColDef={{ resizable: true, sortingOrder: ['asc', 'desc', null] }} />
-            </div>
+          // Columns keep their minimum widths and scroll inside the grid; on phones the business column stays pinned.
+          <div className={`w-full ${isFetching ? 'opacity-60' : ''}`}>
+            <AgGridReact<AdminBusinessRow> theme={gridTheme} rowData={data!.items} columnDefs={responsiveColumns} domLayout="autoHeight" getRowId={(p) => p.data.id}
+              onRowClicked={(e) => e.data && navigate(`/admin/businesses/${e.data.id}`)} rowStyle={{ cursor: 'pointer' }} onSortChanged={onSort}
+              suppressCellFocus suppressMultiSort defaultColDef={{ resizable: true, sortingOrder: ['asc', 'desc', null] }} />
           </div>
         )}
       </div>

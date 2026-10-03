@@ -21,13 +21,20 @@ public sealed class GetVisitorCountryHandler(IGeoLocationService geo) : IRequest
         if (cdn is { Length: 2 } && cdn.All(char.IsAsciiLetter) && cdn is not ("XX" or "T1"))
             return Task.FromResult(new VisitorCountryDto(cdn, "cdn", geo.Attribution));
 
-        if (IPAddress.TryParse(r.ClientIp?.Trim(), out var ip))
-        {
-            if (ip.IsIPv4MappedToIPv6) ip = ip.MapToIPv4();
-            if (IsPublic(ip) && geo.CountryCodeFor(ip) is { } code)
-                return Task.FromResult(new VisitorCountryDto(code, "geoip", geo.Attribution));
-        }
+        if (VisitorIp.Parse(r.ClientIp) is { } ip && geo.CountryCodeFor(ip) is { } code)
+            return Task.FromResult(new VisitorCountryDto(code, "geoip", geo.Attribution));
         return Task.FromResult(new VisitorCountryDto(geo.DefaultCountryCode, "default", geo.Attribution));
+    }
+}
+
+public static class VisitorIp
+{
+    /// <summary>The client IP when it is a public address that can be geolocated; null for private, loopback or invalid input.</summary>
+    public static IPAddress? Parse(string? value)
+    {
+        if (!IPAddress.TryParse(value?.Trim(), out var ip)) return null;
+        if (ip.IsIPv4MappedToIPv6) ip = ip.MapToIPv4();
+        return IsPublic(ip) ? ip : null;
     }
 
     private static bool IsPublic(IPAddress ip)

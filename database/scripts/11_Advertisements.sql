@@ -68,6 +68,15 @@ INSERT INTO #Ad VALUES
 (N'ADV-26062', N'framestory-photography',           N'HomepageBanner',   N'Candid wedding films and albums', N'Book your wedding date early.', 5, 35, 45000, N'PendingApproval', 0, 0),
 (N'ADV-26063', N'gati-shift-packers-movers',        N'SearchPromotion',  N'Top result for packers in Chembur', NULL, 1, 31, 8000, N'PendingApproval', 1, 1),
 (N'ADV-26064', N'skyline-property-advisors',        N'SponsoredListing', N'Guaranteed rental income on Powai flats', N'Claim could not be substantiated.', -3, 27, 10000, N'Rejected', 1, 0),
+-- Campaigns for the expanded categories
+(N'ADV-26065', N'pawsome-pet-clinic',               N'FeaturedListing',  N'Annual pet vaccinations with home-visit option', N'Dog and cat vaccinations, deworming and check-ups in Jubilee Hills.', -18, 42, 16000, N'Active', 1, 1),
+(N'ADV-26066', N'mehta-and-shah-chartered-accountants', N'SponsoredListing', N'Startup incorporation in 7 working days', N'Company registration, GST and ROC compliance by chartered accountants.', -12, 48, 14000, N'Active', 1, 0),
+(N'ADV-26067', N'quickfix-appliance-care',          N'SearchPromotion',  N'Same-day washing machine repair', N'All major brands with a 90-day service warranty.', -9, 21, 8000, N'Active', 1, 1),
+(N'ADV-26068', N'suryashakti-solar',                N'FeaturedListing',  N'Rooftop solar with PM Surya Ghar subsidy', N'Free site survey and complete subsidy paperwork.', -20, 70, 32000, N'Active', 1, 1),
+(N'ADV-26069', N'growthgrid-digital-marketing',     N'SponsoredListing', N'Get found on Google Maps', N'Google Business Profile optimisation for local businesses.', -6, 54, 12000, N'Active', 1, 0),
+(N'ADV-26070', N'noor-designer-boutique',           N'FeaturedListing',  N'Wedding-season chikankari collection', N'Custom bridal lehengas and sharara sets by master karigars.', -15, 45, 18000, N'Active', 1, 1),
+(N'ADV-26071', N'arogya-ayurveda-centre',           N'SponsoredListing', N'Monsoon Panchakarma packages', N'Seven-day detox programmes with physician supervision.', -25, 35, 15000, N'Active', 1, 0),
+(N'ADV-26072', N'pixelforge-web-studio',            N'SearchPromotion',  N'Business website in 3 weeks', NULL, -4, 26, 7000, N'Active', 1, 1),
 -- Completed campaigns (history for revenue trends)
 (N'ADV-25901', N'sparkline-electricals',            N'FeaturedListing',  N'Monsoon electrical safety check', N'Earthing and wiring audit before the rains.', -150, -90, 20000, N'Completed', 1, 1),
 (N'ADV-25902', N'coolbreeze-ac-care',               N'SearchPromotion',  N'Summer AC service rush', NULL, -210, -150, 12000, N'Completed', 1, 1),

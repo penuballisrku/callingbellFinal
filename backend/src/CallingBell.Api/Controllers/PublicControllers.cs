@@ -9,13 +9,16 @@ using CallingBell.Application.Features.Home;
 using CallingBell.Application.Features.Media;
 using CallingBell.Application.Features.Onboarding;
 using CallingBell.Application.Features.Payments;
+using CallingBell.Application.Features.Search;
 using CallingBell.Domain.Constants;
 using CallingBell.Infrastructure.Geo;
 using CallingBell.Infrastructure.Identity;
 using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.OutputCaching;
 using Microsoft.AspNetCore.RateLimiting;
+using CallingBell.Api.Infrastructure;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace CallingBell.Api.Controllers;
@@ -69,42 +72,52 @@ public sealed class AuthController : ApiControllerBase
 [Route("api")]
 public sealed class CatalogController : ApiControllerBase
 {
-    [HttpGet("home")]
+    [HttpGet("home"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
     public async Task<ActionResult<ApiResponse<HomeDto>>> Home([FromQuery] string? city, CancellationToken ct) =>
         Success(await Sender.Send(new GetHomeQuery(city), ct));
 
-    [HttpGet("categories")]
+    [HttpGet("categories"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<CategoryDto>>>> Categories(CancellationToken ct) =>
         Success(await Sender.Send(new GetCategoriesQuery(), ct));
 
-    [HttpGet("categories/featured")]
+    [HttpGet("categories/featured"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<SubCategoryDto>>>> FeaturedCategories(CancellationToken ct) =>
         Success(await Sender.Send(new GetFeaturedSubCategoriesQuery(), ct));
 
-    [HttpGet("categories/{slug}")]
+    [HttpGet("categories/{slug}"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
     public async Task<ActionResult<ApiResponse<CategoryDto>>> Category(string slug, CancellationToken ct) =>
         Success(await Sender.Send(new GetCategoryBySlugQuery(slug), ct));
 
-    [HttpGet("locations/cities")]
+    [HttpGet("locations/cities"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<CityDto>>>> Cities(CancellationToken ct) =>
         Success(await Sender.Send(new GetCitiesQuery(), ct));
 
-    [HttpGet("lookups")]
+    /// <summary>All areas of a city with alternate names and sub-localities; queues the area-discovery agent when the data is missing or stale.</summary>
+    [HttpGet("locations/cities/{slug}/areas")]
+    public async Task<ActionResult<ApiResponse<CityAreasDto>>> CityAreas(string slug, CancellationToken ct) =>
+        Success(await Sender.Send(new GetCityAreasQuery(slug), ct));
+
+    [HttpGet("lookups"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
     public async Task<ActionResult<ApiResponse<IReadOnlyDictionary<string, IReadOnlyList<LookupDto>>>>> Lookups(CancellationToken ct) =>
         Success(await Sender.Send(new GetLookupsQuery(), ct));
 
-    [HttpGet("plans")]
+    [HttpGet("plans"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<PlanDto>>>> Plans(CancellationToken ct) =>
         Success(await Sender.Send(new GetPlansQuery(), ct));
 
-    [HttpGet("banners")]
+    [HttpGet("banners"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<BannerDto>>>> Banners([FromQuery] string placement = "HomeHero", CancellationToken ct = default) =>
         Success(await Sender.Send(new GetBannersQuery(placement), ct));
 
     /// <summary>Database-driven marketing page content, e.g. <c>/api/content/pages/ListYourBusiness</c>.</summary>
-    [HttpGet("content/pages/{pageKey}")]
+    [HttpGet("content/pages/{pageKey}"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
     public async Task<ActionResult<ApiResponse<MarketingPageDto>>> MarketingPage(string pageKey, CancellationToken ct) =>
         Success(await Sender.Send(new GetMarketingPageQuery(pageKey), ct));
+
+    /// <summary>Search-box autocomplete: categories, services and businesses matching <paramref name="q"/> (empty below 3 characters).</summary>
+    [HttpGet("search/suggest"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
+    public async Task<ActionResult<ApiResponse<SearchSuggestionsDto>>> SearchSuggestions([FromQuery] string? q, [FromQuery] string? city, CancellationToken ct) =>
+        Success(await Sender.Send(new GetSearchSuggestionsQuery(q, city), ct));
 }
 
 [Route("api/businesses")]
@@ -156,19 +169,100 @@ public sealed class BusinessesController : ApiControllerBase
 }
 
 [Route("api/geo")]
-public sealed class GeoController : ApiControllerBase
+public sealed class GeoController(IOptions<GeoIpOptions> options, IHostEnvironment env, DevelopmentPublicIp developmentIp) : ApiControllerBase
 {
     /// <summary>The visitor's country (ISO code) from a CDN edge header or the local GeoIP database.</summary>
     [HttpGet("country")]
-    public async Task<ActionResult<ApiResponse<VisitorCountryDto>>> Country([FromServices] IOptions<GeoIpOptions> options, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<VisitorCountryDto>>> Country(CancellationToken ct)
     {
         var cdn = Request.Headers["CF-IPCountry"].FirstOrDefault() ?? Request.Headers["CloudFront-Viewer-Country"].FirstOrDefault();
+        Response.Headers.CacheControl = "private, max-age=3600";
+        Response.Headers.Vary = "CF-IPCountry, CloudFront-Viewer-Country, X-Forwarded-For";
+        return Success(await Sender.Send(new GetVisitorCountryQuery(cdn, await ClientIpAsync()), ct));
+    }
+
+    /// <summary>
+    /// The listed city (district) the visitor is browsing from, located with ip-api.com (local GeoIP city database as fallback), so the city and area dropdowns can
+    /// pre-select it and list its areas. District is null when the IP can't be located or isn't near a listed city.
+    /// </summary>
+    /// <param name="ip">Development only: geolocate this IP instead of the caller's.</param>
+    [HttpGet("district")]
+    public async Task<ActionResult<ApiResponse<VisitorLocationDto>>> District([FromQuery] string? ip, CancellationToken ct)
+    {
+        var clientIp = env.IsDevelopment() && !string.IsNullOrWhiteSpace(ip) ? ip : await ClientIpAsync();
+        Response.Headers.CacheControl = "private, max-age=3600";
+        Response.Headers.Vary = "X-Forwarded-For";
+        return Success(await Sender.Send(new GetVisitorDistrictQuery(clientIp, options.Value.DistrictRadiusKm), ct));
+    }
+
+    /// <summary>
+    /// Popular services near the visitor's IP location (or the selected <paramref name="area"/>), ranked from recent bookings and, once ready,
+    /// re-ranked with reasons by the local AI model. Poll while <c>aiPending</c> is true.
+    /// </summary>
+    /// <param name="city">City being browsed; when it differs from the IP's city its centre is used.</param>
+    /// <param name="area">Area slug within <paramref name="city"/>; overrides the IP location.</param>
+    /// <param name="ip">Development only: locate this IP instead of the caller's.</param>
+    [HttpGet("nearby-services")]
+    public async Task<ActionResult<ApiResponse<NearbyServicesDto>>> NearbyServices([FromQuery] string? city, [FromQuery] string? area, [FromQuery] string? ip,
+        CancellationToken ct)
+    {
+        var clientIp = env.IsDevelopment() && !string.IsNullOrWhiteSpace(ip) ? ip : await ClientIpAsync();
+        Response.Headers.CacheControl = "private, no-store";
+        return Success(await Sender.Send(new GetNearbyServicesQuery(clientIp, city, area, options.Value.DistrictRadiusKm), ct));
+    }
+
+    /// <summary>
+    /// Category list for "Top picks", specific to the city detected from the visitor's IP address (<paramref name="fallbackCity"/> only when the IP can't be located):
+    /// database-ranked categories immediately, plus AI-suggested additions for that city once ready. Poll while <c>aiPending</c> is true.
+    /// </summary>
+    /// <param name="fallbackCity">City slug to use when the visitor's IP can't be placed near a listed city.</param>
+    /// <param name="ip">Development only: locate this IP instead of the caller's.</param>
+    [HttpGet("top-picks")]
+    public async Task<ActionResult<ApiResponse<TopPicksDto>>> TopPicks([FromQuery] string? fallbackCity, [FromQuery] string? ip, CancellationToken ct)
+    {
+        var clientIp = env.IsDevelopment() && !string.IsNullOrWhiteSpace(ip) ? ip : await ClientIpAsync();
+        Response.Headers.CacheControl = "private, no-store";
+        return Success(await Sender.Send(new GetTopPicksQuery(clientIp, fallbackCity, options.Value.DistrictRadiusKm), ct));
+    }
+
+    /// <summary>
+    /// Real customer reviews of businesses near the visitor (IP area, or the chosen <paramref name="city"/>/<paramref name="area"/>), a
+    /// different random set on each call, plus a short AI summary of them once ready. Pass recently shown ids in <paramref name="exclude"/>.
+    /// </summary>
+    [HttpGet("reviews")]
+    public async Task<ActionResult<ApiResponse<LocalReviewsDto>>> Reviews([FromQuery] string? city, [FromQuery] string? area,
+        [FromQuery] string? exclude, [FromQuery] string? ip, CancellationToken ct)
+    {
+        var clientIp = env.IsDevelopment() && !string.IsNullOrWhiteSpace(ip) ? ip : await ClientIpAsync();
+        var seen = (exclude ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries).Take(60)
+            .Select(x => Guid.TryParse(x, out var g) ? g : Guid.Empty).Where(g => g != Guid.Empty).ToList();
+        Response.Headers.CacheControl = "private, no-store";
+        return Success(await Sender.Send(new GetLocalReviewsQuery(clientIp, city, area, options.Value.DistrictRadiusKm, seen), ct));
+    }
+
+    /// <summary>
+    /// Search results from beyond the platform, shown after the registered businesses from <c>GET /api/businesses</c>: "AI recommended" real places
+    /// near the selected area from OpenStreetMap (picked by the local AI; poll while <c>ai.aiStatus</c> is "pending"), then Google Maps businesses
+    /// when a Places API key is configured. Places already listed as registered businesses are left out. Same filters as the business search.
+    /// </summary>
+    /// <param name="area">Area id (as in the business search); the results are near it and distances are measured from it.</param>
+    [HttpGet("external-search"), EnableRateLimiting("public-search")]
+    public async Task<ActionResult<ApiResponse<ExternalSearchDto>>> ExternalSearch([FromQuery] string? q, [FromQuery] string? category, [FromQuery] string? sub,
+        [FromQuery] string? city, [FromQuery] Guid? area, [FromQuery] string? ip, CancellationToken ct)
+    {
+        var clientIp = env.IsDevelopment() && !string.IsNullOrWhiteSpace(ip) ? ip : await ClientIpAsync();
+        Response.Headers.CacheControl = "private, no-store";
+        return Success(await Sender.Send(new ExternalSearchQuery(clientIp, q, category, sub, city, area, options.Value.DistrictRadiusKm), ct));
+    }
+
+    private async Task<string?> ClientIpAsync()
+    {
         var ip = options.Value.TrustForwardedFor
             ? Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim() ?? HttpContext.Connection.RemoteIpAddress?.ToString()
             : HttpContext.Connection.RemoteIpAddress?.ToString();
-        Response.Headers.CacheControl = "private, max-age=3600";
-        Response.Headers.Vary = "CF-IPCountry, CloudFront-Viewer-Country, X-Forwarded-For";
-        return Success(await Sender.Send(new GetVisitorCountryQuery(cdn, ip), ct));
+        // Locally the browser connects from 127.0.0.1; geolocate the machine's public IP so detection can be tried in development.
+        if (env.IsDevelopment() && VisitorIp.Parse(ip) is null) return await developmentIp.GetAsync() ?? ip;
+        return ip;
     }
 }
 

@@ -11,7 +11,7 @@ import { ago, date, moneyExact, moneyShort, number } from '@/lib/format';
 import { useDebounced, useDocumentTitle, useLookup } from '@/lib/hooks';
 import type { AdminAd, AdminReview, AdminSubscriptions as Subs, AdminUser, OwnerList } from '@/lib/types';
 import { ConfirmDialog, EmptyState, ErrorState, PageHeader, Panel, StatusBadge, Stars } from '@/components/ui';
-import { useGridTheme } from '@/components/grid';
+import { useGridTheme, useResponsiveColumns } from '@/components/grid';
 
 function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
   return <TextField placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)}
@@ -52,6 +52,7 @@ export function AdminUsers() {
     { headerName: 'Last active', field: 'lastLoginOn', width: 130, valueFormatter: (p) => (p.value ? ago(p.value) : 'Never') },
     { headerName: 'Active', field: 'isActive', width: 95, sortable: false, cellRenderer: ({ data: u }: { data: AdminUser }) => <Switch size="small" checked={u.isActive} onChange={() => setConfirm(u)} slotProps={{ input: { 'aria-label': `${u.displayName} active` } }} /> },
   ];
+  const responsiveColumns = useResponsiveColumns(columns);
 
   return (
     <>
@@ -68,9 +69,9 @@ export function AdminUsers() {
       </div>
       <div className="card overflow-hidden">
         {isError ? <ErrorState onRetry={() => refetch()} /> : isLoading ? <div className="p-4"><Skeleton variant="rounded" height={480} /></div> : !data!.items.length ? <EmptyState title="No users found" /> : (
-          <div className={`overflow-x-auto ${isFetching ? 'opacity-60' : ''}`}><div style={{ minWidth: 1100 }}>
-            <AgGridReact<AdminUser> theme={gridTheme} rowData={data!.items} columnDefs={columns} domLayout="autoHeight" getRowId={(p) => p.data.id} suppressCellFocus defaultColDef={{ resizable: true, sortable: true }} />
-          </div></div>
+          <div className={isFetching ? 'opacity-60' : undefined}>
+            <AgGridReact<AdminUser> theme={gridTheme} rowData={data!.items} columnDefs={responsiveColumns} domLayout="autoHeight" getRowId={(p) => p.data.id} suppressCellFocus defaultColDef={{ resizable: true, sortable: true }} />
+          </div>
         )}
       </div>
       {data && data.pagination.totalPages > 1 && <div className="mt-6 flex justify-center"><Pagination count={data.pagination.totalPages} page={page} onChange={(_, p) => setPage(p)} shape="rounded" /></div>}
@@ -180,6 +181,7 @@ export function AdminAds() {
       ),
     },
   ];
+  const responsiveColumns = useResponsiveColumns(columns);
 
   return (
     <>
@@ -196,9 +198,9 @@ export function AdminAds() {
       </div>
       <div className="card overflow-hidden">
         {isError ? <ErrorState onRetry={() => refetch()} /> : isLoading ? <div className="p-4"><Skeleton variant="rounded" height={480} /></div> : !data!.page.items.length ? <EmptyState title="No campaigns here" /> : (
-          <div className={`overflow-x-auto ${isFetching ? 'opacity-60' : ''}`}><div style={{ minWidth: 1260 }}>
-            <AgGridReact<AdminAd> theme={gridTheme} rowData={data!.page.items} columnDefs={columns} domLayout="autoHeight" getRowId={(p) => p.data.ad.id} suppressCellFocus defaultColDef={{ resizable: true, sortable: true }} />
-          </div></div>
+          <div className={isFetching ? 'opacity-60' : undefined}>
+            <AgGridReact<AdminAd> theme={gridTheme} rowData={data!.page.items} columnDefs={responsiveColumns} domLayout="autoHeight" getRowId={(p) => p.data.ad.id} suppressCellFocus defaultColDef={{ resizable: true, sortable: true }} />
+          </div>
         )}
       </div>
       {data && data.page.meta.totalPages > 1 && <div className="mt-6 flex justify-center"><Pagination count={data.page.meta.totalPages} page={page} onChange={(_, p) => setPage(p)} shape="rounded" /></div>}

@@ -1,8 +1,11 @@
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Tooltip } from '@mui/material';
 import { api } from '@/lib/api';
+import { useCities } from '@/lib/hooks';
+import { useCity } from '@/stores/city';
 
-interface VisitorCountry { countryCode: string; source: 'cdn' | 'geoip' | 'default'; attribution?: { text: string; url: string } | null }
+interface VisitorCountry { countryCode: string; source: 'cdn' | 'geoip' | 'default' }
 
 let regionNames: Intl.DisplayNames | null = null;
 const countryName = (code: string) => {
@@ -36,9 +39,32 @@ export function CountryCode({ onDark }: { onDark?: boolean }) {
   );
 }
 
-/** Credit required by the geolocation database licence (DB-IP Lite: CC BY 4.0). Renders nothing when not required. */
-export function GeoAttribution({ className }: { className?: string }) {
-  const { data } = useVisitorCountry();
-  if (!data?.attribution) return null;
-  return <a href={data.attribution.url} target="_blank" rel="noopener" className={className}>{data.attribution.text}</a>;
+export interface VisitorDistrict { citySlug: string; cityName: string; state: string; areaSlug?: string | null; matchedBy: 'area' | 'city' | 'distance' }
+/** Approximate visitor location from the IP (the IP itself is never sent to the browser). */
+interface VisitorLocation {
+  place?: string | null; region?: string | null; district?: VisitorDistrict | null;
+  country?: string | null; postcode?: string | null; latitude?: number | null; longitude?: number | null;
+}
+
+/** The listed city (district) the visitor is browsing from, detected on the server from their IP address. */
+export function useVisitorDistrict() {
+  return useQuery({
+    queryKey: ['geo', 'district'],
+    queryFn: () => api.get<VisitorLocation>('/api/geo/district'),
+    select: (d) => d.district ?? null,
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+/** Pre-selects the visitor's detected district (and area, when the IP names one we list) unless they've picked a city themselves. */
+export function useDistrictAutoSelect() {
+  const { data: district } = useVisitorDistrict();
+  const { data: cities } = useCities();
+  const applyDetected = useCity((s) => s.applyDetected);
+  useEffect(() => {
+    const city = district && cities?.find((c) => c.slug === district.citySlug);
+    if (!city) return;
+    applyDetected(city.slug, city.areas.find((a) => a.slug === district.areaSlug)?.id ?? null);
+  }, [district, cities, applyDetected]);
 }

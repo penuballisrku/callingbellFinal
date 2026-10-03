@@ -29,12 +29,19 @@ export interface Category {
   altText?: string | null; colorHex?: string | null; isFeatured: boolean; businessCount: number; subCategories: SubCategory[];
 }
 export interface Area { id: string; name: string; slug: string; pincode: string }
+/** A city's area with search aliases: alternate spellings and the sub-localities (neighbourhoods) inside it. */
+export interface CityArea { id: string; name: string; slug: string; pincode: string; areaType?: string | null; altNames: string[]; subLocalities: string[] }
+export interface CityAreas { citySlug: string; cityName: string; state: string; discovering: boolean; discoveredOn?: string | null; subLocalityCount: number; areas: CityArea[] }
 export interface City { id: string; name: string; slug: string; state: string; imageUrl?: string | null; isPopular: boolean; businessCount: number; areas: Area[] }
 export interface Plan {
   id: string; code: string; name: string; tagline?: string | null; monthlyPrice: number; annualPrice: number; leadCredits: number;
   includesFeaturedListing: boolean; includesPrioritySupport: boolean; features: string[]; imageUrl?: string | null; badgeColor?: string | null; isPopular: boolean;
   maxServices: number; maxImages: number;
 }
+export type SuggestionKind = 'Category' | 'SubCategory' | 'Service' | 'Business';
+export interface SearchSuggestion { kind: SuggestionKind; label: string; detail?: string | null; imageUrl?: string | null; slug: string; subCategorySlug?: string | null; rating?: number | null }
+export interface SearchSuggestions { query: string; categories: SearchSuggestion[]; services: SearchSuggestion[]; businesses: SearchSuggestion[] }
+
 export interface Banner {
   id: string; title: string; subtitle?: string | null; ctaText?: string | null; linkUrl?: string | null; imageUrl: string;
   mobileImageUrl?: string | null; desktopImageUrl?: string | null; altText?: string | null; placement: string;
@@ -66,16 +73,48 @@ export interface BusinessCard {
   planCode?: string | null; distanceKm?: number | null;
 }
 
-export interface PopularService { name: string; subCategoryName: string; subCategorySlug: string; imageUrl?: string | null; startingPrice: number; providerCount: number; bookingCount: number }
-export interface ReviewHighlight { id: string; rating: number; title?: string | null; comment: string; customerName: string; businessName: string; businessSlug: string; businessLogoUrl?: string | null; city: string; createdOn: string }
+export interface PopularService {
+  name: string; searchTerm: string;
+  subCategoryName: string; subCategorySlug: string; categoryName: string; categorySlug: string; colorHex?: string | null;
+  imageUrl?: string | null; iconUrl?: string | null; altText?: string | null;
+  startingPrice: number; priceUnit?: string | null; rating: number; reviewCount: number; bookingCount: number;
+}
+/** A popular service near the visitor; `reason` is the local AI model's one-line explanation once its ranking is ready. */
+export interface NearbyService extends Omit<PopularService, 'altText'> { altText?: string | null; nearestKm?: number | null; reason?: string | null }
+export interface NearbyServices {
+  placeName?: string | null; cityName?: string | null; citySlug?: string | null; source: 'area' | 'ip' | 'city' | 'none';
+  aiRanked: boolean; aiPending: boolean; aiModel?: string | null; items: NearbyService[]; relatedCategories: RelatedCategory[];
+}
+/** A sub-category that complements the popular services nearby; `reason` comes from the local AI model once ready. */
+export interface RelatedCategory {
+  name: string; slug: string; categoryName: string; categorySlug: string; colorHex?: string | null; iconUrl?: string | null; imageUrl?: string | null;
+  businessCount: number; nearestKm?: number | null; reason?: string | null;
+}
+/** A category in the visitor's city for "Top picks": `source` is "database" (ranked from local data) or "ai" (added by the AI for this city). */
+export interface TopPickCategory {
+  name: string; slug: string; categoryName: string; categorySlug: string; colorHex?: string | null; iconUrl?: string | null;
+  businessCount: number; rating: number; bookingCount: number; source: 'database' | 'ai'; reason?: string | null;
+}
+export interface TopPicks {
+  cityName?: string | null; citySlug?: string | null; placeName?: string | null; locationSource: 'ip' | 'city' | 'none'; totalInCity: number;
+  aiEnriched: boolean; aiPending: boolean; aiModel?: string | null; categories: TopPickCategory[];
+}
+/** A real customer review near the visitor; `customerName` is first name + last initial. */
+export interface LocalReview {
+  id: string; customerName: string; rating: number; title?: string | null; comment: string; createdOn: string; isVerifiedVisit: boolean;
+  businessName: string; businessSlug: string; businessLogoUrl?: string | null; subCategoryName?: string | null; area?: string | null; city: string;
+}
+export interface LocalReviews {
+  placeName?: string | null; cityName?: string | null; scope: 'area' | 'city' | 'all'; reviewCount: number; averageRating: number;
+  aiSummary?: string | null; aiPending: boolean; reviews: LocalReview[];
+}
 export interface HomeData {
   citySlug?: string | null; cityName?: string | null; heroBanners: Banner[]; promoBanners: Banner[]; categories: SubCategory[];
-  popularServices: PopularService[]; nearby: BusinessCard[]; onlineNow: BusinessCard[]; featured: BusinessCard[]; sponsored: BusinessCard[];
-  recentReviews: ReviewHighlight[]; topRated: BusinessCard[];
-  stats: { businesses: number; cities: number; reviews: number; bookingsCompleted: number; onlineNow: number };
+  popularServices: PopularService[];
+  stats: { businesses: number; cities: number; reviews: number; bookingsCompleted: number };
 }
 
-export interface AppliedFilters { q?: string | null; categorySlug?: string | null; categoryName?: string | null; subSlug?: string | null; subName?: string | null; citySlug?: string | null; cityName?: string | null; openNow: boolean; availability?: string | null }
+export interface AppliedFilters { q?: string | null; categorySlug?: string | null; categoryName?: string | null; subSlug?: string | null; subName?: string | null; citySlug?: string | null; cityName?: string | null; openNow: boolean; availability?: string | null; areaName?: string | null; areaMatches?: number | null }
 
 export interface Service { id: string; name: string; description: string; price: number; priceUnit?: string | null; durationMinutes: number; type: string; imageUrl?: string | null; isPopular: boolean }
 export interface Hours { dayOfWeek: number; day: string; open?: string | null; close?: string | null; isClosed: boolean; isToday: boolean }
@@ -201,3 +240,12 @@ export interface AdminSubscriptions {
   totalMrr: number; expiringIn30Days: number;
   current: { items: { subscriptionNumber: string; businessId: string; businessName: string; city: string; planCode: string; planName: string; billingCycle: string; startDate: string; endDate: string; amount: number; status: string; autoRenew: boolean }[]; meta: Pagination };
 }
+
+/** A real place from outside the platform (OpenStreetMap or Google Maps), shown below registered businesses in search. */
+export interface ExternalPlace {
+  id: string; name: string; kind?: string | null; address?: string | null; phone?: string | null; website?: string | null; openingHours?: string | null;
+  rating?: number | null; ratingCount?: number | null; distanceKm: number; directionsUrl: string; sourceUrl?: string | null;
+}
+/** status: ready | off (not configured) | unavailable | skipped. aiStatus (AI tier): ranked | pending (poll) | off. */
+export interface ExternalTier { status: 'ready' | 'off' | 'unavailable' | 'skipped'; aiStatus?: 'ranked' | 'pending' | 'off' | null; total: number; duplicates: number; items: ExternalPlace[] }
+export interface ExternalSearch { query?: string | null; placeName?: string | null; cityName?: string | null; origin?: string | null; ai: ExternalTier; google: ExternalTier }

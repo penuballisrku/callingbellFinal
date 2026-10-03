@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-community';
+import { useMediaQuery } from '@mui/material';
+import { AllCommunityModule, ModuleRegistry, themeQuartz, type ColDef } from 'ag-grid-community';
 import { tokens } from '@/app/theme';
 import { accents, useResolvedMode, useThemeSettings } from '@/stores/theme';
 
@@ -32,4 +33,15 @@ export function useGridTheme() {
       rowHeight: 56,
     });
   }, [mode, accentKey]);
+}
+
+/**
+ * Phone-friendly columns: below 768px the first (identifying) column is pinned to the left and kept compact, so it stays visible while
+ * the remaining columns scroll horizontally inside the grid.
+ */
+export function useResponsiveColumns<T>(columns: ColDef<T>[]): ColDef<T>[] {
+  const narrow = useMediaQuery('(max-width: 767.98px)');
+  return useMemo(() => (narrow
+    ? columns.map((c, i) => (i === 0 ? { ...c, pinned: 'left' as const, flex: undefined, width: 190, minWidth: 160, maxWidth: 220 } : c))
+    : columns), [columns, narrow]);
 }

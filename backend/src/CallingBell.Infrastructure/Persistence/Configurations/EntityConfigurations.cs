@@ -40,14 +40,21 @@ internal sealed class GeoConfiguration :
         b.Property(a => a.Latitude).HasPrecision(9, 6);
         b.Property(a => a.Longitude).HasPrecision(9, 6);
         b.HasOne(a => a.City).WithMany(c => c.Areas).HasForeignKey(a => a.CityId);
+        b.HasOne(a => a.ParentArea).WithMany().HasForeignKey(a => a.ParentAreaId).OnDelete(DeleteBehavior.NoAction);
     }
 }
 
 internal sealed class CatalogConfiguration :
-    IEntityTypeConfiguration<SubCategory>, IEntityTypeConfiguration<Media>
+    IEntityTypeConfiguration<SubCategory>, IEntityTypeConfiguration<PopularService>, IEntityTypeConfiguration<Media>
 {
     public void Configure(EntityTypeBuilder<SubCategory> b) =>
         b.HasOne(s => s.Category).WithMany(c => c.SubCategories).HasForeignKey(s => s.CategoryId);
+
+    public void Configure(EntityTypeBuilder<PopularService> b)
+    {
+        b.ToTable("PopularServices");
+        b.HasOne(p => p.SubCategory).WithMany().HasForeignKey(p => p.SubCategoryId);
+    }
 
     public void Configure(EntityTypeBuilder<Media> b)
     {

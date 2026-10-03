@@ -309,7 +309,142 @@ INSERT INTO #B VALUES
  N'NH 66, Edappally', N'Near Lulu Mall', 2010, 32, N'Active', N'Verified', 0, N'AvailableForChat', 1, 1, 0, 330),
 (N'anchor-towing-and-roadside', N'Anchor Towing & Roadside Assistance', N'AT', N'towing', N'kochi', N'panampilly-nagar', N'Shibu Varghese', N'shibu.varghese',
  N'24x7 towing & breakdown support', N'Flatbed towing, battery jump-starts, flat-tyre help and accident recovery across Ernakulam district.',
- N'Panampilly Avenue', N'Near Panampilly Nagar Park', 2014, 16, N'Active', N'Verified', 0, N'Online', 1, 0, 1, 300);
+ N'Panampilly Avenue', N'Near Panampilly Nagar Park', 2014, 16, N'Active', N'Verified', 0, N'Online', 1, 0, 1, 300),
+-- ===== Expanded categories (Pet Care, Finance & Tax, Appliance Repair, IT & Digital, Construction, Fashion, Astrology & more) =====
+-- Pet care
+(N'pawsome-pet-clinic', N'Pawsome Pet Clinic', N'PC', N'veterinarians', N'hyderabad', N'jubilee-hills', N'Dr. Sravani Kolli', N'sravani.kolli',
+ N'Vets for dogs, cats & birds', N'Small-animal clinic with vaccinations, deworming, soft-tissue surgery, in-house X-ray and a 24x7 emergency line for registered pets.',
+ N'Road No. 10, Jubilee Hills', N'Near Jubilee Hills Check Post', 2013, 12, N'Active', N'Verified', 1, N'AvailableForVideo', 1, 1, 1, 380),
+(N'furry-tails-grooming-studio', N'Furry Tails Grooming Studio', N'FT', N'pet-grooming', N'bengaluru', N'indiranagar', N'Ananya Krishnan', N'ananya.krishnan',
+ N'Spa & grooming for dogs and cats', N'Breed-specific haircuts, medicated baths, de-shedding and tick treatment by certified groomers, at the studio or in our grooming van.',
+ N'CMH Road, Indiranagar', N'Near Indiranagar Metro Station', 2018, 9, N'Active', N'Verified', 0, N'AvailableForBooking', 1, 0, 1, 260),
+(N'happy-paws-pet-resort', N'Happy Paws Pet Resort', N'HP', N'pet-boarding', N'pune', N'baner', N'Rohan Deshpande', N'rohan.deshpande',
+ N'Cage-free boarding & daycare', N'Cage-free boarding on a half-acre campus with 24x7 caretakers, CCTV access for parents, daily walks and a vet on call.',
+ N'Baner-Pashan Link Road', N'Near Baner Hill', 2017, 14, N'Active', N'Verified', 0, N'Online', 1, 0, 0, 300),
+(N'alpha-k9-dog-training', N'Alpha K9 Dog Training', N'AK', N'dog-trainers', N'delhi', N'saket', N'Capt. Vikrant Sehgal (Retd.)', N'vikrant.sehgal',
+ N'Obedience & behaviour training', N'Puppy socialisation, leash manners and aggression correction using positive-reinforcement methods, at your home or our training ground.',
+ N'Press Enclave Marg, Saket', N'Near Select Citywalk', 2012, 6, N'Active', N'Verified', 0, N'AvailableForCall', 1, 1, 1, 340),
+(N'chennai-pet-care-hospital', N'Chennai Pet Care Hospital', N'CP', N'veterinarians', N'chennai', N'anna-nagar', N'Dr. Karthikeyan Subramanian', N'karthikeyan.s',
+ N'Multispeciality veterinary hospital', N'Veterinary hospital with surgery, dentistry, ultrasound, in-patient wards and round-the-clock emergency care for pets.',
+ N'2nd Avenue, Anna Nagar', N'Near Anna Nagar Tower Park', 2008, 22, N'Active', N'Verified', 0, N'Online', 1, 0, 0, 410),
+-- Finance & tax
+(N'mehta-and-shah-chartered-accountants', N'Mehta & Shah Chartered Accountants', N'MS', N'chartered-accountants', N'ahmedabad', N'navrangpura', N'CA Hiren Mehta', N'hiren.mehta',
+ N'Audit, tax & startup compliance', N'Firm of chartered accountants handling statutory audits, company incorporation, ROC filings, virtual CFO services and FEMA advisory.',
+ N'4th Floor, Shitiratna Complex, CG Road', N'Near Navrangpura Bus Stand', 2004, 26, N'Active', N'Verified', 1, N'AvailableForVideo', 1, 1, 0, 420),
+(N'taxsaral-gst-consultants', N'TaxSaral GST Consultants', N'TS', N'tax-consultants', N'hyderabad', N'ameerpet', N'Ravi Teja Kandula', N'raviteja.kandula',
+ N'GST returns & ITR filing', N'GST registration, monthly GSTR filings, income-tax returns for salaried and business owners, and replies to tax notices.',
+ N'Aditya Enclave, Ameerpet', N'Near Ameerpet Metro Station', 2016, 11, N'Active', N'Verified', 0, N'AvailableForChat', 1, 1, 0, 310),
+(N'suraksha-insurance-advisors', N'Suraksha Insurance Advisors', N'SI', N'insurance-advisors', N'mumbai', N'dadar-west', N'Neha Kulkarni', N'neha.kulkarni',
+ N'Health, life & motor insurance', N'IRDAI-licensed advisors comparing health, term and motor plans across insurers, with dedicated claim assistance for families.',
+ N'Ranade Road, Dadar West', N'Near Dadar Station West', 2009, 8, N'Active', N'Verified', 0, N'AvailableForCall', 1, 1, 0, 350),
+(N'griha-loan-point', N'Griha Loan Point', N'GL', N'loan-advisors', N'pune', N'kothrud', N'Sameer Joshi', N'sameer.joshi',
+ N'Home & business loan assistance', N'Home loans, balance transfers and loans against property with 18 partner banks and NBFCs, from eligibility check to disbursement.',
+ N'Karve Road, Kothrud', N'Near Kothrud Depot', 2014, 10, N'Active', N'Verified', 0, N'AvailableForCall', 1, 1, 0, 290),
+(N'iyer-and-co-chartered-accountants', N'Iyer & Co. Chartered Accountants', N'IC', N'chartered-accountants', N'bengaluru', N'jayanagar', N'CA Lakshmi Iyer', N'lakshmi.iyer',
+ N'Accounting for SMEs & NRIs', N'Bookkeeping, payroll, GST and income-tax compliance for small businesses, plus NRI taxation and property sale advisory.',
+ N'27th Cross, 4th Block, Jayanagar', N'Near Jayanagar Metro', 2001, 15, N'Active', N'Verified', 0, N'AvailableForVideo', 1, 1, 0, 400),
+-- Appliance & gadget repair
+(N'quickfix-appliance-care', N'QuickFix Appliance Care', N'QF', N'washing-machine-repair', N'bengaluru', N'whitefield', N'Prakash Naik', N'prakash.naik',
+ N'Same-day washing machine repair', N'Multi-brand repairs for IFB, LG, Samsung, Bosch and Whirlpool washing machines with genuine spares and a 90-day service warranty.',
+ N'Hope Farm Junction, Whitefield', N'Near Whitefield Bus Stop', 2015, 18, N'Active', N'Verified', 1, N'Online', 1, 0, 1, 330),
+(N'chillwell-refrigeration', N'ChillWell Refrigeration', N'CW', N'refrigerator-repair', N'chennai', N'velachery', N'Murugan Pandian', N'murugan.pandian',
+ N'Fridge & deep freezer repairs', N'Cooling problems, gas charging, compressor replacement and PCB repairs for single-door, double-door and side-by-side refrigerators.',
+ N'100 Feet Bypass Road, Velachery', N'Near Phoenix Marketcity', 2011, 9, N'Active', N'Verified', 0, N'AvailableForCall', 1, 0, 1, 360),
+(N'puredrop-ro-services', N'PureDrop RO Services', N'PR', N'ro-purifier-service', N'hyderabad', N'kukatpally', N'Sai Kiran Bollam', N'saikiran.bollam',
+ N'RO installation, service & AMC', N'Installation and servicing of Kent, Aquaguard and Pureit purifiers, TDS testing and filter replacements with affordable AMC plans.',
+ N'Road No. 1, KPHB Colony', N'Near KPHB Metro Station', 2017, 12, N'Active', N'Verified', 0, N'AvailableForBooking', 1, 0, 1, 250),
+(N'icare-mobile-repair-lab', N'iCare Mobile Repair Lab', N'IM', N'mobile-repair', N'mumbai', N'andheri-west', N'Faizan Shaikh', N'faizan.shaikh',
+ N'iPhone & Android repairs in 60 minutes', N'Screen, battery and charging-port replacements, water-damage recovery and motherboard repairs for iPhone, Samsung, OnePlus and Pixel.',
+ N'Shop 12, Link Square Mall, Linking Road', N'Opp. Andheri West Station', 2016, 7, N'Active', N'Verified', 0, N'Online', 1, 0, 1, 280),
+(N'techmedic-laptop-clinic', N'TechMedic Laptop Clinic', N'TM', N'laptop-repair', N'delhi', N'lajpat-nagar', N'Amit Khurana', N'amit.khurana',
+ N'Laptop repair & data recovery', N'Chip-level laptop repairs, screen and keyboard replacement, SSD and RAM upgrades and data recovery for Dell, HP, Lenovo and MacBook.',
+ N'Central Market, Lajpat Nagar II', N'Near Lajpat Nagar Metro', 2010, 8, N'Active', N'Verified', 0, N'AvailableForChat', 1, 0, 1, 330),
+(N'kolkata-home-appliance-service', N'Kolkata Home Appliance Service', N'KH', N'washing-machine-repair', N'kolkata', N'salt-lake', N'Subhajit Ghosh', N'subhajit.ghosh',
+ N'Washing machine & microwave repairs', N'Doorstep repairs for washing machines, microwaves and chimneys across Salt Lake, New Town and Lake Town.',
+ N'Sector V, Salt Lake', N'Near College More', 2018, 6, N'PendingApproval', N'Pending', 0, N'Offline', 1, 0, 1, 9),
+-- IT & digital
+(N'pixelforge-web-studio', N'PixelForge Web Studio', N'PW', N'web-developers', N'pune', N'hinjewadi', N'Aditya Kulkarni', N'aditya.kulkarni',
+ N'Websites & e-commerce for SMEs', N'Fast, mobile-first business websites, Shopify and WooCommerce stores and custom web apps with ongoing maintenance plans.',
+ N'Phase 1, Hinjewadi', N'Near Rajiv Gandhi Infotech Park Gate', 2015, 24, N'Active', N'Verified', 1, N'AvailableForVideo', 1, 1, 0, 370),
+(N'growthgrid-digital-marketing', N'GrowthGrid Digital Marketing', N'GD', N'digital-marketing', N'hyderabad', N'madhapur', N'Pranav Reddy Gaddam', N'pranav.gaddam',
+ N'SEO, Google Ads & social media', N'Performance marketing agency for clinics, restaurants and local services - Google Business Profile, SEO, Meta Ads and monthly reporting.',
+ N'Cyber Towers Road, Madhapur', N'Near Cyber Towers', 2017, 30, N'Active', N'Verified', 1, N'Online', 1, 1, 0, 320),
+(N'inkbrush-design-studio', N'InkBrush Design Studio', N'ID', N'graphic-designers', N'kochi', N'kakkanad', N'Anjali Menon', N'anjali.menon',
+ N'Brand identity & packaging design', N'Logo and brand identity systems, packaging, menus and social media creatives for startups and family businesses.',
+ N'Infopark Expressway, Kakkanad', N'Near Infopark Phase 1', 2019, 6, N'Active', N'Verified', 0, N'AvailableForChat', 1, 1, 0, 220),
+(N'secureeye-cctv-solutions', N'SecureEye CCTV Solutions', N'SE', N'cctv-installation', N'chennai', N'omr-sholinganallur', N'Balaji Raghunathan', N'balaji.raghunathan',
+ N'CCTV, video door phones & access control', N'HD and IP CCTV installation for homes, shops and apartments, with mobile viewing, video door phones and biometric attendance systems.',
+ N'OMR, Sholinganallur', N'Near Sholinganallur Junction', 2013, 15, N'Active', N'Verified', 0, N'AvailableForCall', 1, 0, 1, 350),
+(N'lucknow-web-solutions', N'Awadh Web Solutions', N'AW', N'web-developers', N'lucknow', N'gomti-nagar', N'Mohd. Faraz Siddiqui', N'faraz.siddiqui',
+ N'Websites & apps for local businesses', N'Websites, booking apps and school management portals for businesses and institutions across Uttar Pradesh.',
+ N'Vibhuti Khand, Gomti Nagar', N'Near Summit Building', 2018, 12, N'Active', N'Verified', 0, N'AvailableForVideo', 1, 1, 0, 240),
+-- Construction & renovation
+(N'buildright-constructions', N'BuildRight Constructions', N'BR', N'civil-contractors', N'hyderabad', N'gachibowli', N'Mahesh Yadav Kommu', N'mahesh.kommu',
+ N'Turnkey home construction', N'Turnkey independent houses and G+3 buildings with transparent BOQs, weekly site updates and a 10-year structural warranty.',
+ N'Financial District Road, Nanakramguda', N'Near Wipro Circle', 2008, 65, N'Active', N'Verified', 1, N'AvailableForCall', 1, 1, 0, 400),
+(N'dryshield-waterproofing', N'DryShield Waterproofing', N'DS', N'waterproofing', N'mumbai', N'chembur', N'Vinod Pawar', N'vinod.pawar',
+ N'Leak-proof terraces & bathrooms', N'Terrace, bathroom, basement and external wall waterproofing using Dr. Fixit and Fosroc systems, with up to 10-year warranty.',
+ N'Sion-Trombay Road, Chembur', N'Near Chembur Station', 2012, 20, N'Active', N'Verified', 0, N'AvailableForBooking', 1, 0, 1, 340),
+(N'suryashakti-solar', N'SuryaShakti Solar', N'SS', N'solar-installation', N'jaipur', N'vaishali-nagar', N'Rajendra Singh Shekhawat', N'rajendra.shekhawat',
+ N'Rooftop solar with subsidy support', N'MNRE-empanelled vendor for on-grid rooftop solar with net metering, PM Surya Ghar subsidy paperwork and 25-year panel warranty.',
+ N'Amrapali Marg, Vaishali Nagar', N'Near Amrapali Circle', 2014, 28, N'Active', N'Verified', 1, N'Online', 1, 1, 0, 380),
+(N'steelcraft-fabricators', N'SteelCraft Fabricators', N'SC', N'fabrication', N'ahmedabad', N'maninagar', N'Imtiyaz Pathan', N'imtiyaz.pathan',
+ N'Gates, grills & roofing sheds', N'MS and SS gates, window grills, staircase railings and industrial roofing sheds, fabricated in-house and installed on site.',
+ N'Jawahar Chowk, Maninagar', N'Near Maninagar Railway Station', 2006, 16, N'Active', N'Verified', 0, N'AvailableForCall', 1, 0, 1, 360),
+(N'stonecraft-flooring', N'StoneCraft Tiles & Flooring', N'SF', N'flooring', N'bengaluru', N'hsr-layout', N'Ramesh Choudhary', N'ramesh.choudhary',
+ N'Tiles, granite & wooden flooring', N'Vitrified tile laying, granite and marble work, Italian marble polishing and engineered wooden flooring for apartments and villas.',
+ N'Sector 6, HSR Layout', N'Near HSR BDA Complex', 2011, 22, N'Active', N'Verified', 0, N'AvailableForBooking', 1, 0, 1, 300),
+(N'greenroof-solar-kochi', N'GreenRoof Solar Kochi', N'GR', N'solar-installation', N'kochi', N'edappally', N'Joseph Kuriakose', N'joseph.kuriakose',
+ N'KSEB-approved rooftop solar', N'Rooftop solar for homes and small businesses with KSEB net-metering approvals and monsoon-ready mounting structures.',
+ N'Toll Junction, Edappally', N'Near Edappally Church', 2019, 10, N'PendingApproval', N'Pending', 0, N'Offline', 1, 0, 0, 6),
+-- Fashion & tailoring
+(N'sui-dhaaga-tailoring', N'Sui Dhaaga Tailoring House', N'SD', N'tailors', N'jaipur', N'malviya-nagar', N'Shabana Qureshi', N'shabana.qureshi',
+ N'Blouses, kurtis & alterations', N'Designer blouse stitching, salwar suits, kurtis and quick alterations, with home measurement and pickup available.',
+ N'Sector 3, Malviya Nagar', N'Near Gaurav Tower', 2009, 8, N'Active', N'Verified', 0, N'AvailableForChat', 1, 0, 1, 330),
+(N'noor-designer-boutique', N'Noor Designer Boutique', N'NB', N'boutiques', N'lucknow', N'hazratganj', N'Ayesha Rizvi', N'ayesha.rizvi',
+ N'Chikankari & bridal couture', N'Hand-embroidered Lucknowi chikankari, bridal lehengas and custom sharara sets, designed in-house by our master karigars.',
+ N'Janpath Market, Hazratganj', N'Near Sahu Cinema', 2012, 18, N'Active', N'Verified', 1, N'AvailableForVideo', 1, 1, 0, 350),
+(N'freshfold-laundry', N'FreshFold Laundry & Dry Clean', N'FF', N'laundry', N'delhi', N'dwarka', N'Gaurav Malhotra', N'gaurav.malhotra',
+ N'Laundry with free pickup & delivery', N'Wash-and-iron, premium dry cleaning, shoe and curtain cleaning with 48-hour turnaround and free doorstep pickup.',
+ N'Sector 12, Dwarka', N'Near Dwarka Sector 12 Metro', 2018, 25, N'Active', N'Verified', 0, N'Online', 1, 0, 1, 270),
+(N'stitch-perfect-mens-tailors', N'Stitch Perfect Men''s Tailors', N'SP', N'tailors', N'kolkata', N'park-street', N'Abdul Kalam Ansari', N'kalam.ansari',
+ N'Bespoke suits & sherwanis', N'Bespoke suits, bandhgalas, sherwanis and shirts tailored since 1987, with two fittings and on-time delivery for weddings.',
+ N'Free School Street, Park Street', N'Near Park Street Metro', 1987, 9, N'Inactive', N'Verified', 0, N'Offline', 0, 0, 0, 460),
+-- Astrology & pooja
+(N'jyotish-vani-astrology', N'Jyotish Vani Astrology Centre', N'JV', N'astrologers', N'delhi', N'rohini', N'Pt. Deepak Shastri', N'deepak.shastri',
+ N'Vedic astrology & kundli matching', N'Kundli analysis, horoscope matching for marriage, muhurat selection and career guidance, in person or over video call.',
+ N'Sector 7, Rohini', N'Near Rohini East Metro', 1998, 4, N'Active', N'Verified', 0, N'AvailableForVideo', 1, 1, 0, 420),
+(N'vedic-pooja-seva', N'Vedic Pooja Seva', N'VP', N'pandits', N'hyderabad', N'secunderabad', N'Sri Ramakrishna Sarma', N'ramakrishna.sarma',
+ N'Pandits for every ceremony', N'Experienced Telugu, Tamil and Hindi-speaking pandits for griha pravesh, Satyanarayana vratham, homams and weddings, with samagri included.',
+ N'Marredpally Main Road', N'Near Secunderabad Railway Station', 2005, 15, N'Active', N'Verified', 0, N'AvailableForCall', 1, 0, 1, 390),
+(N'vastu-darshan-consultants', N'Vastu Darshan Consultants', N'VD', N'vastu-consultants', N'ahmedabad', N'satellite', N'Kiran Trivedi', N'kiran.trivedi',
+ N'Vastu for homes, offices & plots', N'On-site vastu audits for apartments, plots, offices and factories with practical, no-demolition remedies.',
+ N'Jodhpur Cross Road, Satellite', N'Near Star Bazaar', 2007, 5, N'Active', N'Verified', 0, N'AvailableForChat', 1, 1, 0, 360),
+-- Additions to existing categories
+(N'greenleaf-gardening-services', N'GreenLeaf Gardening Services', N'GL', N'gardening', N'bengaluru', N'koramangala', N'Nagaraj Gowda', N'nagaraj.gowda',
+ N'Terrace & balcony gardens', N'Garden maintenance, terrace vegetable gardens, lawn laying and vertical gardens, with monthly maintenance visits.',
+ N'6th Block, Koramangala', N'Near Koramangala Club', 2016, 14, N'Active', N'Verified', 0, N'AvailableForBooking', 1, 0, 1, 250),
+(N'clearvision-eye-clinic', N'ClearVision Eye Clinic & Opticals', N'CV', N'eye-care', N'pune', N'aundh', N'Dr. Meera Bhosale', N'meera.bhosale',
+ N'Eye check-ups, glasses & LASIK', N'Comprehensive eye examinations, paediatric eye care, contact lens fitting, an in-house optical store and LASIK evaluations.',
+ N'ITI Road, Aundh', N'Near Westend Mall', 2010, 12, N'Active', N'Verified', 0, N'AvailableForBooking', 1, 1, 0, 370),
+(N'arogya-ayurveda-centre', N'Arogya Ayurveda Centre', N'AY', N'ayurveda-homeopathy', N'kochi', N'panampilly-nagar', N'Dr. Sreelakshmi Nair', N'sreelakshmi.nair',
+ N'Classical Kerala Ayurveda', N'BAMS physicians offering Panchakarma, treatments for arthritis, migraine and skin conditions, and wellness packages.',
+ N'Panampilly Nagar Main Avenue', N'Near Panampilly Nagar Post Office', 2003, 18, N'Active', N'Verified', 1, N'AvailableForVideo', 1, 1, 0, 410),
+(N'sur-sangam-music-academy', N'Sur Sangam Music Academy', N'SM', N'music-classes', N'chennai', N't-nagar', N'Smt. Padmavathi Raghavan', N'padmavathi.raghavan',
+ N'Carnatic vocal, veena & keyboard', N'Carnatic vocal, veena, violin and keyboard classes for children and adults, with Trinity and Gandharva exam preparation.',
+ N'Usman Road, T. Nagar', N'Near Panagal Park', 1995, 10, N'Active', N'Verified', 1, N'AvailableForVideo', 1, 1, 0, 400),
+(N'rhythm-and-moves-dance-studio', N'Rhythm & Moves Dance Studio', N'RM', N'dance-classes', N'mumbai', N'powai', N'Shreya Iyer', N'shreya.iyer',
+ N'Bollywood, hip-hop & Kathak', N'Dance classes for kids and adults in Bollywood, hip-hop, contemporary and Kathak, plus wedding sangeet choreography.',
+ N'Hiranandani Gardens, Powai', N'Near Galleria Mall', 2015, 9, N'Active', N'Verified', 0, N'Online', 1, 1, 0, 290),
+(N'lingua-bridge-language-institute', N'LinguaBridge Language Institute', N'LB', N'language-classes', N'kolkata', N'new-town', N'Sudeshna Banerjee', N'sudeshna.banerjee',
+ N'Spoken English, IELTS & German', N'Spoken English, IELTS and PTE preparation, and Goethe-certified German and French courses in small batches.',
+ N'Action Area I, New Town', N'Near City Centre 2', 2013, 11, N'Active', N'Verified', 0, N'AvailableForChat', 1, 1, 0, 320),
+(N'glamour-by-pooja-bridal-studio', N'Glamour by Pooja Bridal Studio', N'GP', N'bridal-makeup', N'jaipur', N'c-scheme', N'Pooja Agarwal', N'pooja.agarwal',
+ N'HD & airbrush bridal makeup', N'Bridal and party makeup with HD and airbrush techniques, hairstyling and saree draping, at the studio or venue.',
+ N'Prithviraj Road, C-Scheme', N'Near Statue Circle', 2014, 7, N'Active', N'Verified', 0, N'AvailableForBooking', 1, 0, 1, 310),
+(N'beatbox-dj-and-sound', N'BeatBox DJ & Sound', N'BD', N'dj-sound', N'lucknow', N'gomti-nagar', N'Varun Srivastava', N'varun.srivastava',
+ N'DJs, sound & lighting for events', N'Professional DJs, line-array sound, LED walls and stage lighting for sangeets, receptions, corporate events and college fests.',
+ N'Vipul Khand, Gomti Nagar', N'Near Gomti Riverfront', 2016, 12, N'Active', N'Verified', 0, N'AvailableForCall', 1, 0, 1, 280);
 
 /* ---------- Owner accounts ---------- */
 IF OBJECT_ID('tempdb..#O') IS NOT NULL DROP TABLE #O;
@@ -422,6 +557,17 @@ SELECT N'retail',      d, CASE WHEN d = 0 THEN '10:00' ELSE '09:30' END, CASE WH
                WHEN N'cleaning' THEN N'homeservice' WHEN N'painting' THEN N'homeservice' WHEN N'pest-control' THEN N'homeservice'
                WHEN N'carpenters' THEN N'homeservice' WHEN N'packers-movers' THEN N'homeservice' WHEN N'car-wash' THEN N'homeservice'
                WHEN N'beauty-services' THEN N'homeservice'
+               WHEN N'pet-boarding' THEN N'24x7'
+               WHEN N'veterinarians' THEN N'clinic' WHEN N'eye-care' THEN N'clinic'
+               WHEN N'ayurveda-homeopathy' THEN N'doctor'
+               WHEN N'pet-grooming' THEN N'salon' WHEN N'bridal-makeup' THEN N'salon'
+               WHEN N'dog-trainers' THEN N'fitness'
+               WHEN N'music-classes' THEN N'education' WHEN N'dance-classes' THEN N'education' WHEN N'language-classes' THEN N'education'
+               WHEN N'mobile-repair' THEN N'retail' WHEN N'laptop-repair' THEN N'retail' WHEN N'fabrication' THEN N'retail'
+               WHEN N'tailors' THEN N'retail' WHEN N'boutiques' THEN N'retail' WHEN N'laundry' THEN N'retail'
+               WHEN N'washing-machine-repair' THEN N'homeservice' WHEN N'refrigerator-repair' THEN N'homeservice' WHEN N'ro-purifier-service' THEN N'homeservice'
+               WHEN N'cctv-installation' THEN N'homeservice' WHEN N'waterproofing' THEN N'homeservice' WHEN N'flooring' THEN N'homeservice'
+               WHEN N'gardening' THEN N'homeservice' WHEN N'pandits' THEN N'homeservice' WHEN N'dj-sound' THEN N'homeservice'
                ELSE N'office' END AS Pattern
     FROM dbo.Businesses b
     JOIN #B src ON src.Slug = b.Slug

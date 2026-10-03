@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from './api';
-import type { City, Lookup, Lookups } from './types';
+import type { Category, City, Lookup, Lookups } from './types';
 
 export function useDebounced<T>(value: T, delay = 350): T {
   const [debounced, setDebounced] = useState(value);
@@ -24,6 +24,11 @@ export function useLookup(type: string): Lookup[] {
 
 export function useCities() {
   return useQuery({ queryKey: ['cities'], queryFn: () => api.get<City[]>('/api/locations/cities'), staleTime: 30 * 60_000 });
+}
+
+/** Full category → sub-category tree with business counts, shared by every screen that lists or filters categories. */
+export function useCategories() {
+  return useQuery({ queryKey: ['categories'], queryFn: () => api.get<Category[]>('/api/categories'), staleTime: 600_000 });
 }
 
 export function useDocumentTitle(title?: string) {
