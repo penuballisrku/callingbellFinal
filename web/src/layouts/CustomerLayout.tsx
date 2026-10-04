@@ -42,7 +42,10 @@ export function CitySelect({ size = 'small', fullWidth = false, height, bare = f
   // While the area-discovery agent works on this city the hook polls, so new areas appear without a reload.
   const { data: cityAreas } = useCityAreas(areaCity?.slug);
   // Every city of the visitor's country: the first ones (curated, then largest) until the visitor types, then matches from the whole list.
-  const otherCities = filterCities((cities ?? []).filter((c) => c.slug !== areaCity?.slug), cityFilter, cityFilter.trim() ? 60 : 30);
+  // A typed search also matches the current city, so "hyd" in Hyderabad doesn't claim there is no such city.
+  const otherCities = cityFilter.trim()
+    ? filterCities(cities ?? [], cityFilter, 60)
+    : filterCities((cities ?? []).filter((c) => c.slug !== areaCity?.slug), '', 30);
   // The full list once loaded; the cities payload's areas meanwhile.
   const areas: CityArea[] = cityAreas?.areas ?? areaCity?.areas.map((a) => ({ ...a, areaType: null, altNames: [], subLocalities: [] })) ?? [];
   const term = areaFilter.trim().toLowerCase();
@@ -141,7 +144,8 @@ export function CitySelect({ size = 'small', fullWidth = false, height, bare = f
           }} />
       </ListSubheader>
       {otherCities.map((c) => (
-        <MenuItem key={c.slug} value={c.slug} sx={{ justifyContent: 'space-between', gap: 2 }}>
+        // Prefixed: the current city's slug is also the key of its "All of …" item above.
+        <MenuItem key={`city:${c.slug}`} value={c.slug} sx={{ justifyContent: 'space-between', gap: 2 }}>
           <span className="min-w-0 truncate">{c.name}<span className="text-xs text-muted">, {c.state}</span></span>
           {c.businessCount > 0 && <span className="shrink-0 text-xs text-faint tabular">{number(c.businessCount)}</span>}
         </MenuItem>
