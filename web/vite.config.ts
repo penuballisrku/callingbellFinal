@@ -19,11 +19,16 @@ export default defineConfig({
     chunkSizeWarningLimit: 1500,
     rollupOptions: {
       output: {
-        manualChunks: {
-          react: ['react', 'react-dom', 'react-router'],
-          mui: ['@mui/material', '@emotion/react', '@emotion/styled'],
-          charts: ['recharts'],
-          grid: ['ag-grid-community', 'ag-grid-react'],
+        // Long-lived vendor chunks, matched by package path so internal files (react-dom's client build, scheduler, @mui/system)
+        // land with their package: an app deploy then doesn't make returning visitors re-download them.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (/node_modules[\\/](react|react-dom|react-router|scheduler)[\\/]/.test(id)) return 'react';
+          if (/node_modules[\\/](@mui[\\/](material|system|utils|styled-engine|private-theming|core-downloads-tracker)|@emotion|@popperjs|react-transition-group|stylis)[\\/]/.test(id)) return 'mui';
+          if (/node_modules[\\/](@tanstack|zustand|notistack)[\\/]/.test(id)) return 'data';
+          if (/node_modules[\\/](recharts|d3-|victory-vendor|recharts-scale)/.test(id)) return 'charts';
+          if (/node_modules[\\/]ag-grid/.test(id)) return 'grid';
+          return undefined;
         },
       },
     },

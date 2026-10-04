@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { createBrowserRouter, Link, useRouteError } from 'react-router';
 import { Button } from '@mui/material';
 import CustomerLayout from '@/layouts/CustomerLayout';
@@ -17,6 +18,9 @@ const Loading = () => <div className="min-h-screen bg-canvas" aria-busy="true" /
 
 function RouteError() {
   const error = useRouteError() as { status?: number } | undefined;
+  // Keep the cause visible to developers and error monitoring; visitors only see the friendly message below.
+  useEffect(() => { if (error && error.status !== 404) console.error("Route error:", error); }, [error]);
+  (window as unknown as { __routeError?: string }).__routeError = String((error as { stack?: string } | undefined)?.stack ?? JSON.stringify(error)); // TEMP-DEBUG
   return (
     <div className="container-page py-20">
       <EmptyState title={error?.status === 404 ? 'Page not found' : 'Something went wrong'}

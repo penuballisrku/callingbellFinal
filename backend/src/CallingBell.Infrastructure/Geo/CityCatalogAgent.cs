@@ -9,6 +9,7 @@ using CallingBell.Application.Common.Interfaces;
 using CallingBell.Domain.Entities;
 using CallingBell.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -103,7 +104,8 @@ internal sealed class CityCatalogWorker(CityCatalogQueue queue, IServiceScopeFac
 /// from GeoNames; nothing is generated. Areas of each city come later from the area-discovery agent, when the city is first chosen.
 /// </summary>
 internal sealed partial class CityCatalogRun(
-    ApplicationDbContext db, IHttpClientFactory httpFactory, IOptions<CityCatalogOptions> options, IHostEnvironment env, ILogger<CityCatalogRun> logger)
+    ApplicationDbContext db, IHttpClientFactory httpFactory, IOptions<CityCatalogOptions> options, IHostEnvironment env, IMemoryCache cache,
+    ILogger<CityCatalogRun> logger)
 {
     public const string HttpClientName = "city-catalog";
     private const string Agent = "agent:city-catalog";
@@ -271,6 +273,7 @@ internal sealed partial class CityCatalogRun(
             UserId = null, Action = "Imported", EntityName = nameof(City), EntityId = cc, Changes = catalog.Note, CreatedOn = DateTimeOffset.UtcNow,
         });
         await db.SaveChangesAsync(ct);
+        ReferenceDataCache.Invalidate(cache); // the cached city lists now include the imported cities
         logger.LogInformation("City catalogue import for {Country}: {Note} ({Seconds:0}s)", cc, catalog.Note, (DateTimeOffset.UtcNow - started).TotalSeconds);
     }
 

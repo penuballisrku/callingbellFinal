@@ -11,6 +11,7 @@ using CallingBell.Domain.Entities;
 using CallingBell.Infrastructure.Ai;
 using CallingBell.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -114,7 +115,7 @@ internal sealed class AreaDiscoveryWorker(AreaDiscoveryQueue queue, IServiceScop
 /// </summary>
 internal sealed class AreaDiscoveryRun(
     ApplicationDbContext db, IHttpClientFactory httpFactory, OllamaChatClient ai, IOptions<AreaDiscoveryOptions> options,
-    IOptions<AiOptions> aiOptions, ILogger<AreaDiscoveryRun> logger)
+    IOptions<AiOptions> aiOptions, IMemoryCache cache, ILogger<AreaDiscoveryRun> logger)
 {
     public const string HttpClientName = "area-discovery";
     private const string Agent = "agent:area-discovery";
@@ -166,6 +167,7 @@ internal sealed class AreaDiscoveryRun(
         if (o.UseAi && aiOptions.Value.Enabled && majors.Count > 0)
         {
             try { aiNote = await AiCleanupAsync(city.Name, city.State.Name, majors, ct); }
+            catch (AiUnavailableException) { aiNote = "AI clean-up unavailable"; }
             catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 logger.LogWarning(ex, "AI clean-up unavailable for {City}; continuing without it", city.Name);
@@ -278,6 +280,7 @@ internal sealed class AreaDiscoveryRun(
             $"{places.Count} OSM places; areas +{added} (updated {updated}, {noPin} without verified PIN listed as sub-localities); sub-localities +{subsAdded} " +
             $"(updated {subsUpdated}); retired {retired}; {aiNote}.", 400);
         await db.SaveChangesAsync(ct);
+        ReferenceDataCache.Invalidate(cache); // curated cities carry their areas in the cached city lists
         logger.LogInformation("Area discovery for {City}: {Note}", city.Name, city.AreaDiscoveryNote);
     }
 

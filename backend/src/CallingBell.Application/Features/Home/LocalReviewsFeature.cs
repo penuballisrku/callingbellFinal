@@ -4,6 +4,7 @@ using CallingBell.Application.Features.Geo;
 using CallingBell.Domain.Constants;
 using CallingBell.Domain.Entities;
 using MediatR;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.EntityFrameworkCore;
 
 namespace CallingBell.Application.Features.Home;
@@ -27,7 +28,7 @@ public sealed record GetLocalReviewsQuery(string? ClientIp, string? CitySlug, st
 /// Real, published customer reviews of businesses near the visitor (IP area or chosen area, then the whole city, then everywhere),
 /// a different random selection on every request. Nothing is generated: the local AI only summarises these real reviews.
 /// </summary>
-public sealed class GetLocalReviewsHandler(IUnitOfWork uow, VisitorOriginResolver origins, IReviewSummarizer summarizer)
+public sealed class GetLocalReviewsHandler(IUnitOfWork uow, VisitorOriginResolver origins, IReviewSummarizer summarizer, IMemoryCache cache)
     : IRequestHandler<GetLocalReviewsQuery, LocalReviewsDto>
 {
     private const int Show = 9;
@@ -42,20 +43,7 @@ public sealed class GetLocalReviewsHandler(IUnitOfWork uow, VisitorOriginResolve
     public async Task<LocalReviewsDto> Handle(GetLocalReviewsQuery r, CancellationToken ct)
     {
         var origin = await origins.ResolveAsync(r.ClientIp, r.CitySlug, r.AreaSlug, r.RadiusKm, ct);
-        var reviews = uow.Repository<Review>().QueryNoTracking()
-            .Where(x => x.Status == ReviewStatuses.Published && x.Business.Status == BusinessStatuses.Active);
-        if (origin is not null) reviews = reviews.Where(x => x.Business.CityId == origin.CityId);
-
-        var pool = await reviews
-            .OrderByDescending(x => x.CreatedOn)
-            .Take(Pool)
-            .Select(x => new
-            {
-                x.Id, x.Rating, x.Title, x.Comment, x.CreatedOn, x.IsVerifiedVisit, Customer = x.Customer.DisplayName,
-                x.Business.Name, x.Business.Slug, x.Business.LogoUrl, Sub = x.Business.SubCategory != null ? x.Business.SubCategory.Name : null,
-                x.Business.Area, x.Business.City, x.Business.Latitude, x.Business.Longitude,
-            })
-            .ToListAsync(ct);
+        var pool = await PoolAsync(origin?.CityId, ct);
 
         // Narrow to the visitor's area when it has enough reviews; otherwise the city; with no location at all, everywhere.
         var scope = origin is null ? "all" : "city";
@@ -67,16 +55,7 @@ public sealed class GetLocalReviewsHandler(IUnitOfWork uow, VisitorOriginResolve
         }
         if (inScope.Count == 0 && origin is not null)
         {
-            inScope = await uow.Repository<Review>().QueryNoTracking()
-                .Where(x => x.Status == ReviewStatuses.Published && x.Business.Status == BusinessStatuses.Active)
-                .OrderByDescending(x => x.CreatedOn).Take(Pool)
-                .Select(x => new
-                {
-                    x.Id, x.Rating, x.Title, x.Comment, x.CreatedOn, x.IsVerifiedVisit, Customer = x.Customer.DisplayName,
-                    x.Business.Name, x.Business.Slug, x.Business.LogoUrl, Sub = x.Business.SubCategory != null ? x.Business.SubCategory.Name : null,
-                    x.Business.Area, x.Business.City, x.Business.Latitude, x.Business.Longitude,
-                })
-                .ToListAsync(ct);
+            inScope = await PoolAsync(null, ct);
             scope = "all";
         }
 
@@ -104,6 +83,33 @@ public sealed class GetLocalReviewsHandler(IUnitOfWork uow, VisitorOriginResolve
             picked.Select(x => new LocalReviewDto(x.Id, ShortName(x.Customer), x.Rating, x.Title, x.Comment, x.CreatedOn, x.IsVerifiedVisit,
                 x.Name, x.Slug, x.LogoUrl, x.Sub, x.Area, x.City)).ToList());
     }
+
+    /// <summary>
+    /// The most recent published reviews of a city (or everywhere), kept in memory for <see cref="PoolLifetime"/>: every home page view
+    /// asks for a fresh random selection, which is drawn from this pool instead of re-reading SQL Server each time.
+    /// </summary>
+    private async Task<List<PoolReview>> PoolAsync(Guid? cityId, CancellationToken ct)
+    {
+        var key = $"reviews-pool|{cityId?.ToString() ?? "all"}";
+        if (cache.TryGetValue(key, out List<PoolReview>? hit) && hit is not null) return hit;
+        var reviews = uow.Repository<Review>().QueryNoTracking()
+            .Where(x => x.Status == ReviewStatuses.Published && x.Business.Status == BusinessStatuses.Active);
+        if (cityId is { } id) reviews = reviews.Where(x => x.Business.CityId == id);
+        var pool = await reviews
+            .OrderByDescending(x => x.CreatedOn)
+            .Take(Pool)
+            .Select(x => new PoolReview(x.Id, x.Rating, x.Title, x.Comment, x.CreatedOn, x.IsVerifiedVisit, x.Customer.DisplayName,
+                x.Business.Name, x.Business.Slug, x.Business.LogoUrl, x.Business.SubCategory != null ? x.Business.SubCategory.Name : null,
+                x.Business.Area, x.Business.City, x.Business.Latitude, x.Business.Longitude))
+            .ToListAsync(ct);
+        cache.Set(key, pool, PoolLifetime);
+        return pool;
+    }
+
+    private static readonly TimeSpan PoolLifetime = TimeSpan.FromMinutes(2);
+
+    private sealed record PoolReview(Guid Id, byte Rating, string? Title, string Comment, DateTimeOffset CreatedOn, bool IsVerifiedVisit, string? Customer,
+        string Name, string Slug, string? LogoUrl, string? Sub, string? Area, string City, decimal? Latitude, decimal? Longitude);
 
     /// <summary>"Aarav Sharma" -> "Aarav S."; single names are shown as they are.</summary>
     private static string ShortName(string? displayName)

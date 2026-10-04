@@ -10,6 +10,9 @@ import LanguageRounded from '@mui/icons-material/LanguageRounded';
 import ScheduleRounded from '@mui/icons-material/ScheduleRounded';
 import PlaceRounded from '@mui/icons-material/PlaceRounded';
 import InfoOutlined from '@mui/icons-material/InfoOutlined';
+import WhatsApp from '@mui/icons-material/WhatsApp';
+import { LogoMark } from '@/components/Logo';
+import { Link } from 'react-router';
 import { api } from '@/lib/api';
 import { initials, number } from '@/lib/format';
 import type { ExternalPlace, ExternalSearch, ExternalTier } from '@/lib/types';
@@ -96,7 +99,7 @@ export function ExternalResults({ ext, loading, isError, only }: { ext?: Externa
     return (
       <section aria-busy="true" aria-label={`Searching ${sourceName}`}>
         <Skeleton width={260} height={28} />
-        <div className="mt-3 grid gap-3 md:grid-cols-2">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} variant="rounded" height={150} />)}</div>
+        <div className="mt-3 space-y-3">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} variant="rounded" height={130} />)}</div>
       </section>
     );
   }
@@ -193,7 +196,8 @@ function TierSection({ tier, source, title, subtitle, where, empty, attribution 
         <div className="card p-4 text-sm text-muted">{empty}</div>
       ) : (
         <>
-          <ul className="grid gap-3 md:grid-cols-2">
+          {/* One business per row. */}
+          <ul className="space-y-3">
             {tier.items.slice(0, shown).map((p) => <li key={p.id} className="min-w-0"><PlaceCard p={p} source={source} /></li>)}
           </ul>
           {tier.items.length > shown && (
@@ -213,8 +217,32 @@ function TierSection({ tier, source, title, subtitle, where, empty, attribution 
   );
 }
 
+/**
+ * WhatsApp chat link for a place's phone, or null when it isn't a mobile number (WhatsApp needs one). Indian numbers are written many
+ * ways ("098480 12345", "+91 98480 12345", "9848012345"); they are reduced to the 10-digit mobile number with the 91 country code.
+ */
+function whatsAppHref(p: ExternalPlace): string | null {
+  if (!p.phone) return null;
+  let digits = p.phone.replace(/\D/g, '');
+  if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2);
+  else if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);
+  if (!/^[6-9]\d{9}$/.test(digits)) return null;
+  const text = `Hi ${p.name}, I found your business on Calling Bell and would like to know more about your services.`;
+  return `https://wa.me/91${digits}?text=${encodeURIComponent(text)}`;
+}
+
+/** Business sign-up, pre-filled with what is known about the place (the owner can change everything). */
+function joinHref(p: ExternalPlace): string {
+  const params = new URLSearchParams({ type: 'business', name: p.name });
+  if (p.phone) params.set('phone', p.phone);
+  if (p.website) params.set('website', p.website);
+  if (p.address) params.set('address', p.address);
+  return `/register?${params}`;
+}
+
 function PlaceCard({ p, source }: { p: ExternalPlace; source: 'ai' | 'google' }) {
   const hours = p.openingHours?.replace(/;\s*/g, ' · ');
+  const whatsApp = whatsAppHref(p);
   return (
     <article className="card flex h-full gap-3 p-4">
       {p.photoUrl ? (
@@ -252,10 +280,29 @@ function PlaceCard({ p, source }: { p: ExternalPlace; source: 'ai' | 'google' })
         <div className="mt-3 flex flex-wrap gap-2">
           <Button size="small" variant="contained" startIcon={<DirectionsRounded />} href={p.directionsUrl} target="_blank" rel="noreferrer">Directions</Button>
           {p.phone && <Button size="small" variant="outlined" startIcon={<CallRounded />} href={`tel:${p.phone.replace(/[^\d+]/g, '')}`}>Call</Button>}
+          {whatsApp && (
+            <Button size="small" variant="outlined" startIcon={<WhatsApp />} href={whatsApp} target="_blank" rel="noreferrer"
+              sx={{ color: '#128C7E', borderColor: 'rgba(18,140,126,0.5)', '&:hover': { borderColor: '#128C7E', bgcolor: 'rgba(37,211,102,0.08)' } }}>
+              WhatsApp
+            </Button>
+          )}
           {p.website && <Button size="small" variant="outlined" startIcon={<LanguageRounded />} href={p.website} target="_blank" rel="noreferrer nofollow">Website</Button>}
           {p.sourceUrl && (
             <Button size="small" href={p.sourceUrl} target="_blank" rel="noreferrer">{source === 'ai' ? 'View on map' : 'Open in Google Maps'}</Button>
           )}
+          <Tooltip describeChild title="Own this business? List it on Calling Bell for free to get enquiries and bookings">
+            {/* Highlighted brand call to action: amber with the Calling Bell mark. */}
+            <Button size="small" variant="contained" disableElevation component={Link} to={joinHref(p)}
+              startIcon={<LogoMark size={18} />}
+              sx={{
+                ml: { sm: 'auto' }, bgcolor: 'var(--cb-accent)', color: 'var(--cb-on-accent)', fontWeight: 700, px: 1.5,
+                boxShadow: '0 0 0 3px var(--cb-ring)',
+                '&:hover': { bgcolor: 'color-mix(in srgb, var(--cb-accent) 88%, #000)', boxShadow: '0 0 0 4px var(--cb-ring)' },
+                '& .MuiButton-startIcon': { mr: 0.75 },
+              }}>
+              Join Calling Bell
+            </Button>
+          </Tooltip>
         </div>
       </div>
     </article>
