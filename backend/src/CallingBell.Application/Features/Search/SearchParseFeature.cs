@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using CallingBell.Application.Common;
 using CallingBell.Application.Common.Interfaces;
 using CallingBell.Domain.Entities;
 using FluentValidation;
@@ -36,7 +37,7 @@ public sealed class ParseSearchValidator : AbstractValidator<ParseSearchQuery>
 /// Splits a search such as "lawyers in Nellore" or "plumbers near Madhapur, Hyderabad" into what is searched for and where, and matches
 /// the place to a listed city or area (city name or slug, area name, alternate spelling or PIN code) so the location dropdown can show it.
 /// </summary>
-public sealed partial class ParseSearchHandler(IUnitOfWork uow) : IRequestHandler<ParseSearchQuery, ParsedSearchDto>
+public sealed partial class ParseSearchHandler(IUnitOfWork uow, ReferenceDataCache reference) : IRequestHandler<ParseSearchQuery, ParsedSearchDto>
 {
     /// <summary>The last " in " / " near " separates the place: "work from home jobs in pune" keeps "work from home jobs".</summary>
     [GeneratedRegex(@"^(?<what>.+)\s+(?:in|near|around|at)\s+(?<where>[^\s].*)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
@@ -69,8 +70,7 @@ public sealed partial class ParseSearchHandler(IUnitOfWork uow) : IRequestHandle
 
     private async Task<SearchPlaceMatchDto?> MatchPlaceAsync(string placeText, string? hintCity, CancellationToken ct)
     {
-        var cities = await uow.Repository<City>().QueryNoTracking().Where(c => c.IsActive)
-            .OrderBy(c => c.SortOrder).Select(c => new CityRow(c.Id, c.Slug, c.Name, c.AltNames)).ToListAsync(ct);
+        var cities = (await reference.ActiveCitiesAsync(ct)).Select(c => new CityRow(c.Id, c.Slug, c.Name, c.AltNames)).ToList();
         CityRow? ByName(string n)
         {
             var compact = n.Replace(" ", "");

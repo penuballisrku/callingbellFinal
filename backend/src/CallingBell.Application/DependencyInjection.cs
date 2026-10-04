@@ -15,6 +15,8 @@ public static class DependencyInjection
         services.AddValidatorsFromAssembly(assembly);
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehaviour<,>));
         services.AddScoped<Features.Geo.VisitorOriginResolver>();
+        services.AddMemoryCache();
+        services.AddScoped<Common.ReferenceDataCache>();
 
         return services;
     }

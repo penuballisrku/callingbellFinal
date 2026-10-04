@@ -16,14 +16,12 @@ public sealed record VisitorOrigin(Guid CityId, string CitySlug, string CityName
 /// Resolves the visitor's origin: an explicitly selected area first, then the IP's coordinates when they fall near a listed city
 /// (and that is the city being browsed), then the centre of the city being browsed.
 /// </summary>
-public sealed class VisitorOriginResolver(IUnitOfWork uow, IIpLocationService locator)
+public sealed class VisitorOriginResolver(IUnitOfWork uow, IIpLocationService locator, ReferenceDataCache reference)
 {
     public async Task<VisitorOrigin?> ResolveAsync(string? clientIp, string? citySlug, string? areaSlug, double radiusKm, CancellationToken ct)
     {
-        var cities = await uow.Repository<City>().QueryNoTracking()
-            .Where(c => c.IsActive)
-            .Select(c => new { c.Id, c.Slug, c.Name, State = c.State.Name, c.Latitude, c.Longitude })
-            .ToListAsync(ct);
+        // Every active city, from memory: this runs on most location-aware requests (reviews, nearby services, search).
+        var cities = await reference.ActiveCitiesAsync(ct);
 
         // 1. An explicit area wins.
         if (!string.IsNullOrWhiteSpace(citySlug) && !string.IsNullOrWhiteSpace(areaSlug))

@@ -2,12 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Button, Checkbox, Chip, CircularProgress, Drawer, FormControlLabel, MenuItem, Pagination, Radio, RadioGroup, TextField, ToggleButton, ToggleButtonGroup,
+  Button, Checkbox, Chip, CircularProgress, Drawer, FormControlLabel, MenuItem, Pagination, Radio, RadioGroup, TextField,
 } from '@mui/material';
 import TuneRounded from '@mui/icons-material/TuneRounded';
 import SearchRounded from '@mui/icons-material/SearchRounded';
-import ViewListRounded from '@mui/icons-material/ViewListRounded';
-import GridViewRounded from '@mui/icons-material/GridViewRounded';
 import { api } from '@/lib/api';
 import { useCategories, useCities, useCityAreas, useDebounced, useDocumentTitle, useLookup } from '@/lib/hooks';
 import { CityAutocomplete } from '@/components/CityAutocomplete';
@@ -53,7 +51,6 @@ export default function SearchPage() {
   const [text, setText] = useState(params.get('q') ?? '');
   const debounced = useDebounced(text);
   const [drawer, setDrawer] = useState(false);
-  const [layout, setLayout] = useState<'row' | 'grid'>('row');
   const queryClient = useQueryClient();
   const { enqueueSnackbar } = useSnackbar();
 
@@ -294,18 +291,12 @@ export default function SearchPage() {
             </form>
             <div className="flex gap-2">
               <Button className="lg:!hidden" variant="outlined" startIcon={<TuneRounded />} onClick={() => setDrawer(true)}>Filters{activeChips.length ? ` (${activeChips.length})` : ''}</Button>
-              {/* Sorting and list/grid apply to Calling Bell results; Google Maps and AI results are listed nearest first. */}
+              {/* Sorting applies to Calling Bell results; Google Maps and AI results are listed nearest first. */}
               {tab === 'db' && (
-                <>
-                  <TextField select size="small" value={query.sort} onChange={(e) => update({ sort: e.target.value === 'relevance' ? null : e.target.value })}
-                    sx={{ minWidth: 170 }} slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Sort by' } }}>
-                    {sorts.map((s) => <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>)}
-                  </TextField>
-                  <ToggleButtonGroup size="small" exclusive value={layout} onChange={(_, v) => v && setLayout(v)} className="hidden sm:flex" aria-label="Layout">
-                    <ToggleButton value="row" aria-label="List view"><ViewListRounded fontSize="small" /></ToggleButton>
-                    <ToggleButton value="grid" aria-label="Grid view"><GridViewRounded fontSize="small" /></ToggleButton>
-                  </ToggleButtonGroup>
-                </>
+                <TextField select size="small" value={query.sort} onChange={(e) => update({ sort: e.target.value === 'relevance' ? null : e.target.value })}
+                  sx={{ minWidth: 170 }} slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Sort by' } }}>
+                  {sorts.map((s) => <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>)}
+                </TextField>
               )}
             </div>
           </div>
@@ -377,9 +368,8 @@ export default function SearchPage() {
                   {groups.map((g) => (
                     <section key={g.key} aria-label={g.label ?? 'Results'}>
                       {g.label && <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">{g.label}</h2>}
-                      {layout === 'row'
-                        ? <div className="space-y-3">{g.items.map((b) => <BusinessCard key={b.id} b={b} layout="row" />)}</div>
-                        : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{g.items.map((b) => <BusinessCard key={b.id} b={b} />)}</div>}
+                      {/* One business per row. */}
+                      <ul className="space-y-3">{g.items.map((b) => <li key={b.id}><BusinessCard b={b} layout="row" /></li>)}</ul>
                     </section>
                   ))}
                 </div>

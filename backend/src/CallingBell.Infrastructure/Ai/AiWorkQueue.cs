@@ -97,6 +97,11 @@ internal static class AiJobs
                 if (result is not null && !usable(result)) result = null;
                 logger.LogInformation("AI {What}: {Outcome}", what, result is null ? "no usable answer" : "done");
             }
+            catch (AiUnavailableException ex)
+            {
+                // The client logs the outage once; no stack trace per place.
+                logger.LogDebug("AI {What} skipped: {Reason}", what, ex.Message);
+            }
             catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 logger.LogWarning(ex, "AI {What} failed; database results are shown instead", what);

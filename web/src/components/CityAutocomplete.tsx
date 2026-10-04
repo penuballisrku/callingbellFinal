@@ -52,8 +52,9 @@ export function CityAutocomplete({ value, onChange, label, placeholder = 'Search
       fullWidth={fullWidth}
       disabled={disabled}
       autoHighlight
-      renderOption={({ key, ...props }, c) => (
-        <li key={key} {...props}>
+      // Keyed by slug: several states share a city name (Udaipur, Raipur…), and MUI's default key is the label.
+      renderOption={({ key: _key, ...props }, c) => (
+        <li key={c.slug} {...props}>
           <span className="flex w-full min-w-0 items-baseline justify-between gap-3">
             <span className="min-w-0 truncate">{c.name}<span className="text-muted">, {c.state}</span></span>
             {c.businessCount > 0 && <span className="shrink-0 text-xs text-muted tabular">{number(c.businessCount)} listed</span>}

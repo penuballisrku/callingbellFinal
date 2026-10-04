@@ -1,6 +1,9 @@
 using System.Globalization;
 using System.Net.Http.Json;
+using System.Net;
+using System.Net.Sockets;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace CallingBell.Infrastructure.Ai;
@@ -31,11 +34,20 @@ public sealed class AiOptions
     public int Threads { get; set; } = 2;
 }
 
+/// <summary>Ollama isn't reachable (not running) or the model isn't pulled; callers fall back to database results without a stack trace.</summary>
+internal sealed class AiUnavailableException(string message, Exception? inner = null) : Exception(message, inner);
+
 /// <summary>Minimal client for Ollama's chat API in JSON mode (free local inference).</summary>
-internal sealed class OllamaChatClient(IHttpClientFactory httpFactory, IOptions<AiOptions> options)
+internal sealed class OllamaChatClient(IHttpClientFactory httpFactory, IOptions<AiOptions> options, ILogger<OllamaChatClient> logger)
 {
     public const string HttpClientName = "ollama";
     internal static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    /// <summary>
+    /// While Ollama is unavailable every call fails at once for <see cref="AiOptions.RetryAfterMinutes"/> instead of trying again,
+    /// and the outage is logged once rather than per place and feature.
+    /// </summary>
+    private long _unavailableUntilTicks;
 
     public string Model => options.Value.Model;
 
@@ -44,6 +56,8 @@ internal sealed class OllamaChatClient(IHttpClientFactory httpFactory, IOptions<
     public async Task<string?> ChatJsonAsync(string system, string user, CancellationToken ct, int? maxOutputTokens = null)
     {
         var o = options.Value;
+        if (DateTime.UtcNow.Ticks < Interlocked.Read(ref _unavailableUntilTicks))
+            throw new AiUnavailableException($"Ollama at {o.BaseUrl} is unavailable");
         var body = new
         {
             model = o.Model, stream = false, format = "json", keep_alive = o.KeepAlive,
@@ -55,10 +69,34 @@ internal sealed class OllamaChatClient(IHttpClientFactory httpFactory, IOptions<
         };
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(TimeSpan.FromSeconds(o.TimeoutSeconds));
-        using var response = await httpFactory.CreateClient(HttpClientName).PostAsJsonAsync($"{o.BaseUrl.TrimEnd('/')}/api/chat", body, Json, cts.Token);
+        HttpResponseMessage sent;
+        try
+        {
+            sent = await httpFactory.CreateClient(HttpClientName).PostAsJsonAsync($"{o.BaseUrl.TrimEnd('/')}/api/chat", body, Json, cts.Token);
+        }
+        catch (HttpRequestException ex) when (ex.InnerException is SocketException)
+        {
+            // Connection refused / host not found: Ollama isn't running.
+            throw Unavailable(o, $"no Ollama server at {o.BaseUrl} ({ex.Message}). Start it with `ollama serve`", ex);
+        }
+        using var response = sent;
+        // Ollama answers 404 when the model hasn't been pulled.
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            throw Unavailable(o, $"Ollama model '{o.Model}' is not installed. Run `ollama pull {o.Model}`", null);
         response.EnsureSuccessStatusCode();
         var chat = await response.Content.ReadFromJsonAsync<ChatResponse>(Json, cts.Token);
         return string.IsNullOrWhiteSpace(chat?.Message?.Content) ? null : chat.Message.Content;
+    }
+
+    /// <summary>Starts the back-off, logging only when it wasn't already in effect.</summary>
+    private AiUnavailableException Unavailable(AiOptions o, string reason, Exception? inner)
+    {
+        var minutes = Math.Max(1, o.RetryAfterMinutes);
+        var now = DateTime.UtcNow.Ticks;
+        if (Interlocked.Exchange(ref _unavailableUntilTicks, DateTime.UtcNow.AddMinutes(minutes).Ticks) < now)
+            logger.LogWarning("AI is unavailable: {Reason}, or set Ai:Enabled to false. Database results are shown; retrying in {Minutes} min.",
+                reason, minutes);
+        return new AiUnavailableException(reason, inner);
     }
 
     private sealed record ChatResponse(ChatMessage? Message);

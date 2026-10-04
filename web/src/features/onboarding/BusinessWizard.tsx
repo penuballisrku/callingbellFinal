@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { FormProvider, useForm, useWatch, type FieldPath } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -59,6 +59,33 @@ function loadDraft(mode: string): WizardForm | null {
   } catch { return null; }
 }
 
+/**
+ * Fills empty fields from the link's query string (?name=&phone=&website=&address=), e.g. from "Join Calling Bell" on a search result.
+ * Phone numbers are reduced to 10 digits when they are Indian mobile/landline numbers written with +91 or a leading 0.
+ */
+function withPrefill(form: WizardForm, params: URLSearchParams): WizardForm {
+  const get = (key: string) => params.get(key)?.trim().slice(0, 300) || '';
+  const name = get('name'), phone = get('phone'), website = get('website'), address = get('address');
+  if (!name && !phone && !website && !address) return form;
+  let digits = phone.replace(/\D/g, '');
+  if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2);
+  else if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);
+  const b = form.business;
+  const fill = (current: string, value: string) => current || value;
+  return {
+    ...form,
+    business: {
+      ...b,
+      businessName: fill(b.businessName, name.slice(0, 150)),
+      businessPhone: fill(b.businessPhone, digits.length === 10 ? digits : phone),
+      whatsAppNumber: fill(b.whatsAppNumber, /^[6-9]\d{9}$/.test(digits) ? digits : ''),
+      website: fill(b.website, /^https?:\/\//i.test(website) ? website : ''),
+      addressLine: fill(b.addressLine, address),
+      pincode: fill(b.pincode, address.match(/\b\d{6}\b/)?.[0] ?? ''),
+    },
+  };
+}
+
 function Wizard({ mode, data, paymentsEnabled }: { mode: 'register' | 'setup'; data: WizardData; paymentsEnabled: boolean }) {
   const user = useAuth((s) => s.user);
   const setSession = useAuth((s) => s.setSession);
@@ -66,10 +93,14 @@ function Wizard({ mode, data, paymentsEnabled }: { mode: 'register' | 'setup'; d
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { enqueueSnackbar } = useSnackbar();
+  const [params] = useSearchParams();
+  // "Join Calling Bell" on a Google Maps / OpenStreetMap result links here with what is known about the business; it only fills
+  // fields that are still empty, so a saved draft is never overwritten.
   const [restored] = useState(() => loadDraft(mode));
+  const [initial] = useState(() => withPrefill(restored ?? defaultValues(mode, user ?? undefined), params));
   const form = useForm<WizardForm>({
     resolver: zodResolver(makeWizardSchema(mode)),
-    defaultValues: restored ?? defaultValues(mode, user ?? undefined),
+    defaultValues: initial,
     mode: 'onTouched',
   });
   const [step, setStep] = useState(0);

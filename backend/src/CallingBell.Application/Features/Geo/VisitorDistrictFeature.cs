@@ -28,7 +28,7 @@ public sealed record VisitorLocationDto(string? Place, string? Region, VisitorDi
 
 public sealed record GetVisitorDistrictQuery(string? ClientIp, double RadiusKm) : IRequest<VisitorLocationDto>;
 
-public sealed class GetVisitorDistrictHandler(IIpLocationService locator, IUnitOfWork uow, IAreaDiscoveryService discovery)
+public sealed class GetVisitorDistrictHandler(IIpLocationService locator, IUnitOfWork uow, IAreaDiscoveryService discovery, ReferenceDataCache reference)
     : IRequestHandler<GetVisitorDistrictQuery, VisitorLocationDto>
 {
     /// <summary>When nothing matches by name, the nearest area within this distance of the IP's coordinates is pre-selected.</summary>
@@ -38,19 +38,8 @@ public sealed class GetVisitorDistrictHandler(IIpLocationService locator, IUnitO
     {
         if (VisitorIp.Parse(r.ClientIp) is not { } ip || await locator.LocateAsync(ip, ct) is not { } loc) return new VisitorLocationDto(null, null, null);
 
-        var cities = await uow.Repository<City>().QueryNoTracking()
-            .Where(c => c.IsActive)
-            .Select(c => new
-            {
-                c.Id, c.Slug, c.Name, State = c.State.Name, c.Latitude, c.Longitude, c.AreasDiscoveredOn,
-                Areas = c.Areas.Where(a => a.IsActive).Select(a => new
-                {
-                    a.Slug, a.Name, a.Pincode, a.AltNames, a.Latitude, a.Longitude, IsTop = a.ParentAreaId == null,
-                    // A sub-locality resolves to the area it belongs to.
-                    AreaSlug = a.ParentArea != null ? a.ParentArea.Slug : a.Slug,
-                }).ToList(),
-            })
-            .ToListAsync(ct);
+        // Every city with its areas (thousands of rows), from memory: built once and cleared when cities or areas change.
+        var cities = await reference.GetDerivedAsync("district-index", () => LoadIndexAsync(ct), ct);
 
         VisitorDistrictDto? district = null;
         if (!string.IsNullOrWhiteSpace(loc.City))
@@ -112,6 +101,30 @@ public sealed class GetVisitorDistrictHandler(IIpLocationService locator, IUnitO
         return new VisitorLocationDto(loc.City, loc.Region, district, loc.CountryCode, loc.Postcode,
             loc.Latitude is { } y ? Math.Round(y, 2) : null, loc.Longitude is { } x ? Math.Round(x, 2) : null);
     }
+
+    private async Task<List<DistrictCity>> LoadIndexAsync(CancellationToken ct)
+    {
+        var cities = await uow.Repository<City>().QueryNoTracking().Where(c => c.IsActive)
+            .Select(c => new { c.Id, c.Slug, c.Name, State = c.State.Name, c.Latitude, c.Longitude, c.AreasDiscoveredOn })
+            .ToListAsync(ct);
+        var areas = (await uow.Repository<Area>().QueryNoTracking().Where(a => a.IsActive && a.City.IsActive)
+                .Select(a => new
+                {
+                    a.CityId,
+                    Area = new DistrictArea(a.Slug, a.Name, a.Pincode, a.AltNames, a.Latitude, a.Longitude, a.ParentAreaId == null,
+                        // A sub-locality resolves to the area it belongs to.
+                        a.ParentArea != null ? a.ParentArea.Slug : a.Slug),
+                })
+                .ToListAsync(ct))
+            .ToLookup(x => x.CityId, x => x.Area);
+        return cities.Select(c => new DistrictCity(c.Id, c.Slug, c.Name, c.State, c.Latitude, c.Longitude, c.AreasDiscoveredOn, areas[c.Id].ToList())).ToList();
+    }
+
+    private sealed record DistrictCity(Guid Id, string Slug, string Name, string State, decimal? Latitude, decimal? Longitude,
+        DateTimeOffset? AreasDiscoveredOn, List<DistrictArea> Areas);
+
+    private sealed record DistrictArea(string Slug, string Name, string Pincode, string? AltNames, decimal? Latitude, decimal? Longitude, bool IsTop,
+        string AreaSlug);
 
     private static bool Same(string a, string b) => string.Equals(a.Trim(), b.Trim(), StringComparison.OrdinalIgnoreCase);
 

@@ -20,8 +20,9 @@ public sealed class ExternalSearchOptions
         ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
     /// <summary>Time budget for one Overpass search across all servers (it keeps running in the background after a request stops waiting).</summary>
     public int OverpassTimeoutSeconds { get; set; } = 25;
-    /// <summary>How long a search request waits for Overpass before answering with the faster Photon results.</summary>
-    public int OverpassWaitSeconds { get; set; } = 6;
+    /// <summary>How long a search request waits for Overpass before answering with the faster Photon results. The page keeps polling
+    /// while the full search finishes in the background (ExternalTierDto.Searching), so this stays short.</summary>
+    public int OverpassWaitSeconds { get; set; } = 2;
     /// <summary>Photon geocoder (fast OpenStreetMap name search). Empty = not used.</summary>
     public string? PhotonUrl { get; set; } = "https://photon.komoot.io/api/";
     public string UserAgent { get; set; } = "CallingBell-search/1.0 (+https://callingbell.in)";

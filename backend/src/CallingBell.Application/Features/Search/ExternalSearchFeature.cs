@@ -46,7 +46,7 @@ public sealed record ExternalSearchQuery(string? ClientIp, string? Q, string? Ca
 /// Each source leaves out places a higher-priority source already listed.
 /// </summary>
 public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver origins, IOsmPlaceSearch osm, IGooglePlacesSearch google,
-    ISearchAssistant assistant, IPlaceGeocoder geocoder) : IRequestHandler<ExternalSearchQuery, ExternalSearchDto>
+    ISearchAssistant assistant, IPlaceGeocoder geocoder, ReferenceDataCache reference) : IRequestHandler<ExternalSearchQuery, ExternalSearchDto>
 {
     /// <summary>Search radius around the selected area; results are listed nearest first.</summary>
     private const int RadiusM = 8_000;
@@ -80,8 +80,7 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
             : await origins.ResolveAsync(r.ClientIp, citySlug, areaSlug, r.RadiusKm, ct);
 
         // What: the sub-categories searched for, with their OpenStreetMap tags.
-        var subs = await uow.Repository<SubCategory>().QueryNoTracking().Where(s => s.IsActive)
-            .Select(s => new Sub(s.Slug, s.Name, s.Category.Slug, s.Category.Name, s.OsmTags)).ToListAsync(ct);
+        var subs = (await reference.ActiveSubCategoriesAsync(ct)).Select(s => new Sub(s.Slug, s.Name, s.CategorySlug, s.CategoryName, s.OsmTags)).ToList();
         var q = (r.Q ?? "").Trim();
         var label = subs.FirstOrDefault(s => s.Slug == r.Sub)?.Name
                     ?? subs.FirstOrDefault(s => s.CategorySlug == r.Category)?.CategoryName

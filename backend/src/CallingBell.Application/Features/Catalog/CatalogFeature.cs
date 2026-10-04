@@ -79,22 +79,39 @@ public sealed record GetCitiesQuery(string? Country = null) : IRequest<IReadOnly
 /// The country's cities: curated cities first (in their curated order), then the rest largest first. Curated cities include their
 /// top-level areas; for every other city the areas come from GET /api/locations/cities/{slug}/areas, which also queues their discovery.
 /// </summary>
-public sealed class GetCitiesHandler(IUnitOfWork uow, IGeoLocationService geo) : IRequestHandler<GetCitiesQuery, IReadOnlyList<CityDto>>
+public sealed class GetCitiesHandler(IUnitOfWork uow, IGeoLocationService geo, ReferenceDataCache reference)
+    : IRequestHandler<GetCitiesQuery, IReadOnlyList<CityDto>>
 {
     public async Task<IReadOnlyList<CityDto>> Handle(GetCitiesQuery request, CancellationToken ct)
     {
         var country = request.Country is { Length: 2 } c2 && c2.All(char.IsAsciiLetter) ? c2.ToUpperInvariant() : geo.DefaultCountryCode;
-        var businesses = uow.Repository<Business>().QueryNoTracking();
-        return await uow.Repository<City>().QueryNoTracking()
+        // Thousands of cities per country: built once and kept in memory (the city import and admin edits clear it).
+        return await reference.GetDerivedAsync($"cities|{country}", () => LoadAsync(country, ct), ct);
+    }
+
+    /// <summary>Three set-based queries (cities, business counts, curated cities' areas) instead of a sub-query per city.</summary>
+    private async Task<IReadOnlyList<CityDto>> LoadAsync(string country, CancellationToken ct)
+    {
+        var cities = await uow.Repository<City>().QueryNoTracking()
             .Where(c => c.IsActive && c.State.CountryCode == country)
             .OrderBy(c => c.Source != null).ThenBy(c => c.SortOrder).ThenBy(c => c.Name)
-            .Select(c => new CityDto(c.Id, c.Name, c.Slug, c.State.Name, c.ImageUrl, c.IsPopular,
-                businesses.Count(b => b.CityId == c.Id && b.Status == BusinessStatuses.Active),
-                // Top-level areas only; sub-localities come with GET /api/locations/cities/{slug}/areas.
-                c.Source == null
-                    ? c.Areas.Where(a => a.IsActive && a.ParentAreaId == null).OrderBy(a => a.Name).Select(a => new AreaDto(a.Id, a.Name, a.Slug, a.Pincode)).ToList()
-                    : new List<AreaDto>()))
+            .Select(c => new { c.Id, c.Name, c.Slug, State = c.State.Name, c.ImageUrl, c.IsPopular, Curated = c.Source == null })
             .ToListAsync(ct);
+        var counts = await uow.Repository<Business>().QueryNoTracking()
+            .Where(b => b.Status == BusinessStatuses.Active && b.CityId != null)
+            .GroupBy(b => b.CityId!.Value).Select(g => new { CityId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.CityId, x => x.Count, ct);
+        // Top-level areas of curated cities only; every other city's areas come with GET /api/locations/cities/{slug}/areas.
+        var curatedIds = cities.Where(c => c.Curated).Select(c => c.Id).ToList();
+        var areas = (await uow.Repository<Area>().QueryNoTracking()
+                .Where(a => curatedIds.Contains(a.CityId) && a.IsActive && a.ParentAreaId == null)
+                .OrderBy(a => a.Name)
+                .Select(a => new { a.CityId, Dto = new AreaDto(a.Id, a.Name, a.Slug, a.Pincode) })
+                .ToListAsync(ct))
+            .ToLookup(a => a.CityId, a => a.Dto);
+
+        return cities.Select(c => new CityDto(c.Id, c.Name, c.Slug, c.State, c.ImageUrl, c.IsPopular, counts.GetValueOrDefault(c.Id),
+            c.Curated ? areas[c.Id].ToList() : [])).ToList();
     }
 }
 

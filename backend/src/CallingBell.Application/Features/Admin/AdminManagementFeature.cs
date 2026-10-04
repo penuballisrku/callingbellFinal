@@ -10,6 +10,7 @@ using CallingBell.Domain.Constants;
 using CallingBell.Domain.Entities;
 using FluentValidation;
 using MediatR;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.EntityFrameworkCore;
 
 namespace CallingBell.Application.Features.Admin;
@@ -171,7 +172,7 @@ public sealed class UpdateBusinessAdminValidator : AbstractValidator<UpdateBusin
     }
 }
 
-public sealed class UpdateBusinessAdminHandler(IUnitOfWork uow, IRealtimeNotifier notifier) : IRequestHandler<UpdateBusinessAdminCommand>
+public sealed class UpdateBusinessAdminHandler(IUnitOfWork uow, IRealtimeNotifier notifier, IMemoryCache cache) : IRequestHandler<UpdateBusinessAdminCommand>
 {
     public async Task Handle(UpdateBusinessAdminCommand r, CancellationToken ct)
     {
@@ -198,6 +199,7 @@ public sealed class UpdateBusinessAdminHandler(IUnitOfWork uow, IRealtimeNotifie
         }
         if (r.IsFeatured is { } featured) b.IsFeatured = featured;
         await uow.SaveChangesAsync(ct);
+        ReferenceDataCache.Invalidate(cache); // city lists, business counts and the category tree are cached
 
         foreach (var message in messages)
         {
@@ -243,7 +245,7 @@ public sealed class UpdateCategoryValidator : AbstractValidator<UpdateCategoryCo
     }
 }
 
-public sealed class UpdateCategoryHandler(IUnitOfWork uow) : IRequestHandler<UpdateCategoryCommand>
+public sealed class UpdateCategoryHandler(IUnitOfWork uow, IMemoryCache cache) : IRequestHandler<UpdateCategoryCommand>
 {
     public async Task Handle(UpdateCategoryCommand r, CancellationToken ct)
     {
@@ -254,12 +256,13 @@ public sealed class UpdateCategoryHandler(IUnitOfWork uow) : IRequestHandler<Upd
         c.IsFeatured = r.IsFeatured;
         c.SortOrder = r.SortOrder;
         await uow.SaveChangesAsync(ct);
+        ReferenceDataCache.Invalidate(cache); // city lists, business counts and the category tree are cached
     }
 }
 
 public sealed record UpdateSubCategoryCommand(Guid Id, bool IsActive, bool IsFeatured) : IRequest;
 
-public sealed class UpdateSubCategoryHandler(IUnitOfWork uow) : IRequestHandler<UpdateSubCategoryCommand>
+public sealed class UpdateSubCategoryHandler(IUnitOfWork uow, IMemoryCache cache) : IRequestHandler<UpdateSubCategoryCommand>
 {
     public async Task Handle(UpdateSubCategoryCommand r, CancellationToken ct)
     {
@@ -267,6 +270,7 @@ public sealed class UpdateSubCategoryHandler(IUnitOfWork uow) : IRequestHandler<
         s.IsActive = r.IsActive;
         s.IsFeatured = r.IsFeatured;
         await uow.SaveChangesAsync(ct);
+        ReferenceDataCache.Invalidate(cache); // city lists, business counts and the category tree are cached
     }
 }
 
@@ -297,7 +301,7 @@ public sealed class GetAdminCitiesHandler(IUnitOfWork uow) : IRequestHandler<Get
 
 public sealed record UpdateCityCommand(Guid Id, bool IsActive, bool IsPopular) : IRequest;
 
-public sealed class UpdateCityHandler(IUnitOfWork uow) : IRequestHandler<UpdateCityCommand>
+public sealed class UpdateCityHandler(IUnitOfWork uow, IMemoryCache cache) : IRequestHandler<UpdateCityCommand>
 {
     public async Task Handle(UpdateCityCommand r, CancellationToken ct)
     {
@@ -305,6 +309,7 @@ public sealed class UpdateCityHandler(IUnitOfWork uow) : IRequestHandler<UpdateC
         c.IsActive = r.IsActive;
         c.IsPopular = r.IsPopular;
         await uow.SaveChangesAsync(ct);
+        ReferenceDataCache.Invalidate(cache); // city lists, business counts and the category tree are cached
     }
 }
 

@@ -30,6 +30,10 @@ public sealed class StartupWarmup(IServiceScopeFactory scopes, IHostApplicationL
                 await sender.Send(new GetCategoriesQuery(), stoppingToken);
                 await sender.Send(new GetCitiesQuery(), stoppingToken);
                 await sender.Send(new GetLookupsQuery(), stoppingToken);
+                // Location and search reference data most requests read (kept in memory afterwards).
+                var reference = scope.ServiceProvider.GetRequiredService<CallingBell.Application.Common.ReferenceDataCache>();
+                await reference.ActiveCitiesAsync(stoppingToken);
+                await reference.ActiveSubCategoriesAsync(stoppingToken);
                 logger.LogInformation("Warm-up finished in {Ms} ms", (int)(DateTime.UtcNow - started).TotalMilliseconds);
             }
             catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
