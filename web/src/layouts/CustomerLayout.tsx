@@ -8,13 +8,12 @@ import SearchRounded from '@mui/icons-material/SearchRounded';
 import { useCategories, useCities, useCityAreas, useCountryCatalog } from '@/lib/hooks';
 import { number } from '@/lib/format';
 import { filterCities } from '@/components/CityAutocomplete';
-import type { CityArea, SearchSuggestion } from '@/lib/types';
+import type { CityArea } from '@/lib/types';
 import { useNotificationStream } from '@/lib/realtime';
 import { homeFor, isAdmin, isOwner, useAuth } from '@/stores/auth';
 import { useCity } from '@/stores/city';
 import { Logo, NotificationBell, ThemeMenu, UserMenu } from './Shared';
 import { CountryCode, useDistrictAutoSelect, useNetworkTagline, useVisitorDistrict } from '@/components/VisitorCountry';
-import { resolveSearchHref, SearchSuggest } from '@/components/SearchSuggest';
 
 const AREA = 'area:';
 
@@ -155,33 +154,6 @@ export function CitySelect({ size = 'small', fullWidth = false, height, bare = f
   );
 }
 
-function HeaderSearch() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const citySlug = useCity((s) => s.citySlug);
-  const areaId = useCity((s) => s.areaId);
-  const [q, setQ] = useState('');
-  const [picked, setPicked] = useState<SearchSuggestion | null>(null);
-  // Pages with their own search box don't repeat it in the header.
-  if (['/', '/search', '/categories', '/nearby'].includes(location.pathname)) return <div className="flex-1" />;
-  // Searches the picked category (or typed text) within the location chosen in the city/area selector.
-  // Text naming a place ("lawyers in Nellore") selects that city/area first.
-  const submit = () => void resolveSearchHref(q, picked, citySlug, areaId).then((href) => navigate(href));
-  const pick = (s: SearchSuggestion) => {
-    if (s.kind === 'Business') { navigate(`/b/${s.slug}`); return; }
-    setQ(s.label);
-    setPicked(s);
-  };
-  return (
-    <form role="search" className="relative mx-4 hidden max-w-md flex-1 md:block" onSubmit={(e) => { e.preventDefault(); submit(); }}>
-      <SearchRounded sx={{ position: 'absolute', left: 10, top: 9, fontSize: 20, color: 'var(--cb-faint)', zIndex: 1, pointerEvents: 'none' }} />
-      <SearchSuggest value={q} onChange={setQ} citySlug={citySlug} onSelect={pick} ariaLabel="Search" placeholder="Search electricians, doctors, salons…"
-        panelClassName="min-w-[380px]"
-        inputClassName="h-[38px] w-full rounded-lg border border-line bg-subtle pl-9 pr-3 text-sm outline-none transition-[border-color,box-shadow,background-color] placeholder:text-faint hover:border-line-strong focus:border-accent focus:bg-surface focus:shadow-[0_0_0_3px_var(--cb-ring)]" />
-    </form>
-  );
-}
-
 const nav = [
   { to: '/categories', label: 'Categories' },
   { to: '/search?availability=now', label: 'Available now' },
@@ -205,7 +177,7 @@ export default function CustomerLayout() {
             <Logo />
             <CountryCode />
           </div>
-          <HeaderSearch />
+          <div className="flex-1" />
           <nav className="hidden items-center gap-1 lg:flex" aria-label="Main">
             {nav.map((n) => (
               <NavLink key={n.to} to={n.to} className={({ isActive }) => `rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-subtle hover:text-ink ${isActive ? 'bg-subtle text-ink' : 'text-muted'}`}>{n.label}</NavLink>
@@ -258,7 +230,7 @@ function Footer() {
   const cols = [
     { title: 'Discover', links: [...discover, ['All categories', '/categories']] },
     { title: 'For business', links: [['List your business', '/list-your-business'], ['Plans & pricing', '/pricing'], ['Business sign in', '/login']] },
-    { title: 'Company', links: [['About Calling Bell', '/'], ['Trust & safety', '/'], ['Contact support', '/']] },
+    { title: 'Company', links: [['About Calling Bell', '/about'], ['Trust & safety', '/trust-and-safety'], ['Contact support', '/support']] },
   ];
   return (
     <footer className="mt-16 bg-navy text-on-navy-muted">

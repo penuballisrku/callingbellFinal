@@ -44,6 +44,9 @@ export const router = createBrowserRouter([
       { path: 'b/:slug', lazy: page(() => import('@/features/business/BusinessPage')) },
       { path: 'pricing', lazy: page(() => import('@/features/pricing/PricingPage')) },
       { path: 'list-your-business', lazy: page(() => import('@/features/list-business/ListBusinessPage')) },
+      { path: 'about', lazy: page(() => import('@/features/about/AboutPage')) },
+      { path: 'trust-and-safety', lazy: page(() => import('@/features/about/TrustSafetyPage')) },
+      { path: 'support', lazy: page(() => import('@/features/about/ContactSupportPage')) },
       { path: 'login', lazy: page(() => import('@/features/auth/LoginPage')) },
       { path: 'register', lazy: page(() => import('@/features/auth/RegisterPage')) },
       {

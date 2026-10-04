@@ -34,3 +34,6 @@
 :r $(ScriptDir)\18_ExternalSearch.sql
 :r $(ScriptDir)\19_CityAltNames.sql
 :r $(ScriptDir)\20_Performance.sql
+:r $(ScriptDir)\22_AboutContent.sql
+:r $(ScriptDir)\23_TrustSafetyContent.sql
+:r $(ScriptDir)\24_ContactSupportContent.sql

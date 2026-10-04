@@ -1,57 +1,19 @@
-import { useState, type ComponentType, type ReactNode } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { Button, Skeleton } from '@mui/material';
-import type { SvgIconProps } from '@mui/material';
 import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 import PlayArrowRounded from '@mui/icons-material/PlayArrowRounded';
 import FormatQuoteRounded from '@mui/icons-material/FormatQuoteRounded';
-import ExpandMoreRounded from '@mui/icons-material/ExpandMoreRounded';
-import SearchRounded from '@mui/icons-material/SearchRounded';
-import EventAvailableOutlined from '@mui/icons-material/EventAvailableOutlined';
-import VerifiedOutlined from '@mui/icons-material/VerifiedOutlined';
 import TrendingUpRounded from '@mui/icons-material/TrendingUpRounded';
-import StorefrontOutlined from '@mui/icons-material/StorefrontOutlined';
-import InboxOutlined from '@mui/icons-material/InboxOutlined';
-import StarOutlineRounded from '@mui/icons-material/StarOutlineRounded';
-import BoltRounded from '@mui/icons-material/BoltRounded';
-import CalendarMonthOutlined from '@mui/icons-material/CalendarMonthOutlined';
-import ChatBubbleOutlineRounded from '@mui/icons-material/ChatBubbleOutlineRounded';
-import VideocamOutlined from '@mui/icons-material/VideocamOutlined';
-import CampaignOutlined from '@mui/icons-material/CampaignOutlined';
-import InsightsRounded from '@mui/icons-material/InsightsRounded';
-import GroupsOutlined from '@mui/icons-material/GroupsOutlined';
-import AccountBalanceWalletOutlined from '@mui/icons-material/AccountBalanceWalletOutlined';
-import NotificationsActiveOutlined from '@mui/icons-material/NotificationsActiveOutlined';
-import ShieldOutlined from '@mui/icons-material/ShieldOutlined';
-import SpaceDashboardOutlined from '@mui/icons-material/SpaceDashboardOutlined';
-import PlaceOutlined from '@mui/icons-material/PlaceOutlined';
-import PersonAddAltOutlined from '@mui/icons-material/PersonAddAltOutlined';
 import CheckCircleRounded from '@mui/icons-material/CheckCircleRounded';
-import AutorenewRounded from '@mui/icons-material/AutorenewRounded';
-import ScheduleRounded from '@mui/icons-material/ScheduleRounded';
-import CircleOutlined from '@mui/icons-material/CircleOutlined';
 import { api } from '@/lib/api';
 import { compactNumber, moneyExact, number } from '@/lib/format';
 import { useDocumentTitle } from '@/lib/hooks';
 import { homeFor, isOwner, useAuth } from '@/stores/auth';
 import type { ContentBlock, MarketingPage, Plan } from '@/lib/types';
 import { ErrorState, Img, SectionHeader, VerifiedMark } from '@/components/ui';
-
-/** Icon keys stored in MarketingContent.IconKey. Icons are UI chrome; the words and media come from the database. */
-const icons: Record<string, ComponentType<SvgIconProps>> = {
-  search: SearchRounded, event: EventAvailableOutlined, verified: VerifiedOutlined, trending: TrendingUpRounded, storefront: StorefrontOutlined,
-  inbox: InboxOutlined, star: StarOutlineRounded, bolt: BoltRounded, calendar: CalendarMonthOutlined, chat: ChatBubbleOutlineRounded,
-  videocam: VideocamOutlined, campaign: CampaignOutlined, analytics: InsightsRounded, groups: GroupsOutlined, wallet: AccountBalanceWalletOutlined,
-  notifications: NotificationsActiveOutlined, shield: ShieldOutlined, dashboard: SpaceDashboardOutlined, place: PlaceOutlined,
-  person_add: PersonAddAltOutlined, done: CheckCircleRounded, progress: AutorenewRounded, planned: ScheduleRounded,
-};
-function BlockIcon({ name, size = 22 }: { name?: string | null; size?: number }) {
-  const Icon = (name && icons[name]) || CircleOutlined;
-  return <Icon sx={{ fontSize: size }} aria-hidden />;
-}
-
-const paragraphs = (body?: string | null) => (body ?? '').split('\n').map((p) => p.trim()).filter(Boolean);
+import { BlockIcon, Eyebrow, FaqList, NumberedSteps, paragraphs } from '@/features/content/ContentBlocks';
 
 /** Desktop image with a lighter mobile source; falls back gracefully (never a broken image). */
 function Photo({ block, className, aspect, eager, rounded = 'rounded-none' }: { block: ContentBlock; className?: string; aspect?: string; eager?: boolean; rounded?: string }) {
@@ -69,10 +31,6 @@ function Credit({ block, className = 'text-muted' }: { block: ContentBlock; clas
   return block.mediaCreditUrl
     ? <a href={block.mediaCreditUrl} target="_blank" rel="noopener noreferrer" className={`text-[11px] hover:underline ${className}`}>{block.mediaCredit}</a>
     : <span className={`text-[11px] ${className}`}>{block.mediaCredit}</span>;
-}
-
-function Eyebrow({ children, onDark }: { children: ReactNode; onDark?: boolean }) {
-  return <p className={`text-xs font-semibold uppercase tracking-[0.12em] ${onDark ? 'text-accent' : 'text-accent-ink'}`}>{children}</p>;
 }
 
 export default function ListBusinessPage() {
@@ -127,11 +85,11 @@ export default function ListBusinessPage() {
       <div className="container-page space-y-20 py-16 md:space-y-24 md:py-20">
         <Gallery items={section('Gallery')} />
         <Videos items={section('Video')} />
-        <Steps items={section('Step')} />
+        <NumberedSteps items={section('Step')} id="steps-h" title="How it works" subtitle="Go from sign-up to your first customer enquiry in four simple steps." />
         <Testimonials items={section('Testimonial')} />
         <PlansTeaser plans={plans.data} loading={plans.isLoading} />
         <Roadmap items={section('Roadmap')} />
-        <Faqs items={section('Faq')} />
+        <FaqList items={section('Faq')} subtitle="Everything you need to know before you list your business." />
         {cta && <ClosingCta block={cta} />}
       </div>
     </>
@@ -367,27 +325,6 @@ function Videos({ items }: { items: ContentBlock[] }) {
   );
 }
 
-function Steps({ items }: { items: ContentBlock[] }) {
-  if (!items.length) return null;
-  return (
-    <section aria-labelledby="steps-h">
-      <SectionHeader title="How it works" subtitle="Go from sign-up to your first customer enquiry in four simple steps." />
-      <h2 id="steps-h" className="sr-only">How it works</h2>
-      <ol className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {items.map((st, i) => (
-          <li key={st.code} className="card relative p-5">
-            <div className="flex items-center justify-between">
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-inverse text-sm font-bold text-on-inverse">{i + 1}</span>
-              <span className="text-faint"><BlockIcon name={st.iconKey} /></span>
-            </div>
-            <h3 className="mt-4 font-semibold">{st.title}</h3>
-            {st.subtitle && <p className="mt-1.5 text-sm leading-6 text-muted">{st.subtitle}</p>}
-          </li>
-        ))}
-      </ol>
-    </section>
-  );
-}
 
 function Testimonials({ items }: { items: ContentBlock[] }) {
   if (!items.length) return null;
@@ -485,28 +422,6 @@ function Roadmap({ items }: { items: ContentBlock[] }) {
   );
 }
 
-function Faqs({ items }: { items: ContentBlock[] }) {
-  if (!items.length) return null;
-  return (
-    <section aria-labelledby="faq-h" className="grid gap-8 lg:grid-cols-[1fr_2fr] lg:gap-16">
-      <div>
-        <h2 id="faq-h" className="text-xl font-bold tracking-[-0.02em] md:text-[26px] md:leading-tight">Frequently asked questions</h2>
-        <p className="mt-2 text-sm text-muted md:text-[15px]">Everything you need to know before you list your business.</p>
-      </div>
-      <div className="card divide-y divide-line">
-        {items.map((f, i) => (
-          <details key={f.code} className="group" open={i === 0}>
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 font-semibold transition-colors hover:bg-subtle [&::-webkit-details-marker]:hidden">
-              {f.title}
-              <ExpandMoreRounded className="shrink-0 text-muted transition-transform group-open:rotate-180" />
-            </summary>
-            <div className="space-y-3 px-5 pb-5 text-sm leading-6 text-ink-2">{paragraphs(f.body).map((p) => <p key={p.slice(0, 32)}>{p}</p>)}</div>
-          </details>
-        ))}
-      </div>
-    </section>
-  );
-}
 
 function ClosingCta({ block }: { block: ContentBlock }) {
   return (
