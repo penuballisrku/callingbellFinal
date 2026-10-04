@@ -213,14 +213,43 @@ public interface IReviewSummarizer
 /// <param name="Kind">What the source says the place is, e.g. "Interior designer".</param>
 /// <param name="SourceUrl">The place's page at the source (also its attribution link).</param>
 /// <param name="MatchedBy">"tag" (matched by a category tag) or "name" (its name contains a search word): name matches are less certain.</param>
+/// <param name="Photo">Google Maps only: the place's first photo.</param>
 public sealed record ExternalPlace(string Source, string Id, string Name, string? Kind, string? Address, double Latitude, double Longitude,
-    string? Phone, string? Website, string? OpeningHours, decimal? Rating, int? RatingCount, string? SourceUrl, string MatchedBy);
+    string? Phone, string? Website, string? OpeningHours, decimal? Rating, int? RatingCount, string? SourceUrl, string MatchedBy,
+    GooglePlacePhoto? Photo = null);
 
 /// <summary>Finds named places near a point in OpenStreetMap by "key=value" tag and "name~words" selectors.</summary>
 public interface IOsmPlaceSearch
 {
     /// <returns>Places found, or null when OpenStreetMap could not be reached.</returns>
     Task<IReadOnlyList<ExternalPlace>?> SearchAsync(IReadOnlyCollection<string> selectors, double lat, double lng, int radiusM, CancellationToken ct);
+
+    /// <summary>
+    /// True while the full OpenStreetMap search for these arguments is still running in the background (after <see cref="SearchAsync"/>
+    /// answered with the faster, partial results). Searching again once it finishes returns the full results.
+    /// </summary>
+    bool IsSearching(IReadOnlyCollection<string> selectors, double lat, double lng, int radiusM);
+}
+
+/// <summary>
+/// The city catalogue agent: imports every city and town of a country (from the free GeoNames data) into the location tables, so every
+/// city dropdown can offer the visitor's whole country. Areas of a city then come from <see cref="IAreaDiscoveryService"/> on demand.
+/// </summary>
+public interface ICountryCatalogService
+{
+    /// <summary>Queues an import of the country's cities (ISO 3166-1 alpha-2 code); ignored while one is queued or running.</summary>
+    void Request(string countryCode);
+    bool IsRunning(string countryCode);
+}
+
+/// <summary>A town, city or locality found by name, e.g. a place typed in a search that isn't one of the listed cities.</summary>
+public sealed record GeocodedPlace(string Name, string? State, double Latitude, double Longitude);
+
+/// <summary>Finds a place (city, town, locality) by name in the default country, using free OpenStreetMap geocoding.</summary>
+public interface IPlaceGeocoder
+{
+    /// <returns>The best match, or null when nothing matched or the geocoder could not be reached.</returns>
+    Task<GeocodedPlace?> GeocodeAsync(string place, CancellationToken ct);
 }
 
 /// <summary>Google Maps business results (Google Places API Text Search). Disabled until an API key is configured.</summary>
@@ -230,7 +259,27 @@ public interface IGooglePlacesSearch
 
     /// <returns>Places found, or null when Google could not be reached or rejected the request.</returns>
     Task<IReadOnlyList<ExternalPlace>?> SearchAsync(string text, double lat, double lng, int radiusM, CancellationToken ct);
+
+    /// <summary>
+    /// One page of Google Places Text Search results near a point, using the configured result count and radius.
+    /// Throws <see cref="Exceptions.ExternalServiceException"/> with Google's status and message when Google rejects the request.
+    /// </summary>
+    Task<GooglePlacesPage> TextSearchAsync(string textQuery, double lat, double lng, string? pageToken, CancellationToken ct);
+
+    /// <summary>Short-lived image URL for a place photo resource name ("places/{id}/photos/{ref}").</summary>
+    Task<string> GetPhotoUriAsync(string photoName, int maxWidthPx, CancellationToken ct);
 }
+
+public sealed record GooglePlacesPage(IReadOnlyList<GooglePlace> Places, string? NextPageToken);
+
+public sealed record GooglePlace(string Name, string? FormattedAddress, double? Rating, int? UserRatingCount, double? Latitude, double? Longitude,
+    IReadOnlyList<GooglePlacePhoto> Photos);
+
+/// <param name="Name">Photo resource name, passed to <see cref="IGooglePlacesSearch.GetPhotoUriAsync"/>.</param>
+/// <param name="Attributions">Photo authors, which Google requires to be shown with the photo.</param>
+public sealed record GooglePlacePhoto(string Name, int? WidthPx, int? HeightPx, IReadOnlyList<GooglePhotoAttribution> Attributions);
+
+public sealed record GooglePhotoAttribution(string DisplayName, string? Uri);
 
 /// <summary>Which catalogue sub-categories (slugs) a free-text search is looking for, picked by the AI from the catalogue.</summary>
 public sealed record AiSearchIntent(IReadOnlyList<string> SubCategorySlugs, string Model, DateTimeOffset GeneratedOn);

@@ -11,34 +11,42 @@ namespace CallingBell.Application.Features.Search;
 /// <param name="DistanceKm">From the selected area (or the visitor's location / city centre).</param>
 /// <param name="DirectionsUrl">Google Maps directions to the place.</param>
 /// <param name="SourceUrl">The place's page at its source (OpenStreetMap or Google Maps).</param>
+/// <param name="PhotoUrl">Google Maps only: the place's photo, served through <c>GET /api/places/photo</c>.</param>
+/// <param name="PhotoCredit">The photo's author, which Google requires to be shown with it.</param>
 public sealed record ExternalPlaceDto(string Id, string Name, string? Kind, string? Address, string? Phone, string? Website, string? OpeningHours,
-    decimal? Rating, int? RatingCount, double DistanceKm, string DirectionsUrl, string? SourceUrl);
+    decimal? Rating, int? RatingCount, double DistanceKm, string DirectionsUrl, string? SourceUrl,
+    string? PhotoUrl = null, string? PhotoCredit = null, string? PhotoCreditUrl = null);
 
 /// <param name="Status">"ready", "off" (not configured), "unavailable" (source unreachable) or "skipped" (nothing to search for).</param>
 /// <param name="AiStatus">AI tier only: "ranked" (picked and ordered by the AI), "pending" (being picked; poll) or "off" (nearest first).</param>
 /// <param name="Total">Results after duplicates were removed.</param>
 /// <param name="Duplicates">Results dropped because they are already listed above (registered businesses or an earlier source).</param>
-public sealed record ExternalTierDto(string Status, string? AiStatus, int Total, int Duplicates, IReadOnlyList<ExternalPlaceDto> Items);
+/// <param name="Searching">AI tier only: the full OpenStreetMap search is still running, so these results are partial; poll for the rest.</param>
+public sealed record ExternalTierDto(string Status, string? AiStatus, int Total, int Duplicates, IReadOnlyList<ExternalPlaceDto> Items,
+    bool Searching = false);
 
 /// <param name="Query">What was searched for, e.g. "Interior Designers".</param>
 /// <param name="PlaceName">Selected area (or the visitor's locality / the city) the results are near.</param>
-/// <param name="Origin">"area", "ip" or "city": where <paramref name="PlaceName"/> came from.</param>
+/// <param name="Origin">"area", "ip", "city" or "place" (an unlisted place named in the search): where <paramref name="PlaceName"/> came from.
+/// "place-not-found" when that place could not be found.</param>
 public sealed record ExternalSearchDto(string? Query, string? PlaceName, string? CityName, string? Origin, ExternalTierDto Ai, ExternalTierDto Google);
 
-public sealed record ExternalSearchQuery(string? ClientIp, string? Q, string? Category, string? Sub, string? City, Guid? AreaId, double RadiusKm)
+/// <param name="Place">A place that is not a listed city or area (e.g. "Nellore" from "lawyers in Nellore"): results are near it instead.</param>
+public sealed record ExternalSearchQuery(string? ClientIp, string? Q, string? Category, string? Sub, string? City, Guid? AreaId, double RadiusKm,
+    string? Place = null)
     : IRequest<ExternalSearchDto>;
 
 /// <summary>
-/// Search results from beyond the platform, shown below registered businesses:
+/// Search results from beyond the platform. Search priority is: registered businesses from the database (<c>GET /api/businesses</c>), then
 /// <list type="number">
+/// <item>"Google Maps": Google Places Text Search near the selected area, when an API key is configured.</item>
 /// <item>"AI Recommended": real places near the selected area from OpenStreetMap, found with the sub-category's OpenStreetMap tags (the
-/// local AI works out the sub-category for free-text searches) and then picked and ordered by the AI. The AI never invents places.</item>
-/// <item>"Google Maps": Google Places Text Search, when an API key is configured.</item>
+/// free local AI works out the sub-category for free-text searches) and then picked and ordered by the AI. The AI never invents places.</item>
 /// </list>
-/// Places already listed as registered businesses, or by an earlier source, are removed.
+/// Each source leaves out places a higher-priority source already listed.
 /// </summary>
 public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver origins, IOsmPlaceSearch osm, IGooglePlacesSearch google,
-    ISearchAssistant assistant) : IRequestHandler<ExternalSearchQuery, ExternalSearchDto>
+    ISearchAssistant assistant, IPlaceGeocoder geocoder) : IRequestHandler<ExternalSearchQuery, ExternalSearchDto>
 {
     /// <summary>Search radius around the selected area; results are listed nearest first.</summary>
     private const int RadiusM = 8_000;
@@ -47,6 +55,7 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
     private const int CityRadiusM = 25_000;
     private const int MaxAiResults = 40;
     private const int MaxSubCategories = 3;
+    private const int PhotoWidthPx = 480;
     private static readonly HashSet<string> StopWords = new(StringComparer.OrdinalIgnoreCase)
         { "near", "me", "nearby", "best", "top", "in", "at", "around", "for", "the", "a", "an", "good", "services", "service", "open", "now", "available", "online" };
 
@@ -63,7 +72,12 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
                 .Select(a => new { a.Slug, CitySlug = a.City.Slug }).FirstOrDefaultAsync(ct);
             if (area is not null) { areaSlug = area.Slug; citySlug ??= area.CitySlug; }
         }
-        var origin = await origins.ResolveAsync(r.ClientIp, citySlug, areaSlug, r.RadiusKm, ct);
+        // An unlisted place named in the search ("lawyers in Nellore") wins; there are no registered businesses there.
+        var origin = !string.IsNullOrWhiteSpace(r.Place)
+            ? await geocoder.GeocodeAsync(r.Place, ct) is { } g
+                ? new VisitorOrigin(Guid.Empty, "", g.Name, g.State ?? "", g.Name, g.Latitude, g.Longitude, "place", $"place|{g.Name.ToLowerInvariant()}")
+                : null
+            : await origins.ResolveAsync(r.ClientIp, citySlug, areaSlug, r.RadiusKm, ct);
 
         // What: the sub-categories searched for, with their OpenStreetMap tags.
         var subs = await uow.Repository<SubCategory>().QueryNoTracking().Where(s => s.IsActive)
@@ -72,6 +86,8 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
         var label = subs.FirstOrDefault(s => s.Slug == r.Sub)?.Name
                     ?? subs.FirstOrDefault(s => s.CategorySlug == r.Category)?.CategoryName
                     ?? (q.Length > 0 ? q : null);
+        if (origin is null && !string.IsNullOrWhiteSpace(r.Place))
+            return new ExternalSearchDto(label, r.Place.Trim(), null, "place-not-found", skipped, googleOff);
         if (origin is not { Lat: { } lat, Lng: { } lng } || label is null)
             return new ExternalSearchDto(label, origin?.PlaceName, origin?.CityName, origin?.Source, skipped, googleOff);
 
@@ -102,42 +118,57 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
             .Select(b => new Known(b.Name, b.PhoneNumber, (double)b.Latitude!, (double)b.Longitude!))
             .ToListAsync(ct);
 
-        // 1. AI recommended: real OpenStreetMap places, picked by the AI.
-        ExternalTierDto aiTier;
+        // Both sources are fetched at once; results are then de-duplicated in priority order (database, Google Maps, AI), so each tier
+        // only shows places that no higher tier already listed.
+        var googleTask = google.IsEnabled
+            ? google.SearchAsync($"{label} in {Where(origin)}", lat, lng, RadiusM, ct)
+            : Task.FromResult<IReadOnlyList<ExternalPlace>?>([]);
+        var osmTask = selectors.Count == 0 ? Task.FromResult<IReadOnlyList<ExternalPlace>?>(null) : SearchOsmAsync(selectors, lat, lng, ct);
+        await Task.WhenAll(googleTask, osmTask);
         var shown = new List<Known>(registered);
-        if (selectors.Count == 0) aiTier = skipped;
-        else
-        {
-            var places = await osm.SearchAsync(selectors, lat, lng, RadiusM, ct);
-            if (places is { Count: < MinNear }) places = await osm.SearchAsync(selectors, lat, lng, CityRadiusM, ct) ?? places;
-            if (places is null) aiTier = new ExternalTierDto("unavailable", null, 0, 0, []);
-            else
-            {
-                var (unique, duplicates) = Dedupe(places, shown);
-                var nearest = unique.OrderBy(p => Km(p, lat, lng)).Take(MaxAiResults).ToList();
-                var (picked, aiStatus) = Rank(nearest, label, origin, nameOnly: wanted.Count == 0);
-                shown.AddRange(picked.Select(p => new Known(p.Name, p.Phone, p.Latitude, p.Longitude)));
-                aiTier = new ExternalTierDto("ready", aiStatus, picked.Count, duplicates, picked.Select(p => ToDto(p, lat, lng)).ToList());
-            }
-        }
 
-        // 2. Google Maps.
+        // 2. Google Maps (after the registered businesses).
         var googleTier = googleOff;
         if (google.IsEnabled)
         {
-            var text = $"{label} in {origin.PlaceName}, {origin.CityName}";
-            var places = await google.SearchAsync(text, lat, lng, RadiusM, ct);
+            var places = await googleTask;
             if (places is null) googleTier = new ExternalTierDto("unavailable", null, 0, 0, []);
             else
             {
                 var (unique, duplicates) = Dedupe(places, shown);
-                googleTier = new ExternalTierDto("ready", null, unique.Count, duplicates,
-                    unique.OrderBy(p => Km(p, lat, lng)).Select(p => ToDto(p, lat, lng)).ToList());
+                var ordered = unique.OrderBy(p => Km(p, lat, lng)).ToList();
+                shown.AddRange(ordered.Select(p => new Known(p.Name, p.Phone, p.Latitude, p.Longitude)));
+                googleTier = new ExternalTierDto("ready", null, ordered.Count, duplicates, ordered.Select(p => ToDto(p, lat, lng)).ToList());
             }
+        }
+
+        // 3. AI recommended: real OpenStreetMap places, picked by the free local AI.
+        ExternalTierDto aiTier;
+        if (selectors.Count == 0) aiTier = skipped;
+        else if (await osmTask is not { } osmPlaces) aiTier = new ExternalTierDto("unavailable", null, 0, 0, [], OsmSearching(selectors, lat, lng));
+        else
+        {
+            var (unique, duplicates) = Dedupe(osmPlaces, shown);
+            var nearest = unique.OrderBy(p => Km(p, lat, lng)).Take(MaxAiResults).ToList();
+            var (picked, aiStatus) = Rank(nearest, label, origin, nameOnly: wanted.Count == 0);
+            aiTier = new ExternalTierDto("ready", aiStatus, picked.Count, duplicates, picked.Select(p => ToDto(p, lat, lng)).ToList(),
+                OsmSearching(selectors, lat, lng));
         }
 
         return new ExternalSearchDto(label, origin.PlaceName, origin.CityName, origin.Source, aiTier, googleTier);
     }
+
+    /// <summary>OpenStreetMap places near the area, widening to the whole city when the area has few. Null when OpenStreetMap is unreachable.</summary>
+    private async Task<IReadOnlyList<ExternalPlace>?> SearchOsmAsync(List<string> selectors, double lat, double lng, CancellationToken ct)
+    {
+        var places = await osm.SearchAsync(selectors, lat, lng, RadiusM, ct);
+        if (places is { Count: < MinNear }) places = await osm.SearchAsync(selectors, lat, lng, CityRadiusM, ct) ?? places;
+        return places;
+    }
+
+    /// <summary>Whether the full OpenStreetMap search (area or city-wide) is still finishing in the background.</summary>
+    private bool OsmSearching(List<string> selectors, double lat, double lng) =>
+        osm.IsSearching(selectors, lat, lng, RadiusM) || osm.IsSearching(selectors, lat, lng, CityRadiusM);
 
     /// <summary>
     /// Orders places by the AI's pick when it is ready (asking for it otherwise): its picks first, then the other places nearest first. Only
@@ -150,7 +181,7 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
         var ranking = assistant.GetRanking(key);
         if (ranking is null)
         {
-            assistant.RequestRanking(key, label, $"{origin.PlaceName}, {origin.CityName}",
+            assistant.RequestRanking(key, label, Where(origin),
                 places.Select(p => new AiPlaceCandidate(p.Id, p.Name, p.Kind)).ToList());
             return (places, assistant.IsRankingPending(key) ? "pending" : "off");
         }
@@ -193,6 +224,10 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
             .Select(w => new string(w.Where(char.IsLetterOrDigit).ToArray()))
             .Where(w => w.Length > 1 && !StopWords.Contains(w));
 
+    /// <summary>"Madhapur, Hyderabad", or just "Nellore" when the place is the town itself.</summary>
+    private static string Where(VisitorOrigin o) =>
+        string.IsNullOrWhiteSpace(o.CityName) || o.CityName.Equals(o.PlaceName, StringComparison.OrdinalIgnoreCase) ? o.PlaceName : $"{o.PlaceName}, {o.CityName}";
+
     private static double Km(ExternalPlace p, double lat, double lng) => GeoMath.HaversineKm(lat, lng, p.Latitude, p.Longitude);
 
     private static ExternalPlaceDto ToDto(ExternalPlace p, double lat, double lng)
@@ -200,8 +235,11 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
         var directions = p.Source == "google"
             ? $"https://www.google.com/maps/dir/?api=1&destination={Uri.EscapeDataString(p.Name)}&destination_place_id={Uri.EscapeDataString(p.Id)}"
             : FormattableString.Invariant($"https://www.google.com/maps/dir/?api=1&destination={p.Latitude:0.######},{p.Longitude:0.######}");
+        var credit = p.Photo?.Attributions.FirstOrDefault();
         return new ExternalPlaceDto($"{p.Source}:{p.Id}", p.Name, p.Kind, p.Address, p.Phone, p.Website, p.OpeningHours, p.Rating, p.RatingCount,
-            Math.Round(Km(p, lat, lng), 1), directions, p.SourceUrl);
+            Math.Round(Km(p, lat, lng), 1), directions, p.SourceUrl,
+            p.Photo is null ? null : $"/api/places/photo?name={Uri.EscapeDataString(p.Photo.Name)}&maxWidth={PhotoWidthPx}",
+            credit?.DisplayName, credit?.Uri);
     }
 
     private sealed record Sub(string Slug, string Name, string CategorySlug, string CategoryName, string? OsmTags);

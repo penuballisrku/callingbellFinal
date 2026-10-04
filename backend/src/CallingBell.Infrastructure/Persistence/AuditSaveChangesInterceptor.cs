@@ -44,6 +44,7 @@ public sealed class AuditSaveChangesInterceptor(ICurrentUser currentUser) : Save
         var now = DateTimeOffset.UtcNow;
         var userId = currentUser.UserId;
         var logs = new List<AuditLog>();
+        var suppress = context is ApplicationDbContext { SuppressAuditLog: true };
 
         foreach (var entry in context.ChangeTracker.Entries().ToList())
         {
@@ -51,7 +52,7 @@ public sealed class AuditSaveChangesInterceptor(ICurrentUser currentUser) : Save
             {
                 case AuditableEntity auditable:
                     if (entry.State == EntityState.Added) { auditable.CreatedOn = now; auditable.CreatedBy ??= userId; }
-                    if (entry.State == EntityState.Modified) { auditable.ModifiedOn = now; auditable.ModifiedBy = userId; }
+                    if (entry.State == EntityState.Modified) { auditable.ModifiedOn = now; auditable.ModifiedBy = suppress ? auditable.ModifiedBy ?? userId : userId; }
                     if (entry.State == EntityState.Deleted)
                     {
                         entry.State = EntityState.Modified;
@@ -68,7 +69,7 @@ public sealed class AuditSaveChangesInterceptor(ICurrentUser currentUser) : Save
                     break;
             }
 
-            if (!AuditedTypes.Contains(entry.Entity.GetType()) || entry.State is not (EntityState.Added or EntityState.Modified)) continue;
+            if (suppress || !AuditedTypes.Contains(entry.Entity.GetType()) || entry.State is not (EntityState.Added or EntityState.Modified)) continue;
 
             var changes = entry.State == EntityState.Modified
                 ? entry.Properties

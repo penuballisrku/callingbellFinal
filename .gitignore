@@ -14,3 +14,6 @@ dist/
 
 ## GeoIP database (download with database/tools/download_geoip.ps1; licences don't allow committing it)
 *.mmdb
+
+## GeoNames city data, downloaded by the city catalogue agent (refreshed monthly)
+backend/src/CallingBell.Api/App_Data/geonames/

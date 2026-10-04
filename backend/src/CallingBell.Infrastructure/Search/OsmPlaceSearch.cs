@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using CallingBell.Application.Common;
 using CallingBell.Application.Common.Interfaces;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -15,7 +16,8 @@ public sealed class ExternalSearchOptions
 {
     public const string Section = "ExternalSearch";
     /// <summary>Overpass API servers (full OpenStreetMap data: tags, phone, website, hours), tried in order when one is overloaded.</summary>
-    public string[] OverpassUrls { get; set; } = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
+    public string[] OverpassUrls { get; set; } =
+        ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
     /// <summary>Time budget for one Overpass search across all servers (it keeps running in the background after a request stops waiting).</summary>
     public int OverpassTimeoutSeconds { get; set; } = 25;
     /// <summary>How long a search request waits for Overpass before answering with the faster Photon results.</summary>
@@ -53,11 +55,20 @@ internal sealed partial class OsmPlaceSearch(IHttpClientFactory httpFactory, IMe
     private static readonly HashSet<string> NotBusinessKeys =
         ["place", "highway", "boundary", "landuse", "natural", "waterway", "railway", "route", "public_transport", "bridge", "junction"];
 
+    public bool IsSearching(IReadOnlyCollection<string> selectors, double lat, double lng, int radiusM) =>
+        Valid(selectors) is { Count: > 0 } valid && Running.ContainsKey(Key(valid, lat, lng, radiusM));
+
+    private static List<string> Valid(IReadOnlyCollection<string> selectors) =>
+        selectors.Select(s => s.Trim().ToLowerInvariant()).Where(s => TagSelector().IsMatch(s) || NameSelector().IsMatch(s)).Distinct().ToList();
+
+    private static string Key(List<string> valid, double lat, double lng, int radiusM) =>
+        string.Create(CultureInfo.InvariantCulture, $"osm|{Math.Round(lat, 3)},{Math.Round(lng, 3)}|{radiusM}|{string.Join('|', valid.Order())}");
+
     public async Task<IReadOnlyList<ExternalPlace>?> SearchAsync(IReadOnlyCollection<string> selectors, double lat, double lng, int radiusM, CancellationToken ct)
     {
-        var valid = selectors.Select(s => s.Trim().ToLowerInvariant()).Where(s => TagSelector().IsMatch(s) || NameSelector().IsMatch(s)).Distinct().ToList();
+        var valid = Valid(selectors);
         if (valid.Count == 0) return [];
-        var key = string.Create(CultureInfo.InvariantCulture, $"osm|{Math.Round(lat, 3)},{Math.Round(lng, 3)}|{radiusM}|{string.Join('|', valid.Order())}");
+        var key = Key(valid, lat, lng, radiusM);
         if (cache.TryGetValue(key, out IReadOnlyList<ExternalPlace>? complete)) return complete;
 
         // Overpass runs to completion in the background (one run per search at a time) and caches what it finds.
@@ -95,14 +106,18 @@ internal sealed partial class OsmPlaceSearch(IHttpClientFactory httpFactory, IMe
 
     private async Task<List<ExternalPlace>?> OverpassAsync(List<string> valid, double lat, double lng, int radiusM)
     {
-        // Tags use the server's tag index directly. Name words are matched within the named points in range, as one regex: a
-        // case-insensitive regex over every element in the area is too slow for the public servers.
+        // Tags use the server's tag index directly; name words are one case-insensitive regex over the named points. The area is a
+        // bounding box (a global [bbox] is far cheaper for the servers than "around" filters, which busy servers time out on);
+        // results outside the radius are dropped below. The name filter is a single statement: inside the union, a helper set
+        // ("named points" then "filter by name") would add every named point in the area to the results.
         var o = options.Value;
-        var around = string.Create(CultureInfo.InvariantCulture, $"(around:{radiusM},{lat},{lng})");
-        var tags = valid.Where(s => !IsName(s)).Select(s => $"nwr{around}[\"{TagKey(s)}\"=\"{TagValue(s)}\"][\"name\"];");
+        var dLat = radiusM / 111_320.0;
+        var dLng = dLat / Math.Cos(lat * Math.PI / 180);
+        var bbox = string.Create(CultureInfo.InvariantCulture, $"{lat - dLat:0.#####},{lng - dLng:0.#####},{lat + dLat:0.#####},{lng + dLng:0.#####}");
+        var tags = valid.Where(s => !IsName(s)).Select(s => $"nwr[\"{TagKey(s)}\"=\"{TagValue(s)}\"][\"name\"];");
         var words = valid.Where(IsName).Select(s => s[5..]).ToList();
-        var byName = words.Count == 0 ? "" : $"node{around}[\"name\"]->.named;node.named[\"name\"~\"{string.Join('|', words)}\",i];";
-        var query = $"[out:json][timeout:{o.OverpassTimeoutSeconds}];({string.Concat(tags)}{byName});out center tags 300;";
+        var byName = words.Count == 0 ? "" : $"node[\"name\"~\"{string.Join('|', words)}\",i];";
+        var query = $"[out:json][timeout:{o.OverpassTimeoutSeconds}][bbox:{bbox}];({string.Concat(tags)}{byName});out center tags 300;";
         try
         {
             using var budget = new CancellationTokenSource(TimeSpan.FromSeconds(o.OverpassTimeoutSeconds + 5));
@@ -127,6 +142,8 @@ internal sealed partial class OsmPlaceSearch(IHttpClientFactory httpFactory, IMe
                 var (elat, elng) = e.Lat is { } la && e.Lon is { } lo ? (la, lo) : e.Center is { } c ? (c.Lat, c.Lon) : (double.NaN, double.NaN);
                 var name = e.Tags.GetValueOrDefault("name:en") ?? e.Tags.GetValueOrDefault("name");
                 if (double.IsNaN(elat) || string.IsNullOrWhiteSpace(name)) continue;
+                if (GeoMath.HaversineKm(lat, lng, elat, elng) * 1000 > radiusM) continue; // box corners
+
                 // A place counts as a tag match when one of the requested tags is on it; otherwise it was found by name.
                 var byTag = valid.Any(s => !IsName(s) && e.Tags.TryGetValue(TagKey(s), out var v) && v == TagValue(s));
                 places.Add(new ExternalPlace("osm", $"{e.Type}/{e.Id}", name.Trim(), Kind(e.Tags), Address(e.Tags), elat, elng,

@@ -5,16 +5,16 @@ import MenuRounded from '@mui/icons-material/MenuRounded';
 import NearMeOutlined from '@mui/icons-material/NearMeOutlined';
 import PlaceOutlined from '@mui/icons-material/PlaceOutlined';
 import SearchRounded from '@mui/icons-material/SearchRounded';
-import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api';
-import { useCategories, useCities } from '@/lib/hooks';
-import type { CityArea, CityAreas, SearchSuggestion } from '@/lib/types';
+import { useCategories, useCities, useCityAreas, useCountryCatalog } from '@/lib/hooks';
+import { number } from '@/lib/format';
+import { filterCities } from '@/components/CityAutocomplete';
+import type { CityArea, SearchSuggestion } from '@/lib/types';
 import { useNotificationStream } from '@/lib/realtime';
 import { homeFor, isAdmin, isOwner, useAuth } from '@/stores/auth';
 import { useCity } from '@/stores/city';
 import { Logo, NotificationBell, ThemeMenu, UserMenu } from './Shared';
-import { CountryCode, useDistrictAutoSelect, useVisitorDistrict } from '@/components/VisitorCountry';
-import { SearchSuggest, searchHref } from '@/components/SearchSuggest';
+import { CountryCode, useDistrictAutoSelect, useNetworkTagline, useVisitorDistrict } from '@/components/VisitorCountry';
+import { resolveSearchHref, SearchSuggest } from '@/components/SearchSuggest';
 
 const AREA = 'area:';
 
@@ -23,24 +23,26 @@ const AREA = 'area:';
  * /api/locations/cities/{slug}/areas, which the area-discovery agent keeps complete. A search box filters by area name, PIN code,
  * alternate spelling or sub-locality ("Hydernagar" finds Kukatpally); picking an area opens search filtered to it.
  */
-export function CitySelect({ size = 'small', fullWidth = false, height }: { size?: 'small' | 'medium'; fullWidth?: boolean; height?: number }) {
+export function CitySelect({ size = 'small', fullWidth = false, height, bare = false }: {
+  size?: 'small' | 'medium'; fullWidth?: boolean; height?: number;
+  /** No outline of its own, for use inside a combined search bar. */
+  bare?: boolean;
+}) {
   const { data: cities } = useCities();
   const { data: district } = useVisitorDistrict();
   const { citySlug, areaId, setCity } = useCity();
   const navigate = useNavigate();
   const location = useLocation();
   const [areaFilter, setAreaFilter] = useState('');
+  const [cityFilter, setCityFilter] = useState('');
+  const { data: catalog } = useCountryCatalog();
 
   const areaCity = cities?.find((c) => c.slug === (citySlug ?? district?.citySlug));
   const isDistrict = !!areaCity && areaCity.slug === district?.citySlug;
-  const { data: cityAreas } = useQuery({
-    queryKey: ['city-areas', areaCity?.slug],
-    queryFn: () => api.get<CityAreas>(`/api/locations/cities/${areaCity!.slug}/areas`),
-    enabled: !!areaCity,
-    staleTime: 30 * 60_000,
-    // While the agent is discovering this city, check back so new areas appear without a reload.
-    refetchInterval: (q) => (q.state.data?.discovering ? 10_000 : false),
-  });
+  // While the area-discovery agent works on this city the hook polls, so new areas appear without a reload.
+  const { data: cityAreas } = useCityAreas(areaCity?.slug);
+  // Every city of the visitor's country: the first ones (curated, then largest) until the visitor types, then matches from the whole list.
+  const otherCities = filterCities((cities ?? []).filter((c) => c.slug !== areaCity?.slug), cityFilter, cityFilter.trim() ? 60 : 30);
   // The full list once loaded; the cities payload's areas meanwhile.
   const areas: CityArea[] = cityAreas?.areas ?? areaCity?.areas.map((a) => ({ ...a, areaType: null, altNames: [], subLocalities: [] })) ?? [];
   const term = areaFilter.trim().toLowerCase();
@@ -53,21 +55,25 @@ export function CitySelect({ size = 'small', fullWidth = false, height }: { size
   const value = !cities ? '' : areaId && areas.some((a) => a.id === areaId) ? AREA + areaId : citySlug ?? '';
 
   const onChange = (v: string) => {
-    if (!v.startsWith(AREA) || !areaCity) { setCity(v || null); return; }
-    const id = v.slice(AREA.length);
-    setCity(areaCity.slug, id);
+    const isArea = v.startsWith(AREA) && !!areaCity;
+    const nextCity = isArea ? areaCity!.slug : v || null;
+    const id = isArea ? v.slice(AREA.length) : null;
+    setCity(nextCity, id);
     // Choosing a location only remembers it; results load when the visitor presses Search. On the results page the
-    // current search is refined in place for the new area.
+    // current search is refined in place for the new location (replacing a place typed in the search, e.g. "in Nellore").
     if (location.pathname !== '/search') return;
     const params = new URLSearchParams(location.search);
-    params.set('city', areaCity.slug);
-    params.set('area', id);
+    if (nextCity) params.set('city', nextCity); else params.delete('city');
+    if (id) params.set('area', id); else params.delete('area');
+    params.delete('place');
+    params.delete('tab');
     params.delete('page');
     navigate(`/search?${params}`, { replace: true });
   };
 
   const label = (v: string) => {
-    if (!v) return 'All cities';
+    // While the city list loads the value is empty; don't claim "All cities" for a visitor who has picked one.
+    if (!v) return !cities && citySlug ? 'Loading…' : 'All cities';
     if (v.startsWith(AREA)) return `${areas.find((a) => AREA + a.id === v)?.name}, ${areaCity?.name}`;
     return cities?.find((c) => c.slug === v)?.name ?? '';
   };
@@ -76,10 +82,11 @@ export function CitySelect({ size = 'small', fullWidth = false, height }: { size
     <Select value={value} displayEmpty onChange={(e) => onChange(e.target.value)} size={size} renderValue={label} fullWidth={fullWidth}
       startAdornment={<PlaceOutlined sx={{ fontSize: 18, mr: 0.5, color: 'text.secondary', flexShrink: 0 }} />}
       // autoFocus off so the area search box keeps focus; the filter resets each time the menu closes.
-      MenuProps={{ autoFocus: false, slotProps: { paper: { sx: { maxHeight: 480 } } } }} onClose={() => setAreaFilter('')}
+      MenuProps={{ autoFocus: false, slotProps: { paper: { sx: { maxHeight: 480 } } } }} onClose={() => { setAreaFilter(''); setCityFilter(''); }}
       title={label(value)}
       sx={{
         minWidth: fullWidth ? 0 : 150, maxWidth: size === 'small' ? 230 : undefined, height,
+        ...(bare && { '& .MuiOutlinedInput-notchedOutline': { border: 'none' }, bgcolor: 'transparent' }),
         '& .MuiSelect-select': { py: size === 'small' ? '7px' : undefined, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
       }}
       inputProps={{ 'aria-label': 'Choose city or area' }}>
@@ -117,9 +124,29 @@ export function CitySelect({ size = 'small', fullWidth = false, height }: { size
         areaFilter && filteredAreas.length === 0 && (
           <MenuItem key="areas-none" disabled sx={{ pl: 3.5, fontSize: 14 }}>No areas match “{areaFilter}”</MenuItem>
         ),
-        <ListSubheader key="cities-h" sx={{ lineHeight: '32px', fontSize: 12, fontWeight: 600 }}>Other cities</ListSubheader>,
       ]}
-      {cities?.filter((c) => c.slug !== areaCity?.slug).map((c) => <MenuItem key={c.slug} value={c.slug}>{c.name}</MenuItem>)}
+      <ListSubheader key="cities-h" sx={{ lineHeight: '32px', fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center' }}>
+        {areaCity ? 'Other cities' : 'Cities'}
+        <span className="ml-auto font-normal text-faint">
+          {catalog?.importing ? `Adding every city in ${catalog.countryName ?? 'your country'}…` : cities ? `${number(cities.length)} in ${catalog?.countryName ?? 'your country'}` : ''}
+        </span>
+      </ListSubheader>
+      <ListSubheader key="cities-search" sx={{ py: 1, lineHeight: 'normal' }}>
+        <TextField size="small" fullWidth value={cityFilter} placeholder="Search any city or state"
+          onChange={(e) => setCityFilter(e.target.value)}
+          onKeyDown={(e) => { if (e.key !== 'Escape') e.stopPropagation(); }}
+          slotProps={{
+            htmlInput: { 'aria-label': 'Search cities' },
+            input: { startAdornment: <InputAdornment position="start"><SearchRounded fontSize="small" /></InputAdornment> },
+          }} />
+      </ListSubheader>
+      {otherCities.map((c) => (
+        <MenuItem key={c.slug} value={c.slug} sx={{ justifyContent: 'space-between', gap: 2 }}>
+          <span className="min-w-0 truncate">{c.name}<span className="text-xs text-muted">, {c.state}</span></span>
+          {c.businessCount > 0 && <span className="shrink-0 text-xs text-faint tabular">{number(c.businessCount)}</span>}
+        </MenuItem>
+      ))}
+      {cityFilter.trim() && otherCities.length === 0 && <MenuItem key="cities-none" disabled sx={{ fontSize: 14 }}>No city matches “{cityFilter}”</MenuItem>}
     </Select>
   );
 }
@@ -132,9 +159,10 @@ function HeaderSearch() {
   const [q, setQ] = useState('');
   const [picked, setPicked] = useState<SearchSuggestion | null>(null);
   // Pages with their own search box don't repeat it in the header.
-  if (['/', '/search', '/categories'].includes(location.pathname)) return <div className="flex-1" />;
+  if (['/', '/search', '/categories', '/nearby'].includes(location.pathname)) return <div className="flex-1" />;
   // Searches the picked category (or typed text) within the location chosen in the city/area selector.
-  const submit = () => navigate(searchHref(q, picked, citySlug, areaId));
+  // Text naming a place ("lawyers in Nellore") selects that city/area first.
+  const submit = () => void resolveSearchHref(q, picked, citySlug, areaId).then((href) => navigate(href));
   const pick = (s: SearchSuggestion) => {
     if (s.kind === 'Business') { navigate(`/b/${s.slug}`); return; }
     setQ(s.label);
@@ -153,6 +181,7 @@ function HeaderSearch() {
 const nav = [
   { to: '/categories', label: 'Categories' },
   { to: '/search?availability=now', label: 'Available now' },
+  { to: '/nearby', label: 'Explore nearby' },
   { to: '/list-your-business', label: 'For business' },
 ];
 
@@ -216,6 +245,7 @@ export default function CustomerLayout() {
 }
 
 function Footer() {
+  const tagline = useNetworkTagline();
   const { data: categories } = useCategories();
   // Most-listed featured services, straight from the category tree.
   const discover = (categories ?? []).flatMap((c) => c.subCategories).filter((s) => s.isFeatured)
@@ -231,7 +261,7 @@ function Footer() {
       <div className="container-page grid gap-10 py-12 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
         <div>
           <Logo light />
-          <p className="mt-3 max-w-xs text-sm leading-6">India's real-time local business network. Discover. Connect. Book. Grow.</p>
+          <p className="mt-3 max-w-xs text-sm leading-6">{tagline} Discover. Connect. Book. Grow.</p>
         </div>
         {cols.map((c) => (
           <div key={c.title}>

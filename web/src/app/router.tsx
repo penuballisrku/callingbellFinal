@@ -34,6 +34,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, lazy: page(() => import('@/features/home/HomePage')) },
       { path: 'search', lazy: page(() => import('@/features/search/SearchPage')) },
+      { path: 'nearby', lazy: page(() => import('@/features/places/PlacesPage')) },
       { path: 'categories', lazy: page(() => import('@/features/categories/CategoriesPage')) },
       { path: 'categories/:slug', lazy: page(() => import('@/features/categories/CategoriesPage')) },
       { path: 'b/:slug', lazy: page(() => import('@/features/business/BusinessPage')) },

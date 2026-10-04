@@ -15,12 +15,12 @@ import PlaceOutlined from '@mui/icons-material/PlaceOutlined';
 import PhoneIphoneRounded from '@mui/icons-material/PhoneIphoneRounded';
 import { api } from '@/lib/api';
 import { compactNumber, number, pluralize } from '@/lib/format';
-import { useCategories, useCities, useDocumentTitle } from '@/lib/hooks';
+import { useCategories, useDocumentTitle, useSelectedAreaSlug } from '@/lib/hooks';
 import { useCity } from '@/stores/city';
 import type { Banner, HomeData, MarketingPage, NearbyService, SearchSuggestion, NearbyServices, PopularService, RelatedCategory, SubCategory, TopPicks } from '@/lib/types';
 import { ErrorState, Img, SectionHeader } from '@/components/ui';
 import { CitySelect } from '@/layouts/CustomerLayout';
-import { SearchSuggest, searchHref } from '@/components/SearchSuggest';
+import { resolveSearchHref, SearchSuggest } from '@/components/SearchSuggest';
 import { PlaceholderTicker } from '@/components/PlaceholderTicker';
 import { ReviewsSection } from './ReviewsSection';
 
@@ -49,7 +49,7 @@ export default function HomePage() {
 
       <div className="container-page space-y-14 py-12 md:space-y-16">
         <section aria-labelledby="cat-h">
-          <SectionHeader title="Popular categories"
+          <SectionHeader id="cat-h" title="Popular categories"
             subtitle={categoryTree ? `Trusted professionals across ${number(categoryTree.reduce((n, c) => n + c.subCategories.length, 0))} services in ${categoryTree.length} categories` : 'Trusted professionals for every local need'}
             action={<Link to="/categories" className="hidden items-center gap-1 text-sm font-semibold sm:inline-flex">All categories <ArrowForwardRounded sx={{ fontSize: 18 }} /></Link>} />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
@@ -122,7 +122,8 @@ function Hero({ data }: { data?: HomeData }) {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    navigate(searchHref(q, picked, citySlug, areaId));
+    // Text naming a place ("lawyers in Nellore") selects that city/area first.
+    void resolveSearchHref(q, picked, citySlug, areaId).then((href) => navigate(href));
   };
   const pick = (s: SearchSuggestion) => {
     if (s.kind === 'Business') { navigate(`/b/${s.slug}`); return; }
@@ -214,7 +215,7 @@ function ServicesSection({ items, loading }: { items?: PopularService[]; loading
   if (!loading && !items?.length) return null;
   return (
     <section aria-labelledby="svc-h">
-      <SectionHeader title="Services" subtitle="Book trusted local services at upfront prices" />
+      <SectionHeader id="svc-h" title="Services" subtitle="Book trusted local services at upfront prices" />
       {categories.length > 1 && (
         <div role="group" aria-label="Filter services by category" className="-mx-4 mb-6 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] md:mx-0 md:flex-wrap md:px-0">
           <button type="button" aria-pressed={!category} onClick={() => setCategory(null)} className={chip(!category)}>All</button>
@@ -248,8 +249,7 @@ function ServicesSection({ items, loading }: { items?: PopularService[]; loading
 function NearbyServicesSection() {
   const citySlug = useCity((st) => st.citySlug);
   const areaId = useCity((st) => st.areaId);
-  const { data: cities } = useCities();
-  const areaSlug = useMemo(() => cities?.find((c) => c.slug === citySlug)?.areas.find((a) => a.id === areaId)?.slug ?? null, [cities, citySlug, areaId]);
+  const areaSlug = useSelectedAreaSlug(citySlug, areaId);
   const { data, isLoading } = useQuery({
     queryKey: ['nearby-services', citySlug, areaSlug],
     queryFn: () => api.get<NearbyServices>('/api/geo/nearby-services', { city: citySlug, area: areaSlug }),
@@ -261,7 +261,7 @@ function NearbyServicesSection() {
   const place = data?.placeName ?? data?.cityName;
   return (
     <section aria-labelledby="near-h">
-      <SectionHeader title={place ? `Popular near ${place}` : 'Popular near you'}
+      <SectionHeader id="near-h" title={place ? `Popular near ${place}` : 'Popular near you'}
         subtitle={data?.aiRanked
           ? 'Picked for your area and the season by our AI assistant, from recent local bookings'
           : 'What people around you are booking right now'}
@@ -416,7 +416,7 @@ function TopPicksSection() {
   const more = (picks?.totalInCity ?? 0) - (picks?.categories.filter((c) => c.source === 'database').length ?? 0);
   return (
     <section aria-labelledby="top-picks-h">
-      <SectionHeader title={picks?.cityName ? `Top picks in ${picks.cityName}` : 'Top picks'}
+      <SectionHeader id="top-picks-h" title={picks?.cityName ? `Top picks in ${picks.cityName}` : 'Top picks'}
         subtitle={picks?.locationSource === 'ip'
           ? `Based on your IP address location${picks.placeName && picks.placeName !== picks.cityName ? ` (${picks.placeName})` : ''} · most booked here first`
           : 'Most booked categories in the selected city'}

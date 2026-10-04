@@ -245,7 +245,25 @@ export interface AdminSubscriptions {
 export interface ExternalPlace {
   id: string; name: string; kind?: string | null; address?: string | null; phone?: string | null; website?: string | null; openingHours?: string | null;
   rating?: number | null; ratingCount?: number | null; distanceKm: number; directionsUrl: string; sourceUrl?: string | null;
+  /** Google Maps only: photo served through /api/places/photo, with its author (Google requires the credit to be shown). */
+  photoUrl?: string | null; photoCredit?: string | null; photoCreditUrl?: string | null;
 }
 /** status: ready | off (not configured) | unavailable | skipped. aiStatus (AI tier): ranked | pending (poll) | off. */
-export interface ExternalTier { status: 'ready' | 'off' | 'unavailable' | 'skipped'; aiStatus?: 'ranked' | 'pending' | 'off' | null; total: number; duplicates: number; items: ExternalPlace[] }
+/** searching (AI tier): the full OpenStreetMap search is still running; these results are partial (poll). */
+export interface ExternalTier { status: 'ready' | 'off' | 'unavailable' | 'skipped'; aiStatus?: 'ranked' | 'pending' | 'off' | null; total: number; duplicates: number; items: ExternalPlace[]; searching?: boolean }
 export interface ExternalSearch { query?: string | null; placeName?: string | null; cityName?: string | null; origin?: string | null; ai: ExternalTier; google: ExternalTier }
+
+/* ---------- Google Places (GET /api/places/search) ---------- */
+export interface GooglePhotoAttribution { displayName: string; uri?: string | null }
+export interface GooglePlacePhoto { url: string; width?: number | null; height?: number | null; attributions: GooglePhotoAttribution[] }
+export interface GooglePlace {
+  name: string; address?: string | null; rating?: number | null; userRatingCount?: number | null; latitude?: number | null; longitude?: number | null;
+  distanceKm?: number | null; directionsUrl: string; photos: GooglePlacePhoto[];
+}
+export interface GooglePlacesLocation { lat: number; lon: number; source: 'coordinates' | 'area' | 'city'; areaName?: string | null; cityName?: string | null; citySlug?: string | null }
+export interface GooglePlacesPage { query: string; location: GooglePlacesLocation; places: GooglePlace[]; nextPageToken?: string | null }
+
+/** The visitor's country and its city catalogue (GET /api/geo/country-catalog). importing: the city catalogue agent is still working; poll. */
+export interface CountryCatalog {
+  countryCode: string; countryName?: string | null; stateCount: number; cityCount: number; importing: boolean; importedOn?: string | null; note?: string | null;
+}

@@ -14,7 +14,7 @@ import AutorenewRounded from '@mui/icons-material/AutorenewRounded';
 import StorefrontOutlined from '@mui/icons-material/StorefrontOutlined';
 import { useSnackbar } from 'notistack';
 import { ApiError, api, errorMessage } from '@/lib/api';
-import { useCities, useDocumentTitle, useLookup } from '@/lib/hooks';
+import { useCities, useCityAreas, useDocumentTitle, useLookup } from '@/lib/hooks';
 import { MEDIA_LIMITS, checkFile, releasePending, toPending, uploadMedia, type PendingMedia } from '@/lib/media';
 import { payForPlan, priceBreakdown, usePaymentConfig } from '@/lib/payments';
 import { moneyPrecise } from '@/lib/format';
@@ -447,7 +447,8 @@ function LivePreview({ data, media }: { data: WizardData; media: PendingMedia[] 
   const category = data.categories.find((c) => c.slug === b.categorySlug);
   const sub = category?.subCategories.find((s) => s.slug === b.subCategorySlug);
   const city = data.cities.find((c) => c.slug === b.citySlug);
-  const area = city?.areas.find((a) => a.slug === b.areaSlug);
+  const { areas: cityAreas } = useCityAreas(b.citySlug);
+  const area = cityAreas.find((a) => a.slug === b.areaSlug) ?? city?.areas.find((a) => a.slug === b.areaSlug);
   const plan = data.plans.find((p) => p.code === b.planCode);
   const logo = media.find((m) => m.kind === 'logo');
   const cover = media.find((m) => m.kind === 'cover') ?? media.find((m) => m.kind === 'photo');

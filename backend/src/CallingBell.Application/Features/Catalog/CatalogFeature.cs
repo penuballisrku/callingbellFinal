@@ -72,20 +72,28 @@ internal static class CatalogQueries
 }
 
 // ---------- Locations ----------
-public sealed record GetCitiesQuery : IRequest<IReadOnlyList<CityDto>>;
+/// <param name="Country">ISO 3166-1 alpha-2 code; the default country when omitted. The city catalogue agent fills each country's cities.</param>
+public sealed record GetCitiesQuery(string? Country = null) : IRequest<IReadOnlyList<CityDto>>;
 
-public sealed class GetCitiesHandler(IUnitOfWork uow) : IRequestHandler<GetCitiesQuery, IReadOnlyList<CityDto>>
+/// <summary>
+/// The country's cities: curated cities first (in their curated order), then the rest largest first. Curated cities include their
+/// top-level areas; for every other city the areas come from GET /api/locations/cities/{slug}/areas, which also queues their discovery.
+/// </summary>
+public sealed class GetCitiesHandler(IUnitOfWork uow, IGeoLocationService geo) : IRequestHandler<GetCitiesQuery, IReadOnlyList<CityDto>>
 {
     public async Task<IReadOnlyList<CityDto>> Handle(GetCitiesQuery request, CancellationToken ct)
     {
+        var country = request.Country is { Length: 2 } c2 && c2.All(char.IsAsciiLetter) ? c2.ToUpperInvariant() : geo.DefaultCountryCode;
         var businesses = uow.Repository<Business>().QueryNoTracking();
         return await uow.Repository<City>().QueryNoTracking()
-            .Where(c => c.IsActive)
-            .OrderBy(c => c.SortOrder)
+            .Where(c => c.IsActive && c.State.CountryCode == country)
+            .OrderBy(c => c.Source != null).ThenBy(c => c.SortOrder).ThenBy(c => c.Name)
             .Select(c => new CityDto(c.Id, c.Name, c.Slug, c.State.Name, c.ImageUrl, c.IsPopular,
                 businesses.Count(b => b.CityId == c.Id && b.Status == BusinessStatuses.Active),
                 // Top-level areas only; sub-localities come with GET /api/locations/cities/{slug}/areas.
-                c.Areas.Where(a => a.IsActive && a.ParentAreaId == null).OrderBy(a => a.Name).Select(a => new AreaDto(a.Id, a.Name, a.Slug, a.Pincode)).ToList()))
+                c.Source == null
+                    ? c.Areas.Where(a => a.IsActive && a.ParentAreaId == null).OrderBy(a => a.Name).Select(a => new AreaDto(a.Id, a.Name, a.Slug, a.Pincode)).ToList()
+                    : new List<AreaDto>()))
             .ToListAsync(ct);
     }
 }

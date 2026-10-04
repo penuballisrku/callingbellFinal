@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { IconButton, Skeleton, useMediaQuery } from '@mui/material';
@@ -8,7 +8,7 @@ import AutoAwesomeRounded from '@mui/icons-material/AutoAwesomeRounded';
 import VerifiedRounded from '@mui/icons-material/VerifiedRounded';
 import FormatQuoteRounded from '@mui/icons-material/FormatQuoteRounded';
 import { api } from '@/lib/api';
-import { useCities } from '@/lib/hooks';
+import { useSelectedAreaSlug } from '@/lib/hooks';
 import { ago, date, initials, number } from '@/lib/format';
 import type { LocalReviews } from '@/lib/types';
 import { useCity } from '@/stores/city';
@@ -33,8 +33,7 @@ function rememberSeen(ids: string[]) {
 export function ReviewsSection() {
   const citySlug = useCity((s) => s.citySlug);
   const areaId = useCity((s) => s.areaId);
-  const { data: cities } = useCities();
-  const areaSlug = useMemo(() => cities?.find((c) => c.slug === citySlug)?.areas.find((a) => a.id === areaId)?.slug ?? null, [cities, citySlug, areaId]);
+  const areaSlug = useSelectedAreaSlug(citySlug, areaId);
 
   // A new random set on load and every REFRESH_MS, without user interaction.
   const [round, setRound] = useState(0);
@@ -70,13 +69,20 @@ export function ReviewsSection() {
   const current = Math.min(page, pages - 1);
 
   if (isError && !data) return null;
-  const place = data?.scope === 'area' ? data.placeName : data?.scope === 'city' ? data.cityName : null;
+  // The selected (or IP-detected) area/city, and where the reviews actually come from: the API widens to the city, or to everywhere,
+  // when the selection has too few reviews; the subtitle then says so.
+  const area = data?.placeName && data.cityName && data.placeName !== data.cityName ? data.placeName : null;
+  const selected = area ? `${area}, ${data!.cityName}` : data?.cityName ?? data?.placeName ?? null;
+  const place = data?.scope === 'area' ? selected : data?.scope === 'city' ? data.cityName : null;
+  const subtitle = data?.scope === 'city' && area ? `Not many reviews in ${area} yet, so these are from across ${data.cityName}. Refreshed every few minutes.`
+    : data?.scope === 'all' && selected ? `No reviews in ${selected} yet. These are recent reviews from across Calling Bell.`
+      : 'Real reviews from customers of local businesses, refreshed every few minutes';
 
   return (
     <section aria-labelledby="reviews-h" aria-roledescription="carousel"
       onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)} onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
-      <SectionHeader title={place ? `What customers in ${place} are saying` : 'What customers are saying'}
-        subtitle="Real reviews from customers of local businesses, refreshed every few minutes"
+      <SectionHeader id="reviews-h" title={place ? `What customers in ${place} are saying` : 'What customers are saying'}
+        subtitle={subtitle}
         action={pages > 1 ? (
           <div className="flex gap-1">
             <IconButton size="small" aria-label="Previous reviews" onClick={() => setPage((p) => (p - 1 + pages) % pages)} sx={{ border: '1px solid var(--cb-line)' }}><ChevronLeftRounded fontSize="small" /></IconButton>

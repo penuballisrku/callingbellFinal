@@ -52,7 +52,8 @@ public sealed class GetHomeHandler(IUnitOfWork uow) : IRequestHandler<GetHomeQue
 
         var stats = new PlatformStatsDto(
             await listed.CountAsync(ct),
-            await uow.Repository<City>().QueryNoTracking().CountAsync(c => c.IsActive, ct),
+            // Cities Calling Bell operates in (curated), not every city in the imported country catalogue.
+            await uow.Repository<City>().QueryNoTracking().CountAsync(c => c.IsActive && c.Source == null, ct),
             await uow.Repository<Review>().QueryNoTracking().CountAsync(r => r.Status == ReviewStatuses.Published, ct),
             await uow.Repository<Booking>().QueryNoTracking().CountAsync(b => b.Status == BookingStatuses.Completed, ct));
 

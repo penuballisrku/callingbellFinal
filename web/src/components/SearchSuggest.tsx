@@ -5,6 +5,7 @@ import SearchRounded from '@mui/icons-material/SearchRounded';
 import StarRounded from '@mui/icons-material/StarRounded';
 import { api } from '@/lib/api';
 import { useDebounced } from '@/lib/hooks';
+import { namesPlace, parsedSearchParams, parseSearch } from '@/lib/searchParse';
 import type { SearchSuggestion, SearchSuggestions } from '@/lib/types';
 import { Img } from './ui';
 
@@ -37,6 +38,21 @@ export function searchHref(text: string, picked: SearchSuggestion | null, citySl
   if (citySlug) params.set('city', citySlug);
   if (citySlug && areaId) params.set('area', areaId);
   return `/search?${params}`;
+}
+
+/**
+ * {@link searchHref}, but typed text that names a place ("lawyers in Nellore") is parsed first: a listed city/area replaces the
+ * dropdown's location, and an unlisted place is searched by name. Falls back to the plain link if parsing fails.
+ */
+export async function resolveSearchHref(text: string, picked: SearchSuggestion | null, citySlug?: string | null, areaId?: string | null) {
+  const q = text.trim();
+  if ((picked && picked.label === q) || !namesPlace(q)) return searchHref(text, picked, citySlug, areaId);
+  try {
+    const parsed = await parseSearch(q, citySlug);
+    return `/search?${parsedSearchParams(parsed, new URLSearchParams(), { citySlug, areaId })}`;
+  } catch {
+    return searchHref(text, picked, citySlug, areaId);
+  }
 }
 
 const groupTitles:[keyof Omit<SearchSuggestions, 'query'>, string][] = [['categories', 'Categories'], ['services', 'Services'], ['businesses', 'Businesses']];

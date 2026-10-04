@@ -2,14 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Button, Checkbox, Chip, Drawer, FormControlLabel, MenuItem, Pagination, Radio, RadioGroup, TextField, ToggleButton, ToggleButtonGroup,
+  Button, Checkbox, Chip, CircularProgress, Drawer, FormControlLabel, MenuItem, Pagination, Radio, RadioGroup, TextField, ToggleButton, ToggleButtonGroup,
 } from '@mui/material';
 import TuneRounded from '@mui/icons-material/TuneRounded';
 import SearchRounded from '@mui/icons-material/SearchRounded';
 import ViewListRounded from '@mui/icons-material/ViewListRounded';
 import GridViewRounded from '@mui/icons-material/GridViewRounded';
 import { api } from '@/lib/api';
-import { useCategories, useCities, useDebounced, useDocumentTitle, useLookup } from '@/lib/hooks';
+import { useCategories, useCities, useCityAreas, useDebounced, useDocumentTitle, useLookup } from '@/lib/hooks';
+import { CityAutocomplete } from '@/components/CityAutocomplete';
 import { usePresence } from '@/lib/realtime';
 import { number } from '@/lib/format';
 import type { AppliedFilters, Banner, BusinessCard as Card, Pagination as Meta, Plan, SearchSuggestion } from '@/lib/types';
@@ -18,8 +19,14 @@ import { EmptyState, ErrorState, Img, PageHeader } from '@/components/ui';
 import { useVisitorDistrict } from '@/components/VisitorCountry';
 import { useCity } from '@/stores/city';
 import { SearchSuggest } from '@/components/SearchSuggest';
-import { ExternalResults, SourceSummary, useExternalSearch } from './ExternalResults';
+import { PlaceholderTicker } from '@/components/PlaceholderTicker';
+import { ExternalResults, type ResultSource, sourcePanelId, sourceTabId, SourceTabs, useExternalSearch } from './ExternalResults';
 import InfoOutlined from '@mui/icons-material/InfoOutlined';
+import VerifiedRounded from '@mui/icons-material/VerifiedRounded';
+import LocationOffRounded from '@mui/icons-material/LocationOffRounded';
+import PlaceRounded from '@mui/icons-material/PlaceRounded';
+import { useSnackbar } from 'notistack';
+import { namesPlace, parsedSearchParams, parseSearch, placeLabel, type ParsedSearch } from '@/lib/searchParse';
 
 interface SearchResponse { data: Card[]; pagination: Meta; applied: AppliedFilters }
 
@@ -48,6 +55,7 @@ export default function SearchPage() {
   const [drawer, setDrawer] = useState(false);
   const [layout, setLayout] = useState<'row' | 'grid'>('row');
   const queryClient = useQueryClient();
+  const { enqueueSnackbar } = useSnackbar();
 
   // Location: the city/area chosen in the header dropdown applies to every search that doesn't name its own, and any change
   // made here (filters, chips) is reflected back in the dropdown, so the two always agree.
@@ -58,6 +66,8 @@ export default function SearchPage() {
   const areaId = params.get('area') ?? (city && city === storeCity ? storeArea : null);
   // Runs when the URL changes only (store changes made here are followed by a URL change), reading the store's latest values.
   useEffect(() => {
+    // A place typed in the search that isn't a listed city ("in Nellore") stands in for the dropdown's location.
+    if (params.get('place')) return;
     const { citySlug: selCity, areaId: selArea } = useCity.getState();
     const urlCity = params.get('city');
     const urlArea = params.get('area');
@@ -73,22 +83,57 @@ export default function SearchPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params]);
 
-  // Keep debounced text in the URL (search debounce).
+  // Keep debounced text in the URL (search debounce). Text naming a place ("lawyers in Nellore") waits for Enter, so a half-typed
+  // place isn't looked up.
   useEffect(() => {
-    if ((params.get('q') ?? '') === debounced) return;
+    if ((params.get('q') ?? '') === debounced || namesPlace(debounced)) return;
     update({ q: debounced || null });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debounced]);
+
+  /** "lawyers in Madhapur": search "lawyers" (or its sub-category) and select Madhapur in the location dropdown. */
+  const applyParsed = (p: ParsedSearch) => {
+    setText(p.subCategorySlug || p.categorySlug ? '' : p.query);
+    const { citySlug: selCity, areaId: selArea } = useCity.getState();
+    if (p.place) {
+      setLocation(p.place.citySlug, p.place.areaId ?? null);
+      if (p.place.citySlug !== selCity || (p.place.areaId ?? null) !== selArea)
+        enqueueSnackbar(`Location set to ${placeLabel(p.place)}`, { variant: 'info' });
+    }
+    setParams(parsedSearchParams(p, params, { citySlug: selCity, areaId: selArea }), { replace: true });
+  };
+  const [parsing, setParsing] = useState(false);
+  /** Text whose parse failed: it is then searched as typed instead of waiting. */
+  const [parseFailed, setParseFailed] = useState<string | null>(null);
+  const parseAndApply = async (value: string) => {
+    setParsing(true);
+    try { applyParsed(await parseSearch(value, useCity.getState().citySlug)); }
+    catch { setParseFailed(value.trim()); update({ q: value.trim() || null }); }
+    finally { setParsing(false); }
+  };
+  const submitText = () => {
+    if (namesPlace(text)) void parseAndApply(text);
+    else update({ q: text.trim() || null });
+  };
+  // Links and bookmarks such as /search?q=lawyers+in+Nellore are parsed the same way.
+  const urlQ = params.get('q') ?? '';
+  useEffect(() => {
+    if (namesPlace(urlQ)) void parseAndApply(urlQ);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlQ]);
 
   const update = (patch: Record<string, string | null>, resetPage = true) => {
     const next = new URLSearchParams(params);
     Object.entries(patch).forEach(([k, v]) => (v === null || v === '' ? next.delete(k) : next.set(k, v)));
     if (resetPage) next.delete('page');
+    // A new search (what or where) starts on its default tab again.
+    if (['q', 'category', 'sub', 'city', 'area', 'place'].some((k) => k in patch)) next.delete('tab');
     if ('city' in patch || 'area' in patch) {
       const nextCity = 'city' in patch ? patch.city || null : city;
       const nextArea = 'area' in patch ? patch.area || null : 'city' in patch ? null : areaId;
       setLocation(nextCity, nextArea);
       if (!nextArea) next.delete('area');
+      next.delete('place'); // a listed city/area replaces a place typed in the search
     }
     setParams(next, { replace: true });
   };
@@ -96,6 +141,7 @@ export default function SearchPage() {
   /** Clears the search and filters but keeps the selected location. */
   const clearAll = () => {
     setText('');
+    if (params.get('place')) { setParams(new URLSearchParams(), { replace: true }); return; } // the URL sync adds the dropdown's location
     const next = new URLSearchParams();
     if (city) next.set('city', city);
     if (areaId) next.set('area', areaId);
@@ -119,18 +165,53 @@ export default function SearchPage() {
     plan: params.get('plan'), sort: params.get('sort') ?? 'relevance', page: Number(params.get('page') ?? 1), pageSize: 12,
   };
   const queryKey = ['search', query];
+  /** A place typed in the search that isn't a listed city or area ("lawyers in Nellore"): no registered businesses there. */
+  const place = params.get('place')?.trim() || null;
+  /** The URL's text still names a place ("lawyers in Nellore"): it is being parsed, so nothing is searched until it is applied. */
+  const parsePending = namesPlace(query.q ?? '') && query.q?.trim() !== parseFailed;
 
-  const { data, isLoading, isFetching, isError, refetch } = useQuery({
+  const dbQuery = useQuery({
     queryKey,
     queryFn: async () => {
       const env = await api.envelope<Card[]>('/api/businesses', query);
       return env as unknown as SearchResponse;
     },
     placeholderData: keepPreviousData,
+    enabled: !place && !parsePending,
   });
-  // Beyond the platform: AI-recommended real places and Google Maps businesses near the selected area, always after registered ones.
-  const external = useExternalSearch({ q: query.q, category: query.category, sub: query.sub, city: query.city, areaId: query.areaId });
+  const { isLoading, isFetching, isError, refetch } = dbQuery;
+  const data = place ? undefined : dbQuery.data;
+  // Beyond the platform: Google Maps businesses, then AI-recommended real places, near the selected area (or the typed place),
+  // always after registered ones.
+  const external = useExternalSearch(place
+    ? { q: query.q, category: query.category, sub: query.sub, place }
+    : parsePending ? {}
+    : { q: query.q, category: query.category, sub: query.sub, city: query.city, areaId: query.areaId });
   const searchesExternal = !!(query.q?.trim() || query.category || query.sub);
+  // Results tab (?tab=google|ai). Without a choice: Calling Bell first, or Google Maps (else AI) when there are no registered businesses.
+  const tabParam = params.get('tab');
+  const dbEmpty = !!place || (!!data && data.pagination.totalCount === 0);
+  const googleUsable = external.data ? !['off', 'skipped'].includes(external.data.google.status) : true;
+  const tab: ResultSource = !searchesExternal ? 'db'
+    : tabParam === 'google' || tabParam === 'ai' || tabParam === 'db' ? tabParam
+      : dbEmpty ? (googleUsable ? 'google' : 'ai') : 'db';
+  const setTab = (next: ResultSource) => {
+    const p = new URLSearchParams(params);
+    p.set('tab', next);
+    setParams(p, { replace: true });
+  };
+  const { data: categoryTree } = useCategories();
+  // Rotating "e.g. …" placeholder: categories alternating with the most-listed sub-categories, from the catalogue.
+  const tickerNames = useMemo(() => {
+    const cats = (categoryTree ?? []).map((c) => c.name);
+    const subs = (categoryTree ?? []).flatMap((c) => c.subCategories)
+      .sort((a, b) => b.businessCount - a.businessCount).map((s) => s.name);
+    return Array.from({ length: Math.max(cats.length, subs.length) }, (_, i) => [subs[i], cats[i]]).flat().filter((n): n is string => !!n);
+  }, [categoryTree]);
+  const placeWhat = place
+    ? categoryTree?.flatMap((c) => c.subCategories).find((s) => s.slug === query.sub)?.name
+      ?? categoryTree?.find((c) => c.slug === query.category)?.name ?? (query.q ? `“${query.q}”` : 'Businesses')
+    : null;
   const { data: banners } = useQuery({ queryKey: ['banners', 'SearchTop'], queryFn: () => api.get<Banner[]>('/api/banners', { placement: 'SearchTop' }), staleTime: 600_000 });
   // Promote the banner for the sub-category being searched; otherwise one picked per visit, so every campaign gets seen.
   const [bannerSeed] = useState(() => Math.floor(Math.random() * 1000));
@@ -141,10 +222,11 @@ export default function SearchPage() {
 
   const applied = data?.applied;
   const title = useMemo(() => {
+    if (place) return `${placeWhat} in ${external.data?.placeName && external.data.origin === 'place' ? external.data.placeName : place}`;
     const what = applied?.subName ?? applied?.categoryName ?? (applied?.q ? `“${applied.q}”` : 'Local businesses');
     const where = [applied?.areaName, applied?.cityName].filter(Boolean).join(', ');
     return `${what}${where ? ` in ${where}` : ''}`;
-  }, [applied]);
+  }, [applied, place, placeWhat, external.data]);
   useDocumentTitle(title);
 
   usePresence(data?.data.map((b) => b.id) ?? [], (e) => {
@@ -167,7 +249,10 @@ export default function SearchPage() {
     ? `No registered businesses in ${applied!.areaName} yet. Showing the nearest in ${applied!.cityName ?? 'the city'}.`
     : null;
 
-  const activeChips = [
+  const activeChips = place ? [
+    placeWhat && (query.sub || query.category) && { key: query.sub ? 'sub' : 'category', label: placeWhat },
+    { key: 'place', label: place },
+  ].filter(Boolean) as { key: string; label: string }[] : [
     applied?.subName && { key: 'sub', label: applied.subName },
     !applied?.subName && applied?.categoryName && { key: 'category', label: applied.categoryName },
     applied?.cityName && { key: 'city', label: applied.cityName },
@@ -179,35 +264,49 @@ export default function SearchPage() {
   ].filter(Boolean) as { key: string; label: string }[];
 
   const filters = <Filters params={params} update={update} />;
+  const filtersNote = tab !== 'db' && (
+    <p className="mb-3 flex items-start gap-1.5 rounded-lg bg-subtle px-3 py-2 text-xs text-muted">
+      <InfoOutlined sx={{ fontSize: 14, mt: '1px' }} />Category and location apply to every tab; the other filters apply to Calling Bell businesses.
+    </p>
+  );
 
   return (
     <div className="container-page py-8">
       <PageHeader title={title} crumbs={[{ label: 'Home', to: '/' }, { label: 'Search' }]}
-        subtitle={data ? `${number(data.pagination.totalCount)} ${data.pagination.totalCount === 1 ? 'business' : 'businesses'} found` : 'Searching…'} />
+        subtitle={place ? 'Google Maps businesses and AI recommendations · not a Calling Bell city yet'
+          : data ? `${number(data.pagination.totalCount)} ${data.pagination.totalCount === 1 ? 'business' : 'businesses'} found` : 'Searching…'} />
 
       <div className="grid gap-6 lg:grid-cols-[264px_1fr]">
         <aside className="hidden lg:block">
-          <div className="card sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto p-4">{filters}</div>
+          <div className="card sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto p-4">{filtersNote}{filters}</div>
         </aside>
 
         <div className="min-w-0">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="relative flex-1">
+            <form role="search" className="relative flex-1" onSubmit={(e) => { e.preventDefault(); submitText(); }}>
               <SearchRounded sx={{ position: 'absolute', left: 10, top: 9, fontSize: 20, color: 'var(--cb-faint)', zIndex: 1, pointerEvents: 'none' }} />
               <SearchSuggest value={text} onChange={setText} citySlug={query.city} onSelect={applySuggestion}
-                placeholder="Search by name, service or locality" ariaLabel="Search"
-                inputClassName="h-[40px] w-full rounded-lg border border-line bg-surface pl-9 pr-3 text-sm outline-none focus:border-line-strong" />
-            </div>
+                placeholder={tickerNames.length ? '' : 'Search a service and place, e.g. lawyers in Madhapur'} ariaLabel="Search"
+                inputClassName="h-[40px] w-full rounded-lg border border-line bg-surface pl-9 pr-9 text-sm outline-none focus:border-line-strong">
+                {!text && <PlaceholderTicker names={tickerNames} prefix="e.g." className="pl-9 pr-9 text-sm" />}
+              </SearchSuggest>
+              {parsing && <CircularProgress size={16} sx={{ position: 'absolute', right: 12, top: 12 }} aria-label="Finding the place" />}
+            </form>
             <div className="flex gap-2">
               <Button className="lg:!hidden" variant="outlined" startIcon={<TuneRounded />} onClick={() => setDrawer(true)}>Filters{activeChips.length ? ` (${activeChips.length})` : ''}</Button>
-              <TextField select size="small" value={query.sort} onChange={(e) => update({ sort: e.target.value === 'relevance' ? null : e.target.value })}
-                sx={{ minWidth: 170 }} slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Sort by' } }}>
-                {sorts.map((s) => <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>)}
-              </TextField>
-              <ToggleButtonGroup size="small" exclusive value={layout} onChange={(_, v) => v && setLayout(v)} className="hidden sm:flex" aria-label="Layout">
-                <ToggleButton value="row" aria-label="List view"><ViewListRounded fontSize="small" /></ToggleButton>
-                <ToggleButton value="grid" aria-label="Grid view"><GridViewRounded fontSize="small" /></ToggleButton>
-              </ToggleButtonGroup>
+              {/* Sorting and list/grid apply to Calling Bell results; Google Maps and AI results are listed nearest first. */}
+              {tab === 'db' && (
+                <>
+                  <TextField select size="small" value={query.sort} onChange={(e) => update({ sort: e.target.value === 'relevance' ? null : e.target.value })}
+                    sx={{ minWidth: 170 }} slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Sort by' } }}>
+                    {sorts.map((s) => <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>)}
+                  </TextField>
+                  <ToggleButtonGroup size="small" exclusive value={layout} onChange={(_, v) => v && setLayout(v)} className="hidden sm:flex" aria-label="Layout">
+                    <ToggleButton value="row" aria-label="List view"><ViewListRounded fontSize="small" /></ToggleButton>
+                    <ToggleButton value="grid" aria-label="Grid view"><GridViewRounded fontSize="small" /></ToggleButton>
+                  </ToggleButtonGroup>
+                </>
+              )}
             </div>
           </div>
 
@@ -218,8 +317,17 @@ export default function SearchPage() {
             </div>
           )}
 
-          {searchesExternal && <SourceSummary dbCount={data?.pagination.totalCount} ext={external.data} loading={external.isLoading} />}
+          {searchesExternal && (
+            <SourceTabs value={tab} onChange={setTab} dbCount={place ? 0 : data?.pagination.totalCount} dbLoading={!place && (isLoading || parsePending)}
+              ext={external.data} loading={external.isLoading} />
+          )}
 
+          {tab !== 'db' ? (
+            <div role="tabpanel" id={sourcePanelId(tab)} aria-labelledby={sourceTabId(tab)}>
+              <ExternalResults only={tab} ext={external.data} loading={external.isLoading} isError={external.isError} />
+            </div>
+          ) : (
+          <div role={searchesExternal ? 'tabpanel' : undefined} id={sourcePanelId('db')} aria-labelledby={searchesExternal ? sourceTabId('db') : undefined}>
           {banner && query.page === 1 && (
             <Link to={banner.linkUrl ?? '/search'} className="card mb-4 flex items-center gap-4 overflow-hidden p-0 hover:border-line-strong">
               <Img src={banner.mobileImageUrl ?? banner.imageUrl} alt={banner.altText ?? ''} className="h-20 w-20 shrink-0 sm:h-24 sm:w-24" rounded="rounded-none" />
@@ -231,16 +339,23 @@ export default function SearchPage() {
             </Link>
           )}
 
-          {isError ? <div className="card"><ErrorState onRetry={() => refetch()} /></div> : (
+          {place ? (
+            <UnlistedPlaceNotice place={external.data?.origin === 'place' && external.data.placeName ? external.data.placeName : place}
+              notFound={external.data?.origin === 'place-not-found'} onUseDropdown={() => update({ place: null })} />
+          ) : isError ? <div className="card"><ErrorState onRetry={() => refetch()} /></div> : (
             <div className={`transition-opacity ${isFetching && !isLoading ? 'opacity-60' : ''}`} aria-busy={isFetching}>
-              {isLoading ? (
+              {isLoading || parsePending || !data ? (
                 <div className="space-y-3">{Array.from({ length: 6 }, (_, i) => <BusinessCardSkeleton key={i} layout="row" />)}</div>
               ) : data!.data.length === 0 && searchesExternal ? (
-                <div role="status" className="card flex items-start gap-3 border-accent/40 bg-accent-soft/40 p-4 text-sm">
+                <div role="status" className="card flex flex-col gap-3 border-accent/40 bg-accent-soft/40 p-4 text-sm sm:flex-row sm:items-start">
                   <InfoOutlined fontSize="small" className="mt-0.5 shrink-0 text-accent-ink" />
-                  <div>
-                    <p className="font-medium text-ink">No registered businesses found in our database for {applied?.areaName ?? applied?.cityName ?? 'this area'}. Showing AI and Google Maps recommendations.</p>
-                    <p className="mt-0.5 text-muted">Filters such as rating and availability apply to registered businesses only.</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-ink">No registered businesses found in our database for {applied?.areaName ?? applied?.cityName ?? 'this area'}.</p>
+                    <p className="mt-0.5 text-muted">See what Google Maps and our AI assistant found nearby. Filters such as rating and availability apply to registered businesses only.</p>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    <Button size="small" variant="contained" onClick={() => setTab('google')}>Google Maps</Button>
+                    <Button size="small" variant="outlined" onClick={() => setTab('ai')}>AI recommended</Button>
                   </div>
                 </div>
               ) : data!.data.length === 0 ? (
@@ -248,6 +363,12 @@ export default function SearchPage() {
                   action={<Button variant="contained" onClick={clearAll}>Reset filters</Button>} /></div>
               ) : (
                 <div className="space-y-6">
+                  {searchesExternal && (
+                    <p className="flex items-center gap-1.5 text-sm text-muted">
+                      <VerifiedRounded sx={{ fontSize: 16 }} className="text-success" />
+                      Verified businesses registered on Calling Bell: enquire, book and review them here.
+                    </p>
+                  )}
                   {areaNotice && (
                     <p role="status" className="flex items-start gap-2 rounded-xl border border-line bg-surface px-4 py-3 text-sm text-muted">
                       <InfoOutlined fontSize="small" className="mt-0.5 shrink-0 text-accent-ink" />{areaNotice}
@@ -272,18 +393,40 @@ export default function SearchPage() {
                 onChange={(_, p) => { update({ page: p === 1 ? null : String(p) }, false); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
             </div>
           )}
-
-          {/* Registered businesses always come first: the other sources follow their last page. */}
-          {searchesExternal && data && query.page >= data.pagination.totalPages && (
-            <ExternalResults ext={external.data} loading={external.isLoading} isError={external.isError} />
+          </div>
           )}
         </div>
       </div>
 
       <Drawer anchor="bottom" open={drawer} onClose={() => setDrawer(false)} slotProps={{ paper: { sx: { maxHeight: '85vh', borderTopLeftRadius: 16, borderTopRightRadius: 16 } } }}>
-        <div className="overflow-y-auto p-5">{filters}</div>
+        <div className="overflow-y-auto p-5">{filtersNote}{filters}</div>
         <div className="border-t border-line p-4"><Button fullWidth variant="contained" size="large" onClick={() => setDrawer(false)}>Show {data ? number(data.pagination.totalCount) : ''} results</Button></div>
       </Drawer>
+    </div>
+  );
+}
+
+/** Shown instead of registered businesses when the search names a place that isn't a Calling Bell city or area ("lawyers in Nellore"). */
+function UnlistedPlaceNotice({ place, notFound, onUseDropdown }: { place: string; notFound: boolean; onUseDropdown: () => void }) {
+  const selected = useCity((s) => s.citySlug);
+  return (
+    <div role="status" className="card flex flex-col gap-3 border-accent/40 bg-accent-soft/40 p-4 text-sm sm:flex-row sm:items-start">
+      <span aria-hidden className="mt-0.5 shrink-0 text-accent-ink">{notFound ? <LocationOffRounded fontSize="small" /> : <InfoOutlined fontSize="small" />}</span>
+      <div className="min-w-0 flex-1">
+        <p className="font-medium text-ink">
+          {notFound
+            ? `We couldn’t find a place called “${place}”.`
+            : `${place} isn’t a Calling Bell city yet, so there are no registered businesses there.`}
+        </p>
+        <p className="mt-0.5 text-muted">
+          {notFound
+            ? 'Check the spelling, or pick a city or area from the location menu.'
+            : `Showing Google Maps businesses and AI recommendations in ${place} below.`}
+        </p>
+      </div>
+      <Button size="small" variant="outlined" onClick={onUseDropdown} sx={{ flexShrink: 0, alignSelf: { xs: 'flex-start', sm: 'center' } }}>
+        {selected ? 'Search my selected location' : 'Choose a listed city'}
+      </Button>
     </div>
   );
 }
@@ -296,9 +439,13 @@ function Filters({ params, update }: { params: URLSearchParams; update: (p: Reco
 
   const categorySlug = params.get('category') ?? categories?.find((c) => c.subCategories.some((s) => s.slug === params.get('sub')))?.slug ?? '';
   const city = cities?.find((c) => c.slug === params.get('city'));
+  const typedPlace = params.get('place')?.trim() || null;
   // With no city chosen, offer the areas of the visitor's IP-detected district.
   const { data: district } = useVisitorDistrict();
   const areaCity = city ?? cities?.find((c) => c.slug === district?.citySlug);
+  // Every area of the city (the area-discovery agent fills cities that have none yet).
+  const areaList = useCityAreas(areaCity?.slug);
+  const areaParam = (params.get('area') ?? '').toLowerCase();
 
   return (
     <div className="space-y-5">
@@ -316,16 +463,24 @@ function Filters({ params, update }: { params: URLSearchParams; update: (p: Reco
       </FilterGroup>
 
       <FilterGroup title="Location">
-        <TextField select value={cities ? params.get('city') ?? '' : ''} onChange={(e) => update({ city: e.target.value || null, area: null })} slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'City' } }}>
-          <MenuItem value="">All cities</MenuItem>
-          {cities?.map((c) => <MenuItem key={c.slug} value={c.slug}>{c.name}</MenuItem>)}
-        </TextField>
-        {areaCity && (
-          <TextField select value={city ? (params.get('area') ?? '').toLowerCase() : ''} sx={{ mt: 1, minWidth: 0, '& .MuiSelect-select': { overflow: 'hidden', textOverflow: 'ellipsis' } }}
+        {/* A place typed in the search that isn't a listed city ("in Nellore"): shown here; picking a listed city replaces it. */}
+        {typedPlace && (
+          <div className="mb-2 flex items-center gap-1.5 rounded-lg border border-line bg-subtle px-3 py-2 text-sm">
+            <PlaceRounded sx={{ fontSize: 16 }} className="text-muted" />
+            <span className="min-w-0 flex-1 truncate font-medium">{typedPlace}</span>
+            <span className="shrink-0 text-xs text-muted">from your search</span>
+          </div>
+        )}
+        <CityAutocomplete value={typedPlace ? null : params.get('city')} onChange={(slug) => update({ city: slug, area: null })}
+          placeholder={typedPlace ? 'Choose a listed city' : 'All cities'} ariaLabel="City" />
+        {areaCity && !typedPlace && (
+          <TextField select value={city && areaList.areas.some((a) => a.id === areaParam) ? areaParam : ''}
+            sx={{ mt: 1, minWidth: 0, '& .MuiSelect-select': { overflow: 'hidden', textOverflow: 'ellipsis' } }}
             onChange={(e) => update(city ? { area: e.target.value || null } : { city: areaCity.slug, area: e.target.value || null })}
-            slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Area' } }}>
+            slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Area' } }}
+            helperText={areaList.discovering ? `Finding areas in ${areaCity.name}…` : undefined}>
             <MenuItem value="">{city ? `All areas in ${city.name}` : `Areas near you · ${areaCity.name}`}</MenuItem>
-            {areaCity.areas.map((a) => <MenuItem key={a.id} value={a.id}>{a.name} · {a.pincode}</MenuItem>)}
+            {areaList.areas.map((a) => <MenuItem key={a.id} value={a.id}>{a.name} · {a.pincode}</MenuItem>)}
           </TextField>
         )}
       </FilterGroup>

@@ -17,6 +17,8 @@ import { moneyExact, moneyPrecise, number } from '@/lib/format';
 import { IMAGE_ACCEPT, MEDIA_LIMITS, VIDEO_ACCEPT, fileSize, type PendingMedia } from '@/lib/media';
 import type { Category, City, Lookup, MediaKind, Plan } from '@/lib/types';
 import { DropZone, MediaTile } from '@/components/media';
+import { CityAutocomplete } from '@/components/CityAutocomplete';
+import { useCityAreas } from '@/lib/hooks';
 import { emptyService, type StepKey, type WizardForm } from './schema';
 import { priceBreakdown } from '@/lib/payments';
 
@@ -139,13 +141,15 @@ export function BusinessStep({ data }: { data: WizardData }) {
 }
 
 /* ======================= 3. Contact & address ======================= */
-export function ContactStep({ data }: { data: WizardData }) {
+// Cities and areas come from the shared hooks (the whole country), not the wizard data.
+export function ContactStep(_props: { data: WizardData }) {
   const { control, setValue, getValues } = useFormContext<WizardForm>();
   const citySlug = useWatch({ control, name: 'business.citySlug' });
   const phone = useWatch({ control, name: 'business.businessPhone' });
   const whatsapp = useWatch({ control, name: 'business.whatsAppNumber' });
   const [sameAsPhone, setSame] = useState(() => !!phone && phone === whatsapp);
-  const areas = data.cities.find((c) => c.slug === citySlug)?.areas ?? [];
+  // Every area of the chosen city; the area-discovery agent fills cities that have none yet (the list updates while it works).
+  const { areas, discovering } = useCityAreas(citySlug);
   useEffect(() => { if (sameAsPhone) setValue('business.whatsAppNumber', phone ?? '', { shouldValidate: !!phone }); }, [sameAsPhone, phone, setValue]);
 
   return (
@@ -165,13 +169,12 @@ export function ContactStep({ data }: { data: WizardData }) {
       <Section title="Business address">
         <div className="grid gap-4 sm:grid-cols-2">
           <Controller control={control} name="business.citySlug" render={({ field, fieldState }) => (
-            <TextField select label="City" required {...field} error={!!fieldState.error} helperText={fieldState.error?.message}
-              onChange={(e) => { field.onChange(e.target.value); setValue('business.areaSlug', ''); }}>
-              {data.cities.map((c) => <MenuItem key={c.slug} value={c.slug}>{c.name}, {c.state}</MenuItem>)}
-            </TextField>
+            <CityAutocomplete value={field.value || null} label="City" required size="medium" error={!!fieldState.error} helperText={fieldState.error?.message}
+              onChange={(slug) => { field.onChange(slug ?? ''); field.onBlur(); setValue('business.areaSlug', ''); }} />
           )} />
           <Controller control={control} name="business.areaSlug" render={({ field }) => (
-            <TextField select label="Area / locality" {...field} disabled={!citySlug} helperText={citySlug ? 'Optional · helps "near me" searches' : 'Choose a city first'}
+            <TextField select label="Area / locality" {...field} value={areas.some((a) => a.slug === field.value) ? field.value : ''} disabled={!citySlug}
+              helperText={!citySlug ? 'Choose a city first' : discovering ? 'Finding areas in this city… you can continue meanwhile' : 'Optional · helps "near me" searches'}
               onChange={(e) => {
                 field.onChange(e.target.value);
                 const area = areas.find((a) => a.slug === e.target.value);
@@ -460,7 +463,8 @@ export function ReviewStep({ data, media, onEdit, paymentsEnabled }: { data: Wiz
   const category = data.categories.find((c) => c.slug === b.categorySlug);
   const sub = category?.subCategories.find((s) => s.slug === b.subCategorySlug);
   const city = data.cities.find((c) => c.slug === b.citySlug);
-  const area = city?.areas.find((a) => a.slug === b.areaSlug);
+  const { areas: cityAreas } = useCityAreas(b.citySlug);
+  const area = cityAreas.find((a) => a.slug === b.areaSlug) ?? city?.areas.find((a) => a.slug === b.areaSlug);
   const plan = data.plans.find((p) => p.code === b.planCode);
   const count = (k: MediaKind) => media.items.filter((m) => m.kind === k).length;
 

@@ -45,7 +45,7 @@ internal sealed class GeoConfiguration :
 }
 
 internal sealed class CatalogConfiguration :
-    IEntityTypeConfiguration<SubCategory>, IEntityTypeConfiguration<PopularService>, IEntityTypeConfiguration<Media>
+    IEntityTypeConfiguration<SubCategory>, IEntityTypeConfiguration<PopularService>, IEntityTypeConfiguration<Media>, IEntityTypeConfiguration<CountryCatalog>
 {
     public void Configure(EntityTypeBuilder<SubCategory> b) =>
         b.HasOne(s => s.Category).WithMany(c => c.SubCategories).HasForeignKey(s => s.CategoryId);
@@ -60,6 +60,12 @@ internal sealed class CatalogConfiguration :
     {
         b.ToTable("Media");
         b.HasKey(m => m.MediaId);
+    }
+
+    public void Configure(EntityTypeBuilder<CountryCatalog> b)
+    {
+        b.ToTable("CountryCatalogs");
+        b.HasKey(c => c.CountryCode);
     }
 }
 

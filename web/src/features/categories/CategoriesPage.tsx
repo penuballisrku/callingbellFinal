@@ -8,6 +8,7 @@ import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 import CategoryOutlined from '@mui/icons-material/CategoryOutlined';
 import HandymanOutlined from '@mui/icons-material/HandymanOutlined';
 import VerifiedOutlined from '@mui/icons-material/VerifiedOutlined';
+import TravelExploreRounded from '@mui/icons-material/TravelExploreRounded';
 import { useCategories, useDocumentTitle } from '@/lib/hooks';
 import { number, pluralize } from '@/lib/format';
 import type { Category, SubCategory } from '@/lib/types';
@@ -267,7 +268,8 @@ export default function CategoriesPage() {
             </div>
           </div>
         )}
-        {single && <PageHeader title={pluralize(single.businessCount, 'business', 'businesses')} crumbs={[{ label: 'Home', to: '/' }, { label: 'Categories', to: '/categories' }, { label: single.name }]} />}
+        {single && <PageHeader title={pluralize(single.businessCount, 'business', 'businesses')} crumbs={[{ label: 'Home', to: '/' }, { label: 'Categories', to: '/categories' }, { label: single.name }]}
+          actions={<Button component={Link} to={`/nearby?category=${single.slug}`} variant="outlined" startIcon={<TravelExploreRounded />}>Explore nearby on Google Maps</Button>} />}
         {isLoading || !single ? <Skeleton variant="rounded" height={260} /> : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             {single.subCategories.map((s) => (
@@ -413,10 +415,14 @@ export default function CategoriesPage() {
                       <p className="line-clamp-2 text-sm text-muted">{c.description}</p>
                     </div>
                   </div>
-                  <Button component={Link} to={`/search?category=${c.slug}`} variant="outlined" size="small" endIcon={<ArrowForwardRounded />}
-                    sx={{ flexShrink: 0, alignSelf: { xs: 'flex-start', sm: 'center' } }}>
-                    View all · {number(c.businessCount)}
-                  </Button>
+                  <div className="flex shrink-0 flex-wrap gap-2 self-start sm:self-center">
+                    <Button component={Link} to={`/nearby?category=${c.slug}`} size="small" startIcon={<TravelExploreRounded />}>
+                      Explore nearby
+                    </Button>
+                    <Button component={Link} to={`/search?category=${c.slug}`} variant="outlined" size="small" endIcon={<ArrowForwardRounded />}>
+                      View all · {number(c.businessCount)}
+                    </Button>
+                  </div>
                 </header>
                 <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
                   {c.subCategories.map((s) => <ServiceTile key={s.id} s={s} />)}

@@ -41,6 +41,7 @@
   --cb-ring: color-mix(in srgb, var(--cb-accent) 28%, transparent);
 
   --cb-success: #067647;
+  --cb-info: #1570ef;
   --cb-success-soft: #ecfdf3;
   --cb-danger: #b42318;
   --cb-danger-soft: #fef3f2;
@@ -79,6 +80,7 @@
   --cb-ring: color-mix(in srgb, var(--cb-accent) 35%, transparent);
 
   --cb-success: #75e0a7;
+  --cb-info: #53b1fd;
   --cb-success-soft: #0c2a1d;
   --cb-danger: #fda29b;
   --cb-danger-soft: #3a1512;
@@ -128,6 +130,7 @@
   --color-accent-ink: var(--cb-accent-ink);
   --color-on-accent: var(--cb-on-accent);
   --color-success: var(--cb-success);
+  --color-info: var(--cb-info);
   --color-success-soft: var(--cb-success-soft);
   --color-danger: var(--cb-danger);
   --color-danger-soft: var(--cb-danger-soft);
@@ -224,6 +227,11 @@
   }
   .scroll-row { display: grid; grid-auto-flow: column; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory; padding-block: 4px 12px; margin-block: -4px -12px; scrollbar-width: thin; }
   .scroll-row > * { scroll-snap-align: start; }
+  /* Single-line chip/tile rail: scrolls sideways (swipe, trackpad, or the rail's arrow buttons) without a visible scrollbar. */
+  .rail { display: flex; gap: 8px; overflow-x: auto; scroll-behavior: smooth; scrollbar-width: none; overscroll-behavior-x: contain; }
+  .rail::-webkit-scrollbar { display: none; }
+  .rail > * { flex-shrink: 0; }
+  @media (prefers-reduced-motion: reduce) { .rail { scroll-behavior: auto; } }
   .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 }

@@ -698,6 +698,40 @@ IF COL_LENGTH('dbo.Areas', 'ExternalRef') IS NULL    ALTER TABLE dbo.Areas ADD E
 IF COL_LENGTH('dbo.Areas', 'LastVerifiedOn') IS NULL ALTER TABLE dbo.Areas ADD LastVerifiedOn datetimeoffset NULL;
 IF COL_LENGTH('dbo.Cities', 'AreasDiscoveredOn') IS NULL ALTER TABLE dbo.Cities ADD AreasDiscoveredOn datetimeoffset NULL;
 IF COL_LENGTH('dbo.Cities', 'AreaDiscoveryNote') IS NULL ALTER TABLE dbo.Cities ADD AreaDiscoveryNote nvarchar(400) NULL;
+-- Other names people search with, '|' separated ("Bangalore" for Bengaluru); seeded by 19_CityAltNames.sql.
+IF COL_LENGTH('dbo.Cities', 'AltNames') IS NULL          ALTER TABLE dbo.Cities ADD AltNames nvarchar(400) NULL;
+GO
+
+/* ---------- Country city catalogue (filled by the city catalogue agent from GeoNames) ----------
+   States.CountryCode : ISO 3166-1 alpha-2; existing (curated) states are Indian.
+   Cities.Source      : NULL for curated cities, 'geonames' for cities the agent imported.
+   Cities.ExternalRef : the GeoNames id ("geonames:1269843"), also set on curated cities the agent matched.
+   CountryCatalogs    : one row per country whose cities have been imported (when, how many, notes). */
+IF COL_LENGTH('dbo.States', 'CountryCode') IS NULL ALTER TABLE dbo.States ADD CountryCode nvarchar(2) NOT NULL CONSTRAINT DF_States_CountryCode DEFAULT (N'IN');
+IF COL_LENGTH('dbo.States', 'ExternalRef') IS NULL ALTER TABLE dbo.States ADD ExternalRef nvarchar(40) NULL;
+IF COL_LENGTH('dbo.Cities', 'Source') IS NULL      ALTER TABLE dbo.Cities ADD Source nvarchar(40) NULL;
+IF COL_LENGTH('dbo.Cities', 'ExternalRef') IS NULL ALTER TABLE dbo.Cities ADD ExternalRef nvarchar(40) NULL;
+IF COL_LENGTH('dbo.Cities', 'Population') IS NULL  ALTER TABLE dbo.Cities ADD Population int NULL;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_States_CountryCode' AND object_id = OBJECT_ID('dbo.States'))
+    CREATE INDEX IX_States_CountryCode ON dbo.States (CountryCode) INCLUDE (Name);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Cities_ExternalRef' AND object_id = OBJECT_ID('dbo.Cities'))
+    CREATE INDEX IX_Cities_ExternalRef ON dbo.Cities (ExternalRef) WHERE ExternalRef IS NOT NULL;
+IF OBJECT_ID('dbo.CountryCatalogs', 'U') IS NULL
+CREATE TABLE dbo.CountryCatalogs (
+    CountryCode nvarchar(2)    NOT NULL CONSTRAINT PK_CountryCatalogs PRIMARY KEY,
+    CountryName nvarchar(120)  NOT NULL,
+    Source      nvarchar(40)   NOT NULL CONSTRAINT DF_CountryCatalogs_Source DEFAULT (N'geonames'),
+    StateCount  int            NOT NULL CONSTRAINT DF_CountryCatalogs_StateCount DEFAULT (0),
+    CityCount   int            NOT NULL CONSTRAINT DF_CountryCatalogs_CityCount DEFAULT (0),
+    ImportedOn  datetimeoffset NULL,
+    Note        nvarchar(400)  NULL,
+    CreatedBy   nvarchar(450)  NULL,
+    CreatedOn   datetimeoffset NOT NULL CONSTRAINT DF_CountryCatalogs_CreatedOn DEFAULT (SYSDATETIMEOFFSET()),
+    ModifiedBy  nvarchar(450)  NULL,
+    ModifiedOn  datetimeoffset NULL,
+    IsDeleted   bit            NOT NULL CONSTRAINT DF_CountryCatalogs_IsDeleted DEFAULT (0)
+);
 GO
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Areas_City_Parent' AND object_id = OBJECT_ID('dbo.Areas'))
     CREATE INDEX IX_Areas_City_Parent ON dbo.Areas (CityId, ParentAreaId) INCLUDE (Name, Pincode, IsActive) WHERE IsDeleted = 0;

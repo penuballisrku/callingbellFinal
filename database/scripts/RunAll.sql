@@ -32,3 +32,4 @@
 :r $(ScriptDir)\16_PopularServices.sql
 :r $(ScriptDir)\17_HomeContent.sql
 :r $(ScriptDir)\18_ExternalSearch.sql
+:r $(ScriptDir)\19_CityAltNames.sql

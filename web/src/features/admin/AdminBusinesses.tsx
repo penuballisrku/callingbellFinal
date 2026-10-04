@@ -9,7 +9,8 @@ import OpenInNewRounded from '@mui/icons-material/OpenInNewRounded';
 import { useSnackbar } from 'notistack';
 import { api, errorMessage } from '@/lib/api';
 import { ago, date, dateTime, hhmm, money, moneyExact, number } from '@/lib/format';
-import { useCategories, useCities, useDebounced, useDocumentTitle, useLookup } from '@/lib/hooks';
+import { useCategories, useDebounced, useDocumentTitle, useLookup } from '@/lib/hooks';
+import { CityAutocomplete } from '@/components/CityAutocomplete';
 import type { AdminBusinessDetail as Detail, AdminBusinessRow, Plan } from '@/lib/types';
 import { AvailabilityBadge, ConfirmDialog, EmptyState, ErrorState, Img, PageHeader, Panel, Rating, StatusBadge, Stars } from '@/components/ui';
 import { useGridTheme, useResponsiveColumns } from '@/components/grid';
@@ -27,7 +28,6 @@ export function AdminBusinesses() {
   const statuses = useLookup('BusinessStatus');
   const verifications = useLookup('VerificationStatus');
   const { data: categories } = useCategories();
-  const { data: cities } = useCities();
   const { data: plans } = useQuery({ queryKey: ['plans'], queryFn: () => api.get<Plan[]>('/api/plans'), staleTime: 600_000 });
 
   const filters = {
@@ -88,9 +88,7 @@ export function AdminBusinesses() {
         <TextField select value={categories ? filters.category : ''} onChange={(e) => set({ category: e.target.value })} slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Category' } }}>
           <MenuItem value="">All categories</MenuItem>{categories?.map((c) => <MenuItem key={c.slug} value={c.slug}>{c.name}</MenuItem>)}
         </TextField>
-        <TextField select value={cities ? filters.city : ''} onChange={(e) => set({ city: e.target.value })} slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'City' } }}>
-          <MenuItem value="">All cities</MenuItem>{cities?.map((c) => <MenuItem key={c.slug} value={c.slug}>{c.name}</MenuItem>)}
-        </TextField>
+        <CityAutocomplete value={filters.city || null} onChange={(slug) => set({ city: slug ?? '' })} placeholder="All cities" size="medium" />
         <TextField select value={verifications.length ? filters.verification : ''} onChange={(e) => set({ verification: e.target.value })} slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Verification' } }}>
           <MenuItem value="">Any verification</MenuItem>{verifications.map((v) => <MenuItem key={v.code} value={v.code}>{v.name}</MenuItem>)}
         </TextField>

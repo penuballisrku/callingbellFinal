@@ -8,6 +8,7 @@ import VisibilityOutlined from '@mui/icons-material/VisibilityOutlined';
 import VisibilityOffOutlined from '@mui/icons-material/VisibilityOffOutlined';
 import { api, errorMessage } from '@/lib/api';
 import { useDocumentTitle } from '@/lib/hooks';
+import { useNetworkTagline } from '@/components/VisitorCountry';
 import { homeFor, useAuth } from '@/stores/auth';
 import type { AuthResult } from '@/lib/types';
 import { GoogleSignInButton } from './GoogleSignInButton';
@@ -72,12 +73,13 @@ export default function LoginPage() {
 }
 
 export function AuthShell({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
+  const tagline = useNetworkTagline();
   return (
     <div className="container-page grid gap-10 py-10 md:py-16 lg:grid-cols-2 lg:items-center">
       <div className="hidden lg:block">
         <div className="rounded-2xl bg-navy p-10 text-white">
           <p className="text-sm font-semibold uppercase tracking-[0.12em] text-accent">Calling Bell</p>
-          <h2 className="mt-3 text-3xl font-bold leading-tight">India's real-time local business network.</h2>
+          <h2 className="mt-3 text-3xl font-bold leading-tight">{tagline}</h2>
           <ul className="mt-6 space-y-3 text-[15px] text-on-navy-muted">
             <li>• See who's available right now - call, chat or book instantly</li>
             <li>• Verified professionals with genuine customer reviews</li>

@@ -55,7 +55,8 @@ public sealed class GetMarketingPageHandler(IUnitOfWork uow) : IRequestHandler<G
         var stats = new BusinessGrowthStatsDto(
             await listed.CountAsync(ct),
             await listed.CountAsync(b => b.VerificationStatus == VerificationStatuses.Verified, ct),
-            await uow.Repository<City>().QueryNoTracking().CountAsync(c => c.IsActive, ct),
+            // Cities Calling Bell operates in (curated), not every city in the imported country catalogue.
+            await uow.Repository<City>().QueryNoTracking().CountAsync(c => c.IsActive && c.Source == null, ct),
             await uow.Repository<SubCategory>().QueryNoTracking().CountAsync(s => s.IsActive, ct),
             await uow.Repository<Enquiry>().QueryNoTracking().CountAsync(e => e.CreatedOn >= since, ct),
             await uow.Repository<Booking>().QueryNoTracking().CountAsync(b => b.Status == BookingStatuses.Completed, ct),

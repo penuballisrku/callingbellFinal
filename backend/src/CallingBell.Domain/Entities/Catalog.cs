@@ -7,6 +7,10 @@ public class State : AuditableEntity
     public string Name { get; set; } = string.Empty;
     public string Code { get; set; } = string.Empty;
     public string Slug { get; set; } = string.Empty;
+    /// <summary>ISO 3166-1 alpha-2 country code.</summary>
+    public string CountryCode { get; set; } = "IN";
+    /// <summary>Source record, e.g. the GeoNames admin code "IN.40".</summary>
+    public string? ExternalRef { get; set; }
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
 
@@ -21,6 +25,13 @@ public class City : AuditableEntity
     public decimal? Latitude { get; set; }
     public decimal? Longitude { get; set; }
     public string? ImageUrl { get; set; }
+    /// <summary>Other names people search with, '|' separated, e.g. "Bangalore" for Bengaluru.</summary>
+    public string? AltNames { get; set; }
+    /// <summary>Null for curated cities; "geonames" for cities imported by the city catalogue agent.</summary>
+    public string? Source { get; set; }
+    /// <summary>Source record, e.g. "geonames:1269843" (also set on curated cities the agent matched).</summary>
+    public string? ExternalRef { get; set; }
+    public int? Population { get; set; }
     public bool IsPopular { get; set; }
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
@@ -117,6 +128,24 @@ public class PopularService : AuditableEntity
     public bool IsActive { get; set; } = true;
 
     public SubCategory SubCategory { get; set; } = null!;
+}
+
+/// <summary>A country whose cities the city catalogue agent has imported (from GeoNames) into <see cref="State"/> and <see cref="City"/>.</summary>
+public class CountryCatalog : ISoftDeletable
+{
+    public string CountryCode { get; set; } = string.Empty;
+    public string CountryName { get; set; } = string.Empty;
+    public string Source { get; set; } = "geonames";
+    public int StateCount { get; set; }
+    public int CityCount { get; set; }
+    /// <summary>When the last import completed; null while the first one hasn't.</summary>
+    public DateTimeOffset? ImportedOn { get; set; }
+    public string? Note { get; set; }
+    public string? CreatedBy { get; set; }
+    public DateTimeOffset CreatedOn { get; set; }
+    public string? ModifiedBy { get; set; }
+    public DateTimeOffset? ModifiedOn { get; set; }
+    public bool IsDeleted { get; set; }
 }
 
 /// <summary>Generic, database-driven lookup list (statuses, types) with display metadata.</summary>

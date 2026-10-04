@@ -31,6 +31,7 @@ public sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger, IHo
             ForbiddenAccessException f => (context.User.Identity?.IsAuthenticated == true ? StatusCodes.Status403Forbidden : StatusCodes.Status401Unauthorized,
                 ApiResponse.Fail(f.Message)),
             ConflictException c => (StatusCodes.Status409Conflict, ApiResponse.Fail(c.Message)),
+            ExternalServiceException e => (e.StatusCode, ApiResponse.Fail(e.Message)),
             OperationCanceledException => (499, ApiResponse.Fail("The request was cancelled.")),
             _ => (StatusCodes.Status500InternalServerError, ApiResponse.Fail(environment.IsDevelopment()
                 ? exception.Message

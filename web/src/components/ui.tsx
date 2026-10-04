@@ -116,11 +116,11 @@ export function PageHeader({ title, subtitle, actions, crumbs }: {
   );
 }
 
-export function SectionHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
+export function SectionHeader({ title, subtitle, action, id }: { title: string; subtitle?: string; action?: ReactNode; /** Heading id, for the section's aria-labelledby. */ id?: string }) {
   return (
     <div className="mb-5 flex items-end justify-between gap-4">
       <div className="min-w-0">
-        <h2 className="text-xl font-bold tracking-[-0.02em] md:text-[26px] md:leading-tight">{title}</h2>
+        <h2 id={id} className="text-xl font-bold tracking-[-0.02em] md:text-[26px] md:leading-tight">{title}</h2>
         {subtitle && <p className="mt-1 text-sm text-muted md:text-[15px]">{subtitle}</p>}
       </div>
       {action && <div className="shrink-0 text-ink-2 [&_a]:rounded-md [&_a]:transition-colors [&_a:hover]:text-accent-ink">{action}</div>}

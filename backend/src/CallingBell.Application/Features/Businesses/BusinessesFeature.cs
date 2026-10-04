@@ -59,8 +59,11 @@ public sealed class SearchBusinessesHandler(IUnitOfWork uow) : IRequestHandler<S
         var citySlug = r.City;
         if (text.Contains("open now", StringComparison.OrdinalIgnoreCase)) { openNow = true; text = text.Replace("open now", " ", StringComparison.OrdinalIgnoreCase); }
 
-        var cities = await uow.Repository<City>().QueryNoTracking().Where(c => c.IsActive)
-            .Select(c => new { c.Id, c.Name, c.Slug, c.Latitude, c.Longitude }).ToListAsync(ct);
+        // Only cities where businesses are listed (and curated ones): with the whole country imported, single words such as "Una" or
+        // "Mau" are also town names and must not silently become the city filter. Typed places ("in Nellore") are parsed separately.
+        var listedCityIds = uow.Repository<Business>().QueryNoTracking().Listed().Select(b => b.CityId);
+        var textCities = await uow.Repository<City>().QueryNoTracking().Where(c => c.IsActive && (c.Source == null || listedCityIds.Contains(c.Id)))
+            .Select(c => new { c.Id, c.Slug, c.Name }).ToListAsync(ct);
 
         var terms = new List<string>();
         foreach (var token in text.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
@@ -70,7 +73,7 @@ public sealed class SearchBusinessesHandler(IUnitOfWork uow) : IRequestHandler<S
                 availability ??= "now";
                 continue;
             }
-            var cityMatch = cities.FirstOrDefault(c => c.Slug.Equals(token, StringComparison.OrdinalIgnoreCase) || c.Name.Equals(token, StringComparison.OrdinalIgnoreCase));
+            var cityMatch = textCities.FirstOrDefault(c => c.Slug.Equals(token, StringComparison.OrdinalIgnoreCase) || c.Name.Equals(token, StringComparison.OrdinalIgnoreCase));
             if (cityMatch is not null && citySlug is null) { citySlug = cityMatch.Slug; continue; }
             if (!StopWords.Contains(token)) terms.Add(token);
         }
@@ -96,9 +99,12 @@ public sealed class SearchBusinessesHandler(IUnitOfWork uow) : IRequestHandler<S
             var area = await uow.Repository<Area>().QueryNoTracking().Where(a => a.Id == areaId)
                 .Select(a => new { a.Name, a.Latitude, a.Longitude, a.CityId }).FirstOrDefaultAsync(ct);
             (areaName, areaLat, areaLng) = (area?.Name, area?.Latitude, area?.Longitude);
-            if (area is not null && citySlug is null) citySlug = cities.FirstOrDefault(c => c.Id == area.CityId)?.Slug;
+            if (area is not null && citySlug is null)
+                citySlug = await uow.Repository<City>().QueryNoTracking().Where(c => c.Id == area.CityId).Select(c => c.Slug).FirstOrDefaultAsync(ct);
         }
-        var city = citySlug is null ? null : cities.FirstOrDefault(c => c.Slug == citySlug);
+        // Any active city of the catalogue (the dropdowns offer the whole country), not only the ones with listings.
+        var city = citySlug is null ? null : await uow.Repository<City>().QueryNoTracking().Where(c => c.IsActive && c.Slug == citySlug)
+            .Select(c => new { c.Id, c.Name, c.Slug, c.Latitude, c.Longitude }).FirstOrDefaultAsync(ct);
         if (city is not null)
         {
             cityName = city.Name;

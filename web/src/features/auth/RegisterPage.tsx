@@ -3,9 +3,10 @@ import { Link, Navigate, useNavigate, useSearchParams } from 'react-router';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Alert, Button, MenuItem, TextField, ToggleButton, ToggleButtonGroup } from '@mui/material';
+import { Alert, Button, TextField, ToggleButton, ToggleButtonGroup } from '@mui/material';
 import { ApiError, api, errorMessage } from '@/lib/api';
-import { useCities, useDocumentTitle } from '@/lib/hooks';
+import { useDocumentTitle } from '@/lib/hooks';
+import { CityAutocomplete } from '@/components/CityAutocomplete';
 import { homeFor, isOwner, useAuth } from '@/stores/auth';
 import { EmptyState } from '@/components/ui';
 import BusinessWizard from '@/features/onboarding/BusinessWizard';
@@ -45,7 +46,6 @@ function CustomerRegister() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const setSession = useAuth((s) => s.setSession);
-  const { data: cities } = useCities();
   const [error, setError] = useState<string | null>(null);
   const { register, control, handleSubmit, setError: setFieldError, watch, formState: { errors, isSubmitting } } = useForm<Form>({
     resolver: zodResolver(schema),
@@ -82,10 +82,8 @@ function CustomerRegister() {
         <TextField label="Email" type="email" autoComplete="email" {...register('email')} error={!!errors.email} helperText={errors.email?.message} />
         <TextField label="Mobile number" autoComplete="tel" placeholder="98765 43210" {...register('phoneNumber')} error={!!errors.phoneNumber} helperText={errors.phoneNumber?.message} />
         <Controller control={control} name="citySlug" render={({ field }) => (
-          <TextField select label="City" {...field}>
-            <MenuItem value="">Select later</MenuItem>
-            {cities?.map((c) => <MenuItem key={c.slug} value={c.slug}>{c.name}</MenuItem>)}
-          </TextField>
+          <CityAutocomplete value={field.value || null} onChange={(slug) => field.onChange(slug ?? '')} label="City" placeholder="Search your city"
+            size="medium" helperText="Optional. You can choose it later." />
         )} />
         <TextField label="Password" type="password" autoComplete="new-password" {...register('password')} error={!!errors.password}
           helperText={errors.password?.message ?? 'At least 8 characters with upper, lower case and a number'} />

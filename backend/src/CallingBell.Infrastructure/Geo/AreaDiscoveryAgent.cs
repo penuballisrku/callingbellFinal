@@ -25,6 +25,11 @@ public sealed class AreaDiscoveryOptions
     /// <summary>OpenStreetMap places are collected within this radius of the city centre.</summary>
     public int RadiusKm { get; set; } = 20;
     public string OverpassUrl { get; set; } = "https://overpass-api.de/api/interpreter";
+    /// <summary>Further public Overpass servers, tried in turn when one is overloaded (they often answer 504 when busy).</summary>
+    public string[] FallbackOverpassUrls { get; set; } =
+        ["https://overpass.private.coffee/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
+    /// <summary>After a failed run, requests for the city are ignored for this long so the free sources aren't hammered.</summary>
+    public int RetryAfterMinutes { get; set; } = 15;
     /// <summary>India Post post-office directory (free, no key).</summary>
     public string IndiaPostUrl { get; set; } = "https://api.postalpincode.in/postoffice/";
     /// <summary>OpenStreetMap Nominatim reverse geocoding, used for PIN codes India Post can't confirm (max 1 request/second).</summary>
@@ -46,18 +51,23 @@ internal sealed class AreaDiscoveryQueue(IOptions<AreaDiscoveryOptions> options)
 {
     private readonly Channel<Guid> _cities = Channel.CreateBounded<Guid>(new BoundedChannelOptions(50) { FullMode = BoundedChannelFullMode.DropWrite });
     private readonly ConcurrentDictionary<Guid, byte> _pending = new();
+    private readonly ConcurrentDictionary<Guid, DateTimeOffset> _failedUntil = new();
 
     internal ChannelReader<Guid> Reader => _cities.Reader;
 
     public void Request(Guid cityId)
     {
         if (!options.Value.Enabled) return;
+        // A run for this city failed recently (sources unreachable): wait before trying again.
+        if (_failedUntil.TryGetValue(cityId, out var until) && until > DateTimeOffset.UtcNow) return;
         if (_pending.TryAdd(cityId, 0) && !_cities.Writer.TryWrite(cityId)) _pending.TryRemove(cityId, out _);
     }
 
     public bool IsRunning(Guid cityId) => _pending.ContainsKey(cityId);
 
     internal void Done(Guid cityId) => _pending.TryRemove(cityId, out _);
+
+    internal void Failed(Guid cityId) => _failedUntil[cityId] = DateTimeOffset.UtcNow.AddMinutes(options.Value.RetryAfterMinutes);
 }
 
 internal sealed class AreaDiscoveryWorker(AreaDiscoveryQueue queue, IServiceScopeFactory scopes, ILogger<AreaDiscoveryWorker> logger) : BackgroundService
@@ -76,6 +86,7 @@ internal sealed class AreaDiscoveryWorker(AreaDiscoveryQueue queue, IServiceScop
                 catch (Exception ex) when (ex is not OperationCanceledException || !stoppingToken.IsCancellationRequested)
                 {
                     logger.LogWarning(ex, "Area discovery failed for city {CityId}", cityId);
+                    queue.Failed(cityId);
                 }
                 finally
                 {
@@ -274,23 +285,53 @@ internal sealed class AreaDiscoveryRun(
 
     private async Task<List<Candidate>> OverpassAsync(double lat, double lng, int radiusM, CancellationToken ct)
     {
-        var around = string.Create(CultureInfo.InvariantCulture, $"(around:{radiusM},{lat},{lng})");
-        var query = "[out:json][timeout:90];(" +
-                    $"node{around}[\"place\"~\"^(suburb|quarter|neighbourhood|locality|town|village)$\"][\"name\"];" +
-                    $"way{around}[\"place\"~\"^(suburb|quarter|neighbourhood|town|village)$\"][\"name\"];" +
-                    $"relation{around}[\"place\"~\"^(suburb|quarter|neighbourhood|town|village)$\"][\"name\"];" +
+        // A global bounding box is far cheaper for the public Overpass servers than "around" filters (which busy servers time out on);
+        // places in the box's corners, outside the radius, are dropped below.
+        var dLat = radiusM / 111_320.0;
+        var dLng = dLat / Math.Cos(lat * Math.PI / 180);
+        var bbox = string.Create(CultureInfo.InvariantCulture, $"{lat - dLat:0.#####},{lng - dLng:0.#####},{lat + dLat:0.#####},{lng + dLng:0.#####}");
+        var query = $"[out:json][timeout:90][bbox:{bbox}];(" +
+                    "node[\"place\"~\"^(suburb|quarter|neighbourhood|locality|town|village)$\"][\"name\"];" +
+                    "way[\"place\"~\"^(suburb|quarter|neighbourhood|town|village)$\"][\"name\"];" +
+                    "relation[\"place\"~\"^(suburb|quarter|neighbourhood|town|village)$\"][\"name\"];" +
                     ");out center tags;";
-        using var content = new FormUrlEncodedContent([new KeyValuePair<string, string>("data", query)]);
-        using var response = await Client().PostAsync(options.Value.OverpassUrl, content, ct);
-        response.EnsureSuccessStatusCode();
-        var result = await response.Content.ReadFromJsonAsync<OverpassResult>(Json, ct);
+        // Public servers are often overloaded (504/429, or a "runtime error" remark): try the next one.
+        OverpassResult? result = null;
+        Exception? lastError = null;
+        foreach (var url in options.Value.FallbackOverpassUrls.Prepend(options.Value.OverpassUrl).Where(u => !string.IsNullOrWhiteSpace(u)).Distinct())
+        {
+            try
+            {
+                using var content = new FormUrlEncodedContent([new KeyValuePair<string, string>("data", query)]);
+                using var response = await Client().PostAsync(url, content, ct);
+                if ((int)response.StatusCode == 429 || (int)response.StatusCode >= 500)
+                {
+                    lastError = new HttpRequestException($"{url} answered {(int)response.StatusCode}");
+                    continue;
+                }
+                response.EnsureSuccessStatusCode();
+                var answer = await response.Content.ReadFromJsonAsync<OverpassResult>(Json, ct);
+                if (answer?.Remark?.Contains("error", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    lastError = new HttpRequestException($"{url}: {answer.Remark}");
+                    continue;
+                }
+                result = answer;
+                break;
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
+            {
+                lastError = ex;
+            }
+        }
+        if (result is null) throw lastError ?? new HttpRequestException("No Overpass server answered.");
 
         var list = new List<Candidate>();
         foreach (var e in result?.Elements ?? [])
         {
             if (e.Tags is null || !e.Tags.TryGetValue("place", out var place)) continue;
             var (elat, elng) = e.Lat is { } la && e.Lon is { } lo ? (la, lo) : e.Center is { } c ? (c.Lat, c.Lon) : (double.NaN, double.NaN);
-            if (double.IsNaN(elat)) continue;
+            if (double.IsNaN(elat) || GeoMath.HaversineKm(lat, lng, elat, elng) * 1000 > radiusM) continue;
             var name = CleanName(Latin(e.Tags.GetValueOrDefault("name:en")) ?? Latin(e.Tags.GetValueOrDefault("name")));
             if (name is null || NotALocality.IsMatch(name)) continue;
             var cand = new Candidate
@@ -520,7 +561,7 @@ internal sealed class AreaDiscoveryRun(
 
     private static string Trim(string s, int max) => s.Length <= max ? s : s[..(max - 1)] + "…";
 
-    private sealed record OverpassResult(List<OverpassElement>? Elements);
+    private sealed record OverpassResult(List<OverpassElement>? Elements, string? Remark);
     private sealed record OverpassElement(string Type, long Id, double? Lat, double? Lon, OverpassCenter? Center, Dictionary<string, string>? Tags);
     private sealed record OverpassCenter(double Lat, double Lon);
     private sealed record IndiaPostResult(string? Status, List<IndiaPostOffice>? PostOffice);

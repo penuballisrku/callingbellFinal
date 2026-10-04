@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Tooltip } from '@mui/material';
 import { api } from '@/lib/api';
-import { useCities } from '@/lib/hooks';
+import { useCities, useCityAreas } from '@/lib/hooks';
 import { useCity } from '@/stores/city';
 
 interface VisitorCountry { countryCode: string; source: 'cdn' | 'geoip' | 'default' }
@@ -20,6 +20,19 @@ export function useVisitorCountry() {
     staleTime: Infinity,
     retry: false,
   });
+}
+
+/** The visitor's country name (e.g. "India") from their IP address; null until detected. */
+export function useVisitorCountryName(): string | null {
+  const { data } = useVisitorCountry();
+  return data?.countryCode ? countryName(data.countryCode) : null;
+}
+
+/** "India's real-time local business network." for the visitor's country (from their IP); neutral wording until it is known. */
+export function useNetworkTagline(): string {
+  const country = useVisitorCountryName();
+  // Possessive: "India's", but "United States'" for names ending in s.
+  return country ? `${country}${/s$/i.test(country) ? "'" : "'s"} real-time local business network.` : 'The real-time local business network.';
 }
 
 /**
@@ -62,9 +75,13 @@ export function useDistrictAutoSelect() {
   const { data: district } = useVisitorDistrict();
   const { data: cities } = useCities();
   const applyDetected = useCity((s) => s.applyDetected);
+  const city = district ? cities?.find((c) => c.slug === district.citySlug) : undefined;
+  const inlineArea = city?.areas.find((a) => a.slug === district?.areaSlug);
+  // Cities outside the curated list carry no areas in the cities payload: look the area up in the city's full area list.
+  const fetched = useCityAreas(city && district?.areaSlug && !inlineArea ? city.slug : null);
   useEffect(() => {
-    const city = district && cities?.find((c) => c.slug === district.citySlug);
     if (!city) return;
-    applyDetected(city.slug, city.areas.find((a) => a.slug === district.areaSlug)?.id ?? null);
-  }, [district, cities, applyDetected]);
+    if (district?.areaSlug && !inlineArea && fetched.isLoading) return;
+    applyDetected(city.slug, (inlineArea ?? fetched.areas.find((a) => a.slug === district?.areaSlug))?.id ?? null);
+  }, [city, district, inlineArea, fetched.isLoading, fetched.areas, applyDetected]);
 }

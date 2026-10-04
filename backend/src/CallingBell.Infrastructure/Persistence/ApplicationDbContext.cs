@@ -14,6 +14,12 @@ namespace CallingBell.Infrastructure.Persistence;
 public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
     : IdentityDbContext<ApplicationUser, IdentityRole, string>(options)
 {
+    /// <summary>
+    /// Set by background agents that write many rows at once (e.g. importing a country's cities): no per-row AuditLog entries, and the
+    /// agent's own ModifiedBy is kept. The agent writes one summary AuditLog entry itself.
+    /// </summary>
+    public bool SuppressAuditLog { get; set; }
+
     public DbSet<State> States => Set<State>();
     public DbSet<City> Cities => Set<City>();
     public DbSet<Area> Areas => Set<Area>();
@@ -22,6 +28,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<PopularService> PopularServices => Set<PopularService>();
     public DbSet<LookupValue> LookupValues => Set<LookupValue>();
     public DbSet<Media> Media => Set<Media>();
+    public DbSet<CountryCatalog> CountryCatalogs => Set<CountryCatalog>();
     public DbSet<Business> Businesses => Set<Business>();
     public DbSet<BusinessService> BusinessServices => Set<BusinessService>();
     public DbSet<BusinessHour> BusinessHours => Set<BusinessHour>();

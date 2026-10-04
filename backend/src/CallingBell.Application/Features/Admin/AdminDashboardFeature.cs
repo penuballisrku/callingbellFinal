@@ -128,7 +128,7 @@ public sealed class GetAdminDashboardHandler(IUnitOfWork uow) : IRequestHandler<
             .ToListAsync(ct)).OrderByDescending(d => d.Count).ToList();
         var cities = (await uow.Repository<City>().QueryNoTracking().Where(c => c.IsActive)
             .Select(c => new DistributionDto(c.Slug, c.Name, listed.Count(b => b.CityId == c.Id), null, null))
-            .ToListAsync(ct)).OrderByDescending(d => d.Count).ToList();
+            .ToListAsync(ct)).Where(d => d.Count > 0).OrderByDescending(d => d.Count).ToList(); // the catalogue has every city of the country
         var subscriptionRows = await subs.GroupBy(s => new { s.Plan.Code, s.Plan.Name, s.Plan.SortOrder, s.Plan.BadgeColor })
             .Select(g => new
             {

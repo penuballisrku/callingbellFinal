@@ -67,6 +67,14 @@ public static class DependencyInjection
         services.AddScoped<AreaDiscoveryRun>();
         services.AddHostedService<AreaDiscoveryWorker>();
 
+        // City catalogue agent: every city and town of the visitor's country from GeoNames (free), imported in the background.
+        services.Configure<CityCatalogOptions>(configuration.GetSection(CityCatalogOptions.Section));
+        services.AddHttpClient(CityCatalogRun.HttpClientName, c => c.Timeout = TimeSpan.FromMinutes(5));
+        services.AddSingleton<CityCatalogQueue>();
+        services.AddSingleton<ICountryCatalogService>(sp => sp.GetRequiredService<CityCatalogQueue>());
+        services.AddScoped<CityCatalogRun>();
+        services.AddHostedService<CityCatalogWorker>();
+
         // AI enrichment with a free local Ollama model. All jobs share one background worker and never run inside a request.
         services.Configure<AiOptions>(configuration.GetSection(AiOptions.Section));
         services.AddHttpClient(OllamaChatClient.HttpClientName, c => c.Timeout = Timeout.InfiniteTimeSpan); // per-call timeout from AiOptions
@@ -87,6 +95,8 @@ public static class DependencyInjection
         services.AddMemoryCache();
         services.AddSingleton<IOsmPlaceSearch, OsmPlaceSearch>();
         services.AddSingleton<IGooglePlacesSearch, GooglePlacesSearch>();
+        services.AddHttpClient(PhotonPlaceGeocoder.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(8));
+        services.AddSingleton<IPlaceGeocoder, PhotonPlaceGeocoder>();
 
         services.Configure<RazorpayOptions>(configuration.GetSection(RazorpayOptions.Section));
         services.AddHttpClient<IPaymentGateway, RazorpayGateway>(c => c.Timeout = TimeSpan.FromSeconds(20));

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Button, Skeleton, Tooltip } from '@mui/material';
+import { Button, CircularProgress, Skeleton, Tab, Tabs, Tooltip, useMediaQuery, type Theme } from '@mui/material';
 import AutoAwesomeRounded from '@mui/icons-material/AutoAwesomeRounded';
 import MapRounded from '@mui/icons-material/MapRounded';
 import VerifiedRounded from '@mui/icons-material/VerifiedRounded';
@@ -13,107 +13,184 @@ import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import { api } from '@/lib/api';
 import { initials, number } from '@/lib/format';
 import type { ExternalPlace, ExternalSearch, ExternalTier } from '@/lib/types';
-import { Rating } from '@/components/ui';
+import { Img, Rating } from '@/components/ui';
 
 const PAGE = 8;
 
-export interface ExternalSearchParams { q?: string | null; category?: string | null; sub?: string | null; city?: string | null; areaId?: string | null }
+/** `place`: a place typed in the search that isn't a listed city or area ("lawyers in Nellore"); results are near it instead. */
+export interface ExternalSearchParams { q?: string | null; category?: string | null; sub?: string | null; city?: string | null; areaId?: string | null; place?: string | null }
 
 /**
- * Results beyond the platform for the current search: AI-recommended real places from OpenStreetMap, then Google Maps businesses.
- * Polls while the local AI is still picking places.
+ * Results beyond the platform for the current search, after the registered businesses: Google Maps businesses, then AI-recommended real
+ * places from OpenStreetMap. Polls while the local AI is still picking places or OpenStreetMap is still being searched.
  */
 export function useExternalSearch(p: ExternalSearchParams) {
   const enabled = !!(p.q?.trim() || p.category || p.sub);
   return useQuery({
-    queryKey: ['external-search', p.q ?? '', p.category ?? '', p.sub ?? '', p.city ?? '', p.areaId ?? ''],
-    queryFn: () => api.get<ExternalSearch>('/api/geo/external-search', { q: p.q, category: p.category, sub: p.sub, city: p.city, area: p.areaId }),
+    queryKey: ['external-search', p.q ?? '', p.category ?? '', p.sub ?? '', p.city ?? '', p.areaId ?? '', p.place ?? ''],
+    queryFn: () => api.get<ExternalSearch>('/api/geo/external-search', { q: p.q, category: p.category, sub: p.sub, city: p.city, area: p.areaId, place: p.place }),
     enabled,
     staleTime: 300_000,
     retry: 1,
-    refetchInterval: (q) => (q.state.data?.ai.aiStatus === 'pending' && q.state.dataUpdateCount < 40 ? 8_000 : false),
+    // Poll while the AI is ranking or the full OpenStreetMap search is still finishing (about five minutes at most).
+    refetchInterval: (q) => ((q.state.data?.ai.aiStatus === 'pending' || q.state.data?.ai.searching) && q.state.dataUpdateCount < 40 ? 8_000 : false),
   });
 }
 
-/** Result count per source, in priority order. */
-export function SourceSummary({ dbCount, ext, loading }: { dbCount?: number; ext?: ExternalSearch; loading: boolean }) {
-  const tierText = (t?: ExternalTier) =>
-    !t ? (loading ? 'Searching…' : '–')
-      : t.status === 'off' ? 'Not enabled'
-        : t.status === 'unavailable' ? 'Unavailable'
+/** Search priority: registered businesses from our database, then Google Maps, then places picked by the free AI agents. */
+export const SOURCE_PRIORITY = { db: 1, google: 2, ai: 3 } as const;
+
+export type ResultSource = keyof typeof SOURCE_PRIORITY;
+
+/** Tab id/panel id pairs, so each tab names the panel it controls. */
+export const sourceTabId = (s: ResultSource) => `results-tab-${s}`;
+export const sourcePanelId = (s: ResultSource) => `results-panel-${s}`;
+
+/** One tab per source, in priority order, each with its result count. */
+export function SourceTabs({ value, onChange, dbCount, dbLoading, ext, loading }: {
+  value: ResultSource; onChange: (s: ResultSource) => void; dbCount?: number; dbLoading: boolean; ext?: ExternalSearch; loading: boolean;
+}) {
+  // Phones: three equal tabs with short labels and no icons, so all fit without scrolling.
+  const phone = useMediaQuery((theme: Theme) => theme.breakpoints.down('sm'));
+  const tierCount = (t?: ExternalTier) =>
+    !t ? (loading ? <CircularProgress size={12} aria-label="Searching" /> : '–')
+      : t.status === 'off' ? 'off'
+        : t.status === 'unavailable' && !t.searching ? '!'
           : t.status === 'skipped' ? '–'
-            : number(t.total);
-  const pills = [
-    { key: 'db', icon: <VerifiedRounded sx={{ fontSize: 16 }} className="text-success" />, label: 'Verified businesses', value: dbCount == null ? '…' : number(dbCount) },
-    { key: 'ai', icon: <AutoAwesomeRounded sx={{ fontSize: 16 }} className="text-accent-ink" />, label: 'AI recommended', value: tierText(ext?.ai) },
-    { key: 'google', icon: <MapRounded sx={{ fontSize: 16 }} className="text-info" />, label: 'Google Maps', value: tierText(ext?.google) },
+            : <>{number(t.total)}{(t.searching || t.aiStatus === 'pending') && <CircularProgress size={10} sx={{ ml: 0.75 }} aria-label="Still searching" />}</>;
+
+  const tabs: { key: ResultSource; icon: React.ReactNode; label: string; short: string; count: React.ReactNode }[] = [
+    { key: 'db', icon: <VerifiedRounded sx={{ fontSize: 18 }} className="text-success" />, label: 'Calling Bell', short: 'Calling Bell',
+      count: dbLoading || dbCount == null ? <CircularProgress size={12} aria-label="Loading" /> : number(dbCount) },
+    { key: 'google', icon: <MapRounded sx={{ fontSize: 18 }} className="text-info" />, label: 'Google Maps', short: 'Google', count: tierCount(ext?.google) },
+    { key: 'ai', icon: <AutoAwesomeRounded sx={{ fontSize: 18 }} className="text-accent-ink" />, label: 'AI recommended', short: 'AI', count: tierCount(ext?.ai) },
   ];
   return (
-    <ul className="mb-4 flex flex-wrap gap-2" aria-label="Results by source">
-      {pills.map((p) => (
-        <li key={p.key} className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1 text-[13px]">
-          {p.icon}<span className="text-muted">{p.label}</span><span className="font-semibold tabular">{p.value}</span>
-        </li>
+    <Tabs value={value} onChange={(_, v: ResultSource) => onChange(v)} variant={phone ? 'fullWidth' : 'scrollable'} scrollButtons="auto"
+      aria-label="Results by source, in priority order" sx={{ mb: 3, borderBottom: 1, borderColor: 'divider', minHeight: 48 }}>
+      {tabs.map((t) => (
+        <Tab key={t.key} value={t.key} id={sourceTabId(t.key)} aria-controls={sourcePanelId(t.key)} disableRipple
+          sx={{ textTransform: 'none', minHeight: 48, minWidth: 0, px: { xs: 0.5, sm: 1.5 }, mr: { xs: 0, sm: 1 }, fontWeight: 600, fontSize: { xs: 13, sm: 14 } }}
+          label={
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap sm:gap-2">
+              <span className="hidden sm:contents"><PriorityBadge n={SOURCE_PRIORITY[t.key]} /></span><span className="hidden sm:contents">{t.icon}</span>
+              <span className="hidden sm:inline">{t.label}</span><span className="sm:hidden">{t.short}</span>
+              <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-subtle px-2 py-0.5 text-xs font-semibold text-ink-2 tabular">{t.count}</span>
+            </span>
+          } />
       ))}
-    </ul>
+    </Tabs>
   );
 }
 
-/** "AI Recommended Businesses" and "Google Maps Businesses" sections, shown after the registered businesses. */
-export function ExternalResults({ ext, loading, isError }: { ext?: ExternalSearch; loading: boolean; isError: boolean }) {
+export function PriorityBadge({ n }: { n: number }) {
+  return (
+    <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-subtle text-[11px] font-bold text-ink-2 tabular" aria-label={`Priority ${n}`}>{n}</span>
+  );
+}
+
+/** The "Google Maps Businesses" or "AI Recommended Businesses" tab's content. */
+export function ExternalResults({ ext, loading, isError, only }: { ext?: ExternalSearch; loading: boolean; isError: boolean; only: 'google' | 'ai' }) {
+  const sourceName = only === 'google' ? 'Google Maps' : 'AI recommendations';
   if (loading) {
     return (
-      <section className="mt-8" aria-busy="true">
+      <section aria-busy="true" aria-label={`Searching ${sourceName}`}>
         <Skeleton width={260} height={28} />
         <div className="mt-3 grid gap-3 md:grid-cols-2">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} variant="rounded" height={150} />)}</div>
       </section>
     );
   }
-  if (isError || !ext) return null;
-  const near = ext.placeName ? ` near ${ext.placeName}` : '';
+  if (isError) {
+    return (
+      <div className="card flex items-center gap-2 p-4 text-sm text-muted">
+        <InfoOutlined fontSize="small" />{sourceName} couldn’t be loaded right now. Please try again in a few minutes.
+      </div>
+    );
+  }
+  if (!ext) return null;
+  const where = searchLocation(ext);
+  const what = (ext.query ?? 'businesses').toLowerCase();
+  const tier = only === 'google' ? ext.google : ext.ai;
+  if (tier.status === 'off' || tier.status === 'skipped') {
+    return (
+      <div className="card flex items-center gap-2 p-4 text-sm text-muted">
+        <InfoOutlined fontSize="small" />
+        {tier.status === 'off' ? `${sourceName} results aren’t enabled.`
+          : ext.origin === 'place-not-found' ? 'We couldn’t find that place, so there is nothing to search near.'
+            : 'Search for a service or category to see results here.'}
+      </div>
+    );
+  }
   return (
     <>
-      {ext.ai.status !== 'skipped' && (
-        <TierSection tier={ext.ai} source="ai" title="AI Recommended Businesses"
-          subtitle={ext.ai.aiStatus === 'ranked'
-            ? `Real places${near} from OpenStreetMap, picked for “${ext.query}” by our AI assistant. Not registered on Calling Bell.`
-            : ext.ai.aiStatus === 'pending'
-              ? `Real places${near} from OpenStreetMap, nearest first. Our AI assistant is picking the best matches…`
-              : `Real places${near} from OpenStreetMap, nearest first. Not registered on Calling Bell.`}
-          attribution={<>Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="underline">OpenStreetMap contributors</a></>} />
-      )}
-      {ext.google.status !== 'skipped' && ext.google.status !== 'off' && (
-        <TierSection tier={ext.google} source="google" title="Google Maps Businesses"
-          subtitle={`Businesses${near} listed on Google Maps. Not registered on Calling Bell.`}
+      {only === 'google' && (
+        <TierSection tier={ext.google} source="google" title="Google Maps Businesses" where={where}
+          subtitle="Listed on Google Maps, nearest first. Not registered on Calling Bell."
+          empty={`Google Maps has no ${what} near ${where?.label ?? 'this location'}.`}
           attribution={<>Results from Google Maps</>} />
+      )}
+      {only === 'ai' && (
+        <TierSection tier={ext.ai} source="ai" title="AI Recommended Businesses" where={where}
+          subtitle={ext.ai.aiStatus === 'ranked'
+            ? `More real places from OpenStreetMap, picked for “${ext.query}” by our free AI assistant. Not registered on Calling Bell.`
+            : ext.ai.aiStatus === 'pending'
+              ? 'More real places from OpenStreetMap, nearest first. Our free AI assistant is picking the best matches…'
+              : 'More real places from OpenStreetMap, nearest first. Not registered on Calling Bell.'}
+          empty={`OpenStreetMap has no ${what} mapped near ${where?.label ?? 'this location'} yet.`}
+          attribution={<>Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="underline">OpenStreetMap contributors</a></>} />
       )}
     </>
   );
 }
 
-function TierSection({ tier, source, title, subtitle, attribution }: {
-  tier: ExternalTier; source: 'ai' | 'google'; title: string; subtitle: string; attribution: React.ReactNode;
+interface SearchLocation { label: string; source: string }
+
+/** Where the Google Maps and AI results are: the area/city selected in the location menu, a place typed in the search, or the visitor's area. */
+function searchLocation(ext: ExternalSearch): SearchLocation | null {
+  if (!ext.placeName) return null;
+  const label = !ext.cityName || ext.cityName === ext.placeName ? ext.placeName : `${ext.placeName}, ${ext.cityName}`;
+  const source = ext.origin === 'area' ? 'Selected area'
+    : ext.origin === 'city' ? 'Selected city (city centre)'
+      : ext.origin === 'place' ? 'From your search'
+        : 'Your approximate location';
+  return { label, source };
+}
+
+function TierSection({ tier, source, title, subtitle, where, empty, attribution }: {
+  tier: ExternalTier; source: 'ai' | 'google'; title: string; subtitle: string; where: SearchLocation | null; empty: string; attribution: React.ReactNode;
 }) {
   const [shown, setShown] = useState(PAGE);
   const Icon = source === 'ai' ? AutoAwesomeRounded : MapRounded;
   return (
-    <section className="mt-8" aria-labelledby={`ext-${source}`}>
+    <section aria-labelledby={`ext-${source}`}>
       <div className="mb-3 flex items-start gap-3">
         <span aria-hidden className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${source === 'ai' ? 'bg-accent-soft text-accent-ink' : 'bg-subtle text-info'}`}>
           <Icon sx={{ fontSize: 20 }} />
         </span>
         <div className="min-w-0">
-          <h2 id={`ext-${source}`} className="text-lg font-semibold">
-            {title} <span className="ml-1 text-sm font-medium text-muted tabular">{tier.status === 'ready' ? number(tier.total) : ''}</span>
+          <h2 id={`ext-${source}`} className="flex flex-wrap items-center gap-x-2 text-lg font-semibold">
+            <PriorityBadge n={SOURCE_PRIORITY[source]} />
+            {title} <span className="text-sm font-medium text-muted tabular">{tier.status === 'ready' ? number(tier.total) : ''}</span>
           </h2>
+          {where && (
+            <p className="mt-0.5 inline-flex max-w-full items-center gap-1 text-sm">
+              <PlaceRounded sx={{ fontSize: 16 }} className="shrink-0 text-muted" />
+              <span className="truncate font-medium text-ink">{where.label}</span>
+              <span className="shrink-0 text-xs text-muted">· {where.source}</span>
+            </p>
+          )}
           <p className="text-sm text-muted">{subtitle}</p>
         </div>
       </div>
 
-      {tier.status === 'unavailable' ? (
+      {tier.searching && tier.items.length === 0 ? (
+        <div className="card flex items-center gap-2 p-4 text-sm text-muted" role="status">
+          <CircularProgress size={16} />Searching OpenStreetMap{where ? ` around ${where.label}` : ''}… results will appear here shortly.
+        </div>
+      ) : tier.status === 'unavailable' ? (
         <div className="card flex items-center gap-2 p-4 text-sm text-muted"><InfoOutlined fontSize="small" />This source isn’t responding right now. Please try again in a few minutes.</div>
       ) : tier.items.length === 0 ? (
-        <div className="card p-4 text-sm text-muted">No matching places found nearby.</div>
+        <div className="card p-4 text-sm text-muted">{empty}</div>
       ) : (
         <>
           <ul className="grid gap-3 md:grid-cols-2">
@@ -123,6 +200,9 @@ function TierSection({ tier, source, title, subtitle, attribution }: {
             <div className="mt-4 flex justify-center">
               <Button variant="outlined" onClick={() => setShown((n) => n + PAGE)}>Show more ({number(tier.items.length - shown)})</Button>
             </div>
+          )}
+          {tier.searching && (
+            <p className="mt-3 flex items-center gap-2 text-xs text-muted" role="status"><CircularProgress size={12} />Still searching OpenStreetMap for more places…</p>
           )}
         </>
       )}
@@ -137,7 +217,20 @@ function PlaceCard({ p, source }: { p: ExternalPlace; source: 'ai' | 'google' })
   const hours = p.openingHours?.replace(/;\s*/g, ' · ');
   return (
     <article className="card flex h-full gap-3 p-4">
-      <span aria-hidden className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-subtle text-sm font-bold text-muted">{initials(p.name)}</span>
+      {p.photoUrl ? (
+        <div className="w-20 shrink-0 sm:w-24">
+          <Img src={p.photoUrl} alt={`Photo of ${p.name}`} fallbackText={p.name} rounded="rounded-xl" aspect="1/1" className="w-full" />
+          {p.photoCredit && (
+            <p className="mt-1 truncate text-[10px] leading-tight text-faint" title={`Photo: ${p.photoCredit}`}>
+              {p.photoCreditUrl
+                ? <a href={p.photoCreditUrl} target="_blank" rel="noreferrer nofollow" className="hover:underline">{p.photoCredit}</a>
+                : p.photoCredit}
+            </p>
+          )}
+        </div>
+      ) : (
+        <span aria-hidden className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-subtle text-sm font-bold text-muted">{initials(p.name)}</span>
+      )}
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <h3 className="min-w-0 truncate text-[15px] font-semibold">{p.name}</h3>
