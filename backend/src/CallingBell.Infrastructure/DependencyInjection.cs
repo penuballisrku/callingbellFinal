@@ -48,8 +48,10 @@ public static class DependencyInjection
             .AddEntityFrameworkStores<ApplicationDbContext>();
 
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.Section));
-        services.Configure<GoogleAuthOptions>(configuration.GetSection(GoogleAuthOptions.Section));
         services.AddScoped<IIdentityService, IdentityService>();
+        services.Configure<OtpOptions>(configuration.GetSection(OtpOptions.Section));
+        services.AddScoped<IPhoneOtpService, PhoneOtpService>();
+        services.AddSingleton<ISmsSender, LoggingSmsSender>();
 
         services.Configure<GeoIpOptions>(configuration.GetSection(GeoIpOptions.Section));
         services.AddSingleton<IGeoLocationService, MaxMindGeoLocationService>();
@@ -86,6 +88,11 @@ public static class DependencyInjection
         services.AddSingleton<ICityCategoryRecommender, OllamaCityCategoryRecommender>();
         services.AddSingleton<IReviewSummarizer, OllamaReviewSummarizer>();
         services.AddSingleton<ISearchAssistant, OllamaSearchAssistant>();
+        // Fast meaning-based search (Ollama embeddings): matches free text to categories in milliseconds, inside the request.
+        services.Configure<EmbeddingOptions>(configuration.GetSection(EmbeddingOptions.Section));
+        services.AddSingleton<SemanticCatalog>();
+        services.AddSingleton<ISemanticCatalog>(sp => sp.GetRequiredService<SemanticCatalog>());
+        services.AddHostedService<SemanticCatalogWorker>();
 
         // Search results beyond the platform: OpenStreetMap places (free) and Google Maps (needs a Places API key).
         services.Configure<ExternalSearchOptions>(configuration.GetSection(ExternalSearchOptions.Section));

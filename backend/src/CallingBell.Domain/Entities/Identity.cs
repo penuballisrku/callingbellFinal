@@ -34,6 +34,28 @@ public class RefreshToken
     public bool IsActive(DateTimeOffset now) => RevokedAt is null && ExpiresAt > now;
 }
 
+/// <summary>
+/// A one-time code sent by SMS for mobile sign-in or sign-up. Only hashes are stored. A verified sign-up code issues a
+/// short-lived verification token that the registration request must present.
+/// </summary>
+public class OtpCode
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    /// <summary>Normalised mobile number, e.g. "+91 98765 43210".</summary>
+    public string PhoneNumber { get; set; } = string.Empty;
+    /// <summary>"SignIn" or "SignUp".</summary>
+    public string Purpose { get; set; } = string.Empty;
+    public string CodeHash { get; set; } = string.Empty;
+    public int Attempts { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
+    public DateTimeOffset? ConsumedAt { get; set; }
+    public string? VerificationTokenHash { get; set; }
+    public DateTimeOffset? VerificationExpiresAt { get; set; }
+    public DateTimeOffset? VerificationUsedAt { get; set; }
+    public string? IpAddress { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
 public class AuditLog
 {
     public Guid Id { get; set; } = Guid.NewGuid();

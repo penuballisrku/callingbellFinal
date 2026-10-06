@@ -45,14 +45,19 @@ public sealed class AuthController : ApiControllerBase
     public async Task<ActionResult<ApiResponse<bool>>> EmailAvailable([FromQuery] string email, CancellationToken ct) =>
         Success(await Sender.Send(new EmailAvailabilityQuery(email ?? string.Empty), ct));
 
-    [HttpPost("google"), EnableRateLimiting("auth")]
-    public async Task<ActionResult<ApiResponse<AuthResultDto>>> Google(GoogleSignInCommand command, CancellationToken ct) =>
-        Success(await Sender.Send(command, ct), "Signed in with Google");
+    /// <summary>Texts a one-time code to a mobile number. Purpose "SignIn" needs an existing account; "SignUp" needs an unused number.</summary>
+    [HttpPost("otp/send"), EnableRateLimiting("auth")]
+    public async Task<ActionResult<ApiResponse<OtpChallengeDto>>> SendOtp(SendOtpCommand command, CancellationToken ct) =>
+        Success(await Sender.Send(command, ct), "Verification code sent");
 
-    /// <summary>Which external sign-in providers are enabled, with their public client ids.</summary>
-    [HttpGet("providers")]
-    public ActionResult<ApiResponse<AuthProvidersDto>> Providers([FromServices] IOptions<GoogleAuthOptions> google) =>
-        Success(new AuthProvidersDto(string.IsNullOrWhiteSpace(google.Value.ClientId) ? null : google.Value.ClientId));
+    [HttpPost("otp/sign-in"), EnableRateLimiting("auth")]
+    public async Task<ActionResult<ApiResponse<AuthResultDto>>> OtpSignIn(OtpSignInCommand command, CancellationToken ct) =>
+        Success(await Sender.Send(command, ct), "Signed in successfully");
+
+    /// <summary>Verifies a sign-up code; the returned token is sent with <c>register</c> or <c>register-business</c>.</summary>
+    [HttpPost("otp/verify"), EnableRateLimiting("auth")]
+    public async Task<ActionResult<ApiResponse<PhoneVerificationDto>>> VerifyOtp(VerifySignUpPhoneCommand command, CancellationToken ct) =>
+        Success(await Sender.Send(command, ct), "Mobile number verified");
 
     [HttpPost("refresh")]
     public async Task<ActionResult<ApiResponse<AuthResultDto>>> Refresh(RefreshRequest request, CancellationToken ct) =>
@@ -124,6 +129,14 @@ public sealed class CatalogController : ApiControllerBase
         Success(await Sender.Send(new GetSearchSuggestionsQuery(q, city), ct));
 
     /// <summary>
+    /// "Suggested by AI": sub-categories a phrase means ("water dripping from ceiling" gives Plumbers), from the local embedding model.
+    /// Not output-cached: while the model is busy the answer is empty, and a moment later it isn't (the server caches vectors itself).
+    /// </summary>
+    [HttpGet("search/suggest/ai")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<SearchSuggestionDto>>>> MeaningSuggestions([FromQuery] string? q, CancellationToken ct) =>
+        Success(await Sender.Send(new GetMeaningSuggestionsQuery(q), ct));
+
+    /// <summary>
     /// Splits a typed search such as "lawyers in Nellore" into what and where, and matches the place to a listed city or area so the
     /// location dropdown can select it (and the query to a category or sub-category when it names one).
     /// </summary>
@@ -132,6 +145,20 @@ public sealed class CatalogController : ApiControllerBase
     [HttpGet("search/parse"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
     public async Task<ActionResult<ApiResponse<ParsedSearchDto>>> ParseSearch([FromQuery] string? text, [FromQuery] string? city, CancellationToken ct) =>
         Success(await Sender.Send(new ParseSearchQuery(text, city), ct));
+
+    /// <summary>
+    /// AI search assistant: answers a request in plain words ("AC not cooling, need someone today in Madhapur") with the matching
+    /// businesses and the filters it applied. Send the previous answer's <c>filters</c> as <c>context</c> to refine it. When the answer
+    /// says <c>aiPending</c>, send the same request again in a few seconds for the AI's interpretation.
+    /// </summary>
+    /// <summary>Example requests for the assistant, built from the services listed in <paramref name="city"/> (or elsewhere when it has none).</summary>
+    [HttpGet("search/assistant/starters"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
+    public async Task<ActionResult<ApiResponse<AssistantStartersDto>>> SearchAssistantStarters([FromQuery] string? city, CancellationToken ct) =>
+        Success(await Sender.Send(new GetAssistantStartersQuery(city), ct));
+
+    [HttpPost("search/assistant"), EnableRateLimiting("assistant")]
+    public async Task<ActionResult<ApiResponse<AssistantReplyDto>>> SearchAssistant(AskSearchAssistantCommand command, CancellationToken ct) =>
+        Success(await Sender.Send(command, ct));
 }
 
 [Route("api/businesses")]
@@ -244,13 +271,14 @@ public sealed class GeoController(IOptions<GeoIpOptions> options, IHostEnvironme
     /// database-ranked categories immediately, plus AI-suggested additions for that city once ready. Poll while <c>aiPending</c> is true.
     /// </summary>
     /// <param name="fallbackCity">City slug to use when the visitor's IP can't be placed near a listed city.</param>
+    /// <param name="city">The city chosen in the selector; takes precedence over the IP.</param>
     /// <param name="ip">Development only: locate this IP instead of the caller's.</param>
     [HttpGet("top-picks")]
-    public async Task<ActionResult<ApiResponse<TopPicksDto>>> TopPicks([FromQuery] string? fallbackCity, [FromQuery] string? ip, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<TopPicksDto>>> TopPicks([FromQuery] string? fallbackCity, [FromQuery] string? city, [FromQuery] string? ip, CancellationToken ct)
     {
         var clientIp = env.IsDevelopment() && !string.IsNullOrWhiteSpace(ip) ? ip : await ClientIpAsync();
         Response.Headers.CacheControl = "private, no-store";
-        return Success(await Sender.Send(new GetTopPicksQuery(clientIp, fallbackCity, options.Value.DistrictRadiusKm), ct));
+        return Success(await Sender.Send(new GetTopPicksQuery(clientIp, fallbackCity, options.Value.DistrictRadiusKm, city), ct));
     }
 
     /// <summary>

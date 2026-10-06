@@ -2,7 +2,9 @@ import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Tooltip } from '@mui/material';
 import { api } from '@/lib/api';
-import { useCities, useCityAreas } from '@/lib/hooks';
+import { useCities, useCityAreas, useVisitorDistrict } from '@/lib/hooks';
+
+export { useVisitorDistrict, type VisitorDistrict } from '@/lib/hooks';
 import { useCity } from '@/stores/city';
 
 interface VisitorCountry { countryCode: string; source: 'cdn' | 'geoip' | 'default' }
@@ -52,36 +54,22 @@ export function CountryCode({ onDark }: { onDark?: boolean }) {
   );
 }
 
-export interface VisitorDistrict { citySlug: string; cityName: string; state: string; areaSlug?: string | null; matchedBy: 'area' | 'city' | 'distance' }
-/** Approximate visitor location from the IP (the IP itself is never sent to the browser). */
-interface VisitorLocation {
-  place?: string | null; region?: string | null; district?: VisitorDistrict | null;
-  country?: string | null; postcode?: string | null; latitude?: number | null; longitude?: number | null;
-}
-
-/** The listed city (district) the visitor is browsing from, detected on the server from their IP address. */
-export function useVisitorDistrict() {
-  return useQuery({
-    queryKey: ['geo', 'district'],
-    queryFn: () => api.get<VisitorLocation>('/api/geo/district'),
-    select: (d) => d.district ?? null,
-    staleTime: Infinity,
-    retry: false,
-  });
-}
-
 /** Pre-selects the visitor's detected district (and area, when the IP names one we list) unless they've picked a city themselves. */
 export function useDistrictAutoSelect() {
   const { data: district } = useVisitorDistrict();
-  const { data: cities } = useCities();
   const applyDetected = useCity((s) => s.applyDetected);
-  const city = district ? cities?.find((c) => c.slug === district.citySlug) : undefined;
+  // The server names the area's id, so the detection applies at once, without waiting for the (large) city list. Only an older
+  // response without it falls back to looking the area up.
+  const direct = !!district && (!district.areaSlug || !!district.areaId);
+  const { data: cities } = useCities();
+  const city = district && !direct ? cities?.find((c) => c.slug === district.citySlug) : undefined;
   const inlineArea = city?.areas.find((a) => a.slug === district?.areaSlug);
   // Cities outside the curated list carry no areas in the cities payload: look the area up in the city's full area list.
   const fetched = useCityAreas(city && district?.areaSlug && !inlineArea ? city.slug : null);
   useEffect(() => {
+    if (district && direct) { applyDetected(district.citySlug, district.areaId ?? null); return; }
     if (!city) return;
     if (district?.areaSlug && !inlineArea && fetched.isLoading) return;
     applyDetected(city.slug, (inlineArea ?? fetched.areas.find((a) => a.slug === district?.areaSlug))?.id ?? null);
-  }, [city, district, inlineArea, fetched.isLoading, fetched.areas, applyDetected]);
+  }, [direct, city, district, inlineArea, fetched.isLoading, fetched.areas, applyDetected]);
 }

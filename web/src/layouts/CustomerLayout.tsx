@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { Button, Drawer, IconButton, InputAdornment, ListSubheader, MenuItem, Select, TextField } from '@mui/material';
+import AutoAwesomeRounded from '@mui/icons-material/AutoAwesomeRounded';
 import MenuRounded from '@mui/icons-material/MenuRounded';
 import NearMeOutlined from '@mui/icons-material/NearMeOutlined';
 import PlaceOutlined from '@mui/icons-material/PlaceOutlined';
@@ -14,6 +15,8 @@ import { homeFor, isAdmin, isOwner, useAuth } from '@/stores/auth';
 import { useCity } from '@/stores/city';
 import { Logo, NotificationBell, ThemeMenu, UserMenu } from './Shared';
 import { CountryCode, useDistrictAutoSelect, useNetworkTagline, useVisitorDistrict } from '@/components/VisitorCountry';
+import { AskAiButton, SearchAssistant } from '@/features/assistant/SearchAssistant';
+import { useAssistant } from '@/features/assistant/store';
 
 const AREA = 'area:';
 
@@ -87,7 +90,8 @@ export function CitySelect({ size = 'small', fullWidth = false, height, bare = f
       MenuProps={{ autoFocus: false, slotProps: { paper: { sx: { maxHeight: 480 } } } }} onClose={() => { setAreaFilter(''); setCityFilter(''); }}
       title={label(value)}
       sx={{
-        minWidth: fullWidth ? 0 : 150, maxWidth: size === 'small' ? 230 : undefined, height,
+        // A fixed width in the header, so a long area name is cut short ("Jubilee Hills, Hyd…") instead of shifting the items beside it.
+        ...(fullWidth ? { minWidth: 0 } : { width: 220, maxWidth: '100%' }), height,
         ...(bare && { '& .MuiOutlinedInput-notchedOutline': { border: 'none' }, bgcolor: 'transparent' }),
         '& .MuiSelect-select': { py: size === 'small' ? '7px' : undefined, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
       }}
@@ -164,6 +168,7 @@ const nav = [
 export default function CustomerLayout() {
   const user = useAuth((s) => s.user);
   const [open, setOpen] = useState(false);
+  const openAssistant = useAssistant((s) => s.openAssistant);
   const location = useLocation();
   useNotificationStream();
   useDistrictAutoSelect();
@@ -172,47 +177,56 @@ export default function CustomerLayout() {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-40 border-b border-line bg-surface/85 backdrop-blur-md backdrop-saturate-150">
-        <div className="container-page flex h-16 items-center gap-3">
+        {/* One row at a fixed height; every control is 40px tall and centred on it, and labels never wrap. */}
+        <div className="container-page flex h-[72px] items-center gap-2 xl:gap-3">
           <div className="flex shrink-0 items-start gap-1">
             <Logo />
             <CountryCode />
           </div>
           <div className="flex-1" />
-          <nav className="hidden items-center gap-1 lg:flex" aria-label="Main">
+          {/* The links need the full width; below it they are in the menu, so the header never overflows. */}
+          <nav className="hidden shrink-0 items-center gap-0.5 xl:flex" aria-label="Main">
             {nav.map((n) => (
-              <NavLink key={n.to} to={n.to} className={({ isActive }) => `rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-subtle hover:text-ink ${isActive ? 'bg-subtle text-ink' : 'text-muted'}`}>{n.label}</NavLink>
+              <NavLink key={n.to} to={n.to} className={({ isActive }) => `inline-flex h-10 items-center whitespace-nowrap rounded-lg px-2.5 text-sm font-medium transition-colors hover:bg-subtle hover:text-ink 2xl:px-3 ${isActive ? 'bg-subtle text-ink' : 'text-muted'}`}>{n.label}</NavLink>
             ))}
           </nav>
-          <div className="hidden sm:block"><CitySelect /></div>
-          <div className="hidden sm:block"><ThemeMenu /></div>
+          <div className="hidden shrink-0 items-center lg:flex"><AskAiButton /></div>
+          <div className="flex shrink-0 items-center lg:hidden"><AskAiButton compact /></div>
+          <div className="hidden shrink-0 items-center md:flex"><CitySelect height={40} /></div>
+          <div className="hidden shrink-0 items-center sm:flex"><ThemeMenu /></div>
           {user ? (
-            <div className="flex items-center gap-1">
+            <div className="flex shrink-0 items-center gap-1">
               <NotificationBell />
               <UserMenu />
             </div>
           ) : (
-            <div className="hidden items-center gap-2 sm:flex">
-              <Button component={Link} to="/login" color="inherit">Sign in</Button>
-              <Button component={Link} to="/register" variant="contained">Join free</Button>
+            <div className="hidden shrink-0 items-center gap-2 sm:flex">
+              <Button component={Link} to="/login" color="inherit" sx={{ height: 40, px: 1.5, whiteSpace: 'nowrap' }}>Sign in</Button>
+              <Button component={Link} to="/register" variant="contained" sx={{ height: 40, px: 2, whiteSpace: 'nowrap' }}>Join free</Button>
             </div>
           )}
-          <IconButton className="lg:!hidden" onClick={() => setOpen(true)} aria-label="Open menu"><MenuRounded /></IconButton>
+          <IconButton className="shrink-0 xl:!hidden" onClick={() => setOpen(true)} aria-label="Open menu"><MenuRounded /></IconButton>
         </div>
       </header>
 
       <Drawer anchor="right" open={open} onClose={() => setOpen(false)} slotProps={{ paper: { sx: { width: 300, p: 2 } } }}>
         <div className="mb-4 flex items-center justify-between"><Logo /><ThemeMenu /></div>
-        <div className="mb-4"><CitySelect size="medium" /></div>
+        <div className="mb-4"><CitySelect size="medium" fullWidth /></div>
         <nav className="flex flex-col gap-1" aria-label="Mobile">
           {nav.map((n) => <Link key={n.to} to={n.to} className="rounded-lg px-3 py-2.5 font-medium hover:bg-subtle">{n.label}</Link>)}
           {user && <Link to={homeFor(user) === '/' ? '/account' : homeFor(user)} className="rounded-lg px-3 py-2.5 font-medium hover:bg-subtle">
             {isAdmin(user) ? 'Admin console' : isOwner(user) ? 'Business dashboard' : 'My account'}</Link>}
+          <button type="button" onClick={() => { setOpen(false); openAssistant(); }}
+            className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left font-medium hover:bg-subtle">
+            <AutoAwesomeRounded className="text-accent-ink" sx={{ fontSize: 20 }} /> Ask the AI assistant
+          </button>
         </nav>
         {!user && <div className="mt-6 flex flex-col gap-2">
           <Button component={Link} to="/register" variant="contained" size="large">Join free</Button>
           <Button component={Link} to="/login" variant="outlined" size="large">Sign in</Button>
         </div>}
       </Drawer>
+      <SearchAssistant />
 
       <main className="flex-1"><Outlet /></main>
       <Footer />

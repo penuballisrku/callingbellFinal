@@ -2,7 +2,9 @@
    Calling Bell - 12_Subscriptions.sql
    Subscription plans (Free, Silver, Gold, Platinum, Enterprise) with badge artwork,
    each business's subscription history (including upgrades) and subscription invoices.
-   Idempotent: MERGE on plan Code / SubscriptionNumber / InvoiceNumber.
+   Prices are set for small local businesses (annual = 10 x monthly, two months free).
+   Idempotent: MERGE on plan Code / SubscriptionNumber / InvoiceNumber; demo (seed) subscriptions and invoices
+   follow plan price changes, payments made through the app keep the amount actually paid.
    ===================================================================================== */
 SET NOCOUNT ON;
 SET QUOTED_IDENTIFIER ON;
@@ -16,13 +18,13 @@ MERGE dbo.SubscriptionPlans AS t
 USING (VALUES
     (N'FREE',       N'Free',       N'Get listed and start receiving enquiries',          0.00,      0.00,    5,  5,   5, 0, 0, N'#667085', 0, 1,
      N'Business profile with contact details' + CHAR(10) + N'Up to 5 services and 5 photos' + CHAR(10) + N'5 lead credits per month' + CHAR(10) + N'Customer reviews and ratings' + CHAR(10) + N'Basic profile analytics'),
-    (N'SILVER',     N'Silver',     N'For growing neighbourhood businesses',             999.00,   9990.00,   30, 15,  15, 0, 0, N'#98A2B3', 0, 2,
+    (N'SILVER',     N'Silver',     N'For growing neighbourhood businesses',             199.00,   1990.00,   30, 15,  15, 0, 0, N'#98A2B3', 0, 2,
      N'Everything in Free' + CHAR(10) + N'30 lead credits per month' + CHAR(10) + N'Real-time availability status' + CHAR(10) + N'Online booking calendar' + CHAR(10) + N'Call and WhatsApp buttons' + CHAR(10) + N'Monthly performance report'),
-    (N'GOLD',       N'Gold',       N'Stand out in your category',                       2499.00,  24990.00,  100, 40,  40, 1, 0, N'#F4A62C', 1, 3,
+    (N'GOLD',       N'Gold',       N'Stand out in your category',                       499.00,   4990.00,  100, 40,  40, 1, 0, N'#F4A62C', 1, 3,
      N'Everything in Silver' + CHAR(10) + N'100 lead credits per month' + CHAR(10) + N'Priority verification badge' + CHAR(10) + N'Featured on category pages' + CHAR(10) + N'Video consultations' + CHAR(10) + N'Advanced analytics dashboard'),
-    (N'PLATINUM',   N'Platinum',   N'Maximum visibility across your city',              4999.00,  49990.00,  250, 999, 999, 1, 1, N'#0B1220', 0, 4,
+    (N'PLATINUM',   N'Platinum',   N'Maximum visibility across your city',              999.00,   9990.00,  250, 999, 999, 1, 1, N'#0B1220', 0, 4,
      N'Everything in Gold' + CHAR(10) + N'250 lead credits per month' + CHAR(10) + N'Top placement in search results' + CHAR(10) + N'Quarterly homepage feature' + CHAR(10) + N'Staff management (up to 10)' + CHAR(10) + N'Priority support'),
-    (N'ENTERPRISE', N'Enterprise', N'For hospitals, chains and multi-location brands', 12999.00, 129990.00, 1000, 999, 999, 1, 1, N'#021223', 0, 5,
+    (N'ENTERPRISE', N'Enterprise', N'For hospitals, chains and multi-location brands', 2499.00,  24990.00, 1000, 999, 999, 1, 1, N'#021223', 0, 5,
      N'Everything in Platinum' + CHAR(10) + N'Multi-location management' + CHAR(10) + N'Dedicated account manager' + CHAR(10) + N'API access and custom integrations' + CHAR(10) + N'Unlimited staff accounts' + CHAR(10) + N'SLA-backed support')
 ) AS s (Code, Name, Tagline, MonthlyPrice, AnnualPrice, LeadCredits, MaxServices, MaxImages, Featured, Priority, BadgeColor, IsPopular, SortOrder, Features)
 ON t.Code = s.Code
@@ -116,8 +118,9 @@ WHERE p.CurrentPlan = N'FREE' OR p.Status = N'PendingApproval';
 MERGE dbo.BusinessSubscriptions AS t
 USING #Period AS s
 ON t.SubscriptionNumber = N'SUB-' + s.Code + N'-' + RIGHT(N'0' + CAST(s.i + 1 AS nvarchar(3)), 2)
-WHEN MATCHED AND t.Status <> s.SubStatus
-    THEN UPDATE SET Status = s.SubStatus, ModifiedBy = N'seed', ModifiedOn = SYSDATETIMEOFFSET()
+WHEN MATCHED AND (t.Status <> s.SubStatus OR (t.CreatedBy = N'seed' AND t.Amount <> s.Amount))
+    THEN UPDATE SET Status = s.SubStatus, Amount = CASE WHEN t.CreatedBy = N'seed' THEN s.Amount ELSE t.Amount END,
+                    ModifiedBy = N'seed', ModifiedOn = SYSDATETIMEOFFSET()
 WHEN NOT MATCHED BY TARGET
     THEN INSERT (SubscriptionNumber, BusinessId, PlanId, BillingCycle, StartDate, EndDate, Amount, Status, AutoRenew, CreatedBy, CreatedOn)
          VALUES (N'SUB-' + s.Code + N'-' + RIGHT(N'0' + CAST(s.i + 1 AS nvarchar(3)), 2), s.BusinessId, s.PlanId, s.Cycle, s.StartDate, s.EndDate,
@@ -135,6 +138,9 @@ USING (
     WHERE bs.Amount > 0 AND bs.StartDate <= @Today
 ) AS s
 ON t.InvoiceNumber = s.InvoiceNumber
+-- Demo invoices follow their (repriced) subscription.
+WHEN MATCHED AND t.CreatedBy = N'seed' AND t.Amount <> s.Amount
+    THEN UPDATE SET Amount = s.Amount, TaxAmount = s.Tax, TotalAmount = s.Amount + s.Tax, ModifiedBy = N'seed', ModifiedOn = SYSDATETIMEOFFSET()
 WHEN NOT MATCHED BY TARGET
     THEN INSERT (InvoiceNumber, BusinessId, PaymentType, ReferenceId, Amount, TaxAmount, TotalAmount, PaymentMode, Status, PaidOn, CreatedBy, CreatedOn)
          VALUES (s.InvoiceNumber, s.BusinessId, N'Subscription', s.ReferenceId, s.Amount, s.Tax, s.Amount + s.Tax, s.Mode, N'Success', s.PaidOn, N'seed', s.PaidOn);

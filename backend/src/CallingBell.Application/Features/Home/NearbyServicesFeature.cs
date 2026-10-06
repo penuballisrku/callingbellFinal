@@ -23,8 +23,12 @@ public sealed record RelatedCategoryDto(string Name, string Slug, string Categor
 /// <param name="Source">How the origin was found: "area" (selected area), "ip" (visitor IP coordinates), "city" (city centre) or "none".</param>
 /// <param name="AiRanked">True when <see cref="Items"/> is ordered by the AI model; false while only the database ranking is available.</param>
 /// <param name="AiPending">True while an AI ranking is being generated; the client can poll until it flips to <see cref="AiRanked"/>.</param>
+/// <param name="RelatedCategories">Sub-categories near the visitor. For a selected area only those with a business within
+/// <see cref="GetNearbyServicesHandler.NearKm"/> of it; the rest of the city's are in <paramref name="CityCategories"/>.</param>
+/// <param name="CityCategories">Area searches only: the city's other sub-categories, most businesses first.</param>
 public sealed record NearbyServicesDto(string? PlaceName, string? CityName, string? CitySlug, string Source,
-    bool AiRanked, bool AiPending, string? AiModel, IReadOnlyList<NearbyServiceDto> Items, IReadOnlyList<RelatedCategoryDto> RelatedCategories);
+    bool AiRanked, bool AiPending, string? AiModel, IReadOnlyList<NearbyServiceDto> Items, IReadOnlyList<RelatedCategoryDto> RelatedCategories,
+    IReadOnlyList<RelatedCategoryDto> CityCategories);
 
 /// <param name="ClientIp">Visitor IP, located server-side for precise coordinates.</param>
 /// <param name="CitySlug">The city the visitor is browsing; when it isn't the IP's city, the city centre is used instead.</param>
@@ -43,11 +47,13 @@ public sealed class GetNearbyServicesHandler(IUnitOfWork uow, VisitorOriginResol
     private const int Shortlist = 14;
     private const int RelatedAiPicks = 6;
     private const int RelatedShortlist = 10;
+    /// <summary>For a selected area, a category counts as near it when one of its businesses is within this distance.</summary>
+    public const double NearKm = 7;
 
     public async Task<NearbyServicesDto> Handle(GetNearbyServicesQuery r, CancellationToken ct)
     {
         var origin = await origins.ResolveAsync(r.ClientIp, r.CitySlug, r.AreaSlug, r.RadiusKm, ct);
-        if (origin is null) return new NearbyServicesDto(null, null, null, "none", false, false, null, [], []);
+        if (origin is null) return new NearbyServicesDto(null, null, null, "none", false, false, null, [], [], []);
 
         var since = DateTimeOffset.UtcNow.AddDays(-90);
         var bookings = uow.Repository<Booking>().QueryNoTracking().Where(b => b.CreatedOn >= since);
@@ -126,8 +132,12 @@ public sealed class GetNearbyServicesHandler(IUnitOfWork uow, VisitorOriginResol
         // list (minus what the database already shows above); the client gets all of it so it can offer "show all".
         var shownSubs = ranked.Take(Show).Select(c => c.Dto.SubCategorySlug).ToHashSet();
         var shownCategories = ranked.Take(Show).Select(c => c.Dto.CategorySlug).ToHashSet();
+        // For a selected area, categories with a business close to it come first, so the AI suggests from those.
+        var isArea = origin.Source == "area";
+        bool Near(RelatedCategoryDto d) => d.NearestKm is { } km && km <= NearKm;
         var relatedAll = subStats
-            .OrderByDescending(s => shownCategories.Contains(s.Dto.CategorySlug))
+            .OrderByDescending(s => isArea && Near(s.Dto))
+            .ThenByDescending(s => shownCategories.Contains(s.Dto.CategorySlug))
             .ThenByDescending(s => s.Demand).ThenByDescending(s => s.Dto.BusinessCount).ThenBy(s => s.Dto.NearestKm ?? double.MaxValue)
             .ToList();
         var relatedRanked = relatedAll.Where(s => !shownSubs.Contains(s.Dto.Slug)).Take(RelatedShortlist).ToList();
@@ -167,9 +177,17 @@ public sealed class GetNearbyServicesHandler(IUnitOfWork uow, VisitorOriginResol
             related = suggested.Concat(related.Where(d => !suggestedSlugs.Contains(d.Slug)));
         }
 
+        var available = related.Where(d => !finalSubs.Contains(d.Slug)).ToList();
+        // A selected area: what is near it (AI suggestions first, then the closest), and separately the rest of the city.
+        List<RelatedCategoryDto> near = available, city = [];
+        if (isArea)
+        {
+            near = available.Where(Near).OrderByDescending(d => d.Reason is not null).ThenBy(d => d.NearestKm).ToList();
+            city = available.Where(d => !Near(d)).OrderByDescending(d => d.BusinessCount).ThenBy(d => d.Name).ToList();
+        }
         return new NearbyServicesDto(origin.PlaceName, origin.CityName, origin.CitySlug, origin.Source,
             ranking is not null, ranking is null && ai.IsPending(cacheKey), ranking?.Model ?? (ai.IsEnabled ? ai.Model : null),
-            shown, related.Where(d => !finalSubs.Contains(d.Slug)).ToList());
+            shown, near, city);
     }
 
     private static string Key(string subSlug, string serviceName) => $"{subSlug}|{serviceName}";

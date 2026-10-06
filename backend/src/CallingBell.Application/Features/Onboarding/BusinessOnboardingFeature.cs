@@ -36,11 +36,14 @@ public sealed record CreatedBusinessDto(Guid BusinessId, string Slug, string Sta
 
 public sealed record BusinessRegistrationResultDto(AuthResultDto Auth, CreatedBusinessDto Business);
 
-/// <summary>Sign up as a business owner and create the business in one atomic operation.</summary>
-public sealed record RegisterBusinessCommand(string DisplayName, string Email, string PhoneNumber, string Password, BusinessProfileInput Business)
+/// <summary>
+/// Sign up as a business owner and create the business in one atomic operation. The owner's mobile number must have been
+/// verified by OTP first (<c>POST /api/auth/otp/verify</c>), which issues <paramref name="PhoneVerificationToken"/>.
+/// </summary>
+public sealed record RegisterBusinessCommand(string DisplayName, string Email, string PhoneNumber, string PhoneVerificationToken, BusinessProfileInput Business)
     : IRequest<BusinessRegistrationResultDto>;
 
-/// <summary>A signed-in business owner (e.g. after Google sign-up) creates their business.</summary>
+/// <summary>A signed-in business owner who has no business yet creates one.</summary>
 public sealed record CreateOwnerBusinessCommand(BusinessProfileInput Business) : IRequest<CreatedBusinessDto>;
 
 public sealed record EmailAvailabilityQuery(string Email) : IRequest<bool>;
@@ -134,10 +137,8 @@ public sealed class RegisterBusinessValidator : AbstractValidator<RegisterBusine
         RuleFor(x => x.Email).NotEmpty().EmailAddress().MaximumLength(256);
         RuleFor(x => x.PhoneNumber).NotEmpty().Matches(@"^(\+91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}$")
             .WithMessage("Enter a valid 10-digit Indian mobile number.");
-        RuleFor(x => x.Password).NotEmpty().MinimumLength(8)
-            .Matches("[A-Z]").WithMessage("Password must contain an uppercase letter.")
-            .Matches("[a-z]").WithMessage("Password must contain a lowercase letter.")
-            .Matches("[0-9]").WithMessage("Password must contain a number.");
+        RuleFor(x => x.PhoneVerificationToken).NotEmpty().WithMessage("Verify your mobile number with the code we send you.")
+            .OverridePropertyName("phoneNumber");
         RuleFor(x => x.Business).NotNull().SetValidator(new BusinessProfileInputValidator());
     }
 }
@@ -339,18 +340,23 @@ public static class SocialLinks
 
 // ===================== Handlers =====================
 
-public sealed class RegisterBusinessHandler(IUnitOfWork uow, IIdentityService identity) : IRequestHandler<RegisterBusinessCommand, BusinessRegistrationResultDto>
+public sealed class RegisterBusinessHandler(IUnitOfWork uow, IIdentityService identity, IPhoneOtpService otp)
+    : IRequestHandler<RegisterBusinessCommand, BusinessRegistrationResultDto>
 {
     public async Task<BusinessRegistrationResultDto> Handle(RegisterBusinessCommand r, CancellationToken ct)
     {
         var factory = new BusinessFactory(uow);
         var resolved = await factory.ResolveAsync(r.Business, ct);
+        var phone = Phones.Normalize(r.PhoneNumber);
         if (!await identity.IsEmailAvailableAsync(r.Email, ct)) throw new ConflictException("An account with this email already exists. Sign in to add your business.");
+        if (await identity.IsPhoneRegisteredAsync(phone, ct)) throw AuthRules.PhoneTaken();
 
-        // The account, business, services, social links and subscription are created together or not at all.
+        // The account, business, services, social links and subscription are created together or not at all
+        // (the phone verification token is only spent when everything succeeds).
         return await uow.ExecuteInTransactionAsync(async token =>
         {
-            var auth = await identity.RegisterAsync(new RegisterRequest(r.DisplayName.Trim(), r.Email.Trim(), r.PhoneNumber.Trim(), r.Password,
+            await otp.ConsumeVerificationAsync(phone, r.PhoneVerificationToken, token);
+            var auth = await identity.RegisterAsync(new RegisterRequest(r.DisplayName.Trim(), r.Email.Trim(), phone,
                 Roles.BusinessOwner, r.Business.CitySlug), token);
             var business = await factory.CreateAsync(auth.User.Id, r.Business, resolved, token);
             return new BusinessRegistrationResultDto(auth, business);

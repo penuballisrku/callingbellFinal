@@ -65,7 +65,7 @@ export default function OwnerSettings() {
               <dl className="space-y-2 text-sm">
                 <div className="flex justify-between gap-3"><dt className="text-muted">Member since</dt><dd>{date(data.createdOn)}</dd></div>
                 <div className="flex justify-between gap-3"><dt className="text-muted">Last sign-in</dt><dd>{data.lastLoginOn ? dateTime(data.lastLoginOn) : '-'}</dd></div>
-                <div className="flex justify-between gap-3"><dt className="text-muted">Sign-in methods</dt><dd>{[data.hasPassword && 'Password', data.googleLinked && 'Google'].filter(Boolean).join(' & ')}</dd></div>
+                <div className="flex justify-between gap-3"><dt className="text-muted">Sign-in methods</dt><dd>{[data.phoneNumber && 'Mobile OTP', data.hasPassword && 'Password'].filter(Boolean).join(' & ') || '-'}</dd></div>
               </dl>
             </Panel>
           </aside>
@@ -120,7 +120,7 @@ function PasswordPanel({ hasPassword }: { hasPassword: boolean }) {
     }
   };
   return (
-    <Panel title={hasPassword ? 'Change password' : 'Set a password'} subtitle={hasPassword ? 'Use at least 8 characters with upper and lower case letters and a number' : 'You signed up with Google. Add a password to also sign in with your email.'}>
+    <Panel title={hasPassword ? 'Change password' : 'Set a password'} subtitle={hasPassword ? 'Use at least 8 characters with upper and lower case letters and a number' : 'You sign in with a one-time code sent to your mobile. Add a password to also sign in with your email.'}>
       <form onSubmit={handleSubmit(save)} noValidate className="grid gap-4 sm:grid-cols-2">
         {hasPassword && <div className="sm:col-span-2 sm:max-w-[calc(50%-8px)]"><TextField label="Current password" type="password" autoComplete="current-password" {...register('currentPassword')} error={!!errors.currentPassword} helperText={errors.currentPassword?.message} /></div>}
         <TextField label="New password" type="password" autoComplete="new-password" {...register('newPassword')} error={!!errors.newPassword} helperText={errors.newPassword?.message} />

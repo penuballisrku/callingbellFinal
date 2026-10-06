@@ -64,21 +64,22 @@ const accountShape = {
   displayName: z.string().trim().min(2, 'Enter your full name').max(120),
   email: z.string().trim().email('Enter a valid email address'),
   phoneNumber: z.string().trim().regex(mobile, 'Enter a valid 10-digit mobile number'),
-  password: z.string().min(8, 'At least 8 characters').regex(/[A-Z]/, 'Include an uppercase letter').regex(/[a-z]/, 'Include a lowercase letter').regex(/\d/, 'Include a number'),
-  confirmPassword: z.string(),
+  /** Issued by POST /api/auth/otp/verify for {@link verifiedPhone}; never saved in the draft. */
+  phoneVerificationToken: z.string(),
+  verifiedPhone: z.string(),
 };
 
 /**
  * Account fields are validated only when creating a new account. (Field-level rules, not an object-level refine, so each step's
- * errors show even while later steps are still empty. "Passwords match" is checked in the wizard when leaving the step.)
+ * errors show even while later steps are still empty. Mobile verification is checked in the wizard when leaving the step.)
  */
 export const makeWizardSchema = (mode: 'register' | 'setup') => z.object({
   mode: z.enum(['register', 'setup']),
   displayName: mode === 'register' ? accountShape.displayName : z.string(),
   email: mode === 'register' ? accountShape.email : z.string(),
   phoneNumber: mode === 'register' ? accountShape.phoneNumber : z.string(),
-  password: mode === 'register' ? accountShape.password : z.string(),
-  confirmPassword: z.string(),
+  phoneVerificationToken: accountShape.phoneVerificationToken,
+  verifiedPhone: accountShape.verifiedPhone,
   acceptTerms: z.boolean().refine((v) => v, 'Please accept the terms to continue'),
   /** Optional GSTIN printed on the subscription invoice. */
   gstin: z.string().trim().toUpperCase().refine((v) => v === '' || /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(v), 'Enter a valid 15-character GSTIN, e.g. 29ABCDE1234F1Z5'),
@@ -93,7 +94,7 @@ export const emptyService = (type = ''): ServiceForm => ({ name: '', description
 
 export const defaultValues = (mode: 'register' | 'setup', user?: { displayName?: string; email?: string; phoneNumber?: string | null }): WizardForm => ({
   mode,
-  displayName: user?.displayName ?? '', email: user?.email ?? '', phoneNumber: user?.phoneNumber ?? '', password: '', confirmPassword: '',
+  displayName: user?.displayName ?? '', email: user?.email ?? '', phoneNumber: user?.phoneNumber ?? '', phoneVerificationToken: '', verifiedPhone: '',
   acceptTerms: false,
   gstin: '',
   business: {
@@ -107,7 +108,7 @@ export const defaultValues = (mode: 'register' | 'setup', user?: { displayName?:
 /** Wizard steps and the form fields each one validates before moving on. */
 export const STEPS = [
   { key: 'account', label: 'Account', title: 'Create your account', subtitle: 'You will use this to sign in and manage your business.',
-    fields: ['displayName', 'email', 'phoneNumber', 'password', 'confirmPassword'] },
+    fields: ['displayName', 'email', 'phoneNumber'] },
   { key: 'business', label: 'Business', title: 'About your business', subtitle: 'Tell customers who you are and what you do.',
     fields: ['business.businessName', 'business.categorySlug', 'business.subCategorySlug', 'business.tagline', 'business.description',
       'business.yearEstablished', 'business.teamSize', 'business.languages'] },

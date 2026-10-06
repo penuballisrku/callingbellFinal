@@ -21,6 +21,7 @@ import { CityAutocomplete } from '@/components/CityAutocomplete';
 import { useCityAreas } from '@/lib/hooks';
 import { emptyService, type StepKey, type WizardForm } from './schema';
 import { priceBreakdown } from '@/lib/payments';
+import { PhoneVerification, phoneDigits } from '@/features/auth/otp';
 
 export interface WizardData { categories: Category[]; cities: City[]; plans: Plan[]; serviceTypes: Lookup[]; socialPlatforms: Lookup[] }
 
@@ -55,7 +56,9 @@ function useField(name: string) {
 
 /* ======================= 1. Account ======================= */
 export function AccountStep({ emailStatus, onEmailBlur }: { emailStatus: 'idle' | 'checking' | 'available' | 'taken'; onEmailBlur: (email: string) => void }) {
-  const { register, formState: { errors } } = useFormContext<WizardForm>();
+  const { register, control, setValue, setError, clearErrors, trigger, formState: { errors } } = useFormContext<WizardForm>();
+  const [phoneNumber = '', token, verifiedPhone] = useWatch({ control, name: ['phoneNumber', 'phoneVerificationToken', 'verifiedPhone'] });
+  const phoneHelper = errors.phoneNumber?.message ?? 'You will sign in with a one-time code sent to this number';
   const emailField = register('email');
   const emailHelper = errors.email?.message
     ?? (emailStatus === 'checking' ? 'Checking…' : emailStatus === 'available' ? 'This email is available' : 'We will send booking and lead alerts here');
@@ -69,11 +72,15 @@ export function AccountStep({ emailStatus, onEmailBlur }: { emailStatus: 'idle' 
             error={!!errors.email || emailStatus === 'taken'}
             helperText={emailStatus === 'taken' ? <>Already registered. <Link to="/login" className="font-semibold underline">Sign in</Link> to add your business.</> : emailHelper}
             slotProps={{ formHelperText: { sx: emailStatus === 'available' && !errors.email ? { color: 'success.main' } : undefined } }} />
-          <TextField label="Mobile number" autoComplete="tel" required placeholder="98765 43210" {...useField('phoneNumber')}
+          <TextField label="Mobile number" type="tel" autoComplete="tel" required placeholder="98765 43210" {...useField('phoneNumber')}
+            helperText={phoneHelper}
             slotProps={{ input: { startAdornment: <InputAdornment position="start">+91</InputAdornment> } }} />
-          <TextField label="Password" type="password" autoComplete="new-password" required {...useField('password')}
-            helperText={errors.password?.message ?? 'At least 8 characters with upper and lower case letters and a number'} />
-          <TextField label="Confirm password" type="password" autoComplete="new-password" required {...useField('confirmPassword')} />
+          <div className="sm:col-span-2">
+            <PhoneVerification phoneNumber={phoneNumber} verified={!!token && verifiedPhone === phoneDigits(phoneNumber)}
+              validatePhone={() => trigger('phoneNumber')}
+              onVerified={(t, phone) => { setValue('phoneVerificationToken', t); setValue('verifiedPhone', phoneDigits(phone)); clearErrors('phoneNumber'); }}
+              onPhoneError={(message) => setError('phoneNumber', { message }, { shouldFocus: true })} />
+          </div>
         </div>
       </Section>
     </div>

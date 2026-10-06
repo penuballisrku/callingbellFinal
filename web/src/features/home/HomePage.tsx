@@ -13,14 +13,23 @@ import ChevronRightRounded from '@mui/icons-material/ChevronRightRounded';
 import ExpandLessRounded from '@mui/icons-material/ExpandLessRounded';
 import PlaceOutlined from '@mui/icons-material/PlaceOutlined';
 import PhoneIphoneRounded from '@mui/icons-material/PhoneIphoneRounded';
+import CheckCircleRounded from '@mui/icons-material/CheckCircleRounded';
+import HomeRounded from '@mui/icons-material/HomeRounded';
+import ChatBubbleOutlineRounded from '@mui/icons-material/ChatBubbleOutlineRounded';
+import NotificationsNoneRounded from '@mui/icons-material/NotificationsNoneRounded';
+import SignalCellularAltRounded from '@mui/icons-material/SignalCellularAltRounded';
+import WifiRounded from '@mui/icons-material/WifiRounded';
+import BatteryFullRounded from '@mui/icons-material/BatteryFullRounded';
+import { LogoMark } from '@/components/Logo';
 import { api } from '@/lib/api';
-import { compactNumber, number, pluralize } from '@/lib/format';
-import { useCategories, useDocumentTitle, useSelectedAreaSlug } from '@/lib/hooks';
+import { compactNumber, money, number, pluralize } from '@/lib/format';
+import { useCategories, useDocumentTitle, usePageCity, useSelectedAreaSlug } from '@/lib/hooks';
 import { useCity } from '@/stores/city';
-import type { Banner, HomeData, MarketingPage, NearbyService, SearchSuggestion, NearbyServices, PopularService, RelatedCategory, SubCategory, TopPicks } from '@/lib/types';
+import type { Banner, BusinessCard, HomeData, MarketingPage, NearbyService, SearchSuggestion, NearbyServices, PopularService, RelatedCategory, SubCategory, TopPicks } from '@/lib/types';
 import { ErrorState, Img, SectionHeader } from '@/components/ui';
 import { CitySelect } from '@/layouts/CustomerLayout';
 import { resolveSearchHref, SearchSuggest } from '@/components/SearchSuggest';
+import { useAssistant } from '@/features/assistant/store';
 import { PlaceholderTicker } from '@/components/PlaceholderTicker';
 import { ReviewsSection } from './ReviewsSection';
 
@@ -35,9 +44,10 @@ function interleaveByCategory(subs: SubCategory[]): SubCategory[] {
 
 export default function HomePage() {
   useDocumentTitle();
-  const citySlug = useCity((s) => s.citySlug);
+  // Waits for the visitor's detected city (first visit only) so the home content loads once, for their city.
+  const { citySlug, ready } = usePageCity();
   const queryKey = ['home', citySlug];
-  const { data, isLoading, isError, refetch } = useQuery({ queryKey, queryFn: () => api.get<HomeData>('/api/home', { city: citySlug }) });
+  const { data, isPending: isLoading, isError, refetch } = useQuery({ queryKey, queryFn: () => api.get<HomeData>('/api/home', { city: citySlug }), enabled: ready });
   const { data: categoryTree } = useCategories();
   const popularSubs = useMemo(() => interleaveByCategory(data?.categories ?? []).slice(0, 18), [data]);
 
@@ -94,7 +104,7 @@ export default function HomePage() {
         <ReviewsSection />
 
 
-        <AppDownload />
+        <AppDownload data={data} />
       </div>
     </>
   );
@@ -105,6 +115,7 @@ function Hero({ data }: { data?: HomeData }) {
   const citySlug = useCity((s) => s.citySlug);
   const areaId = useCity((s) => s.areaId);
   const [q, setQ] = useState('');
+  const openAssistant = useAssistant((s) => s.openAssistant);
   // Category / sub-category / service picked from the suggestions; searched (with the chosen location) when Search is pressed.
   const [picked, setPicked] = useState<SearchSuggestion | null>(null);
   const [index, setIndex] = useState(0);
@@ -152,6 +163,11 @@ function Hero({ data }: { data?: HomeData }) {
             <div className="min-w-0 sm:w-56 sm:shrink-0"><CitySelect size="medium" fullWidth height={48} /></div>
             <Button type="submit" variant="contained" color="secondary" size="large" sx={{ height: 48, px: 3, flexShrink: 0 }}>Search</Button>
           </form>
+          <button type="button" onClick={() => openAssistant(q)}
+            className="group mt-3 inline-flex items-center gap-1.5 text-left text-sm text-on-navy-muted transition-colors hover:text-white">
+            <AutoAwesomeRounded sx={{ fontSize: 16 }} className="text-accent" />
+            Not sure what to search for? <span className="font-semibold text-on-navy underline-offset-2 group-hover:underline">Describe it to our AI assistant</span>
+          </button>
 
           <div className="mt-4 flex min-h-[34px] flex-wrap gap-2">
             {quickSearches.map((s) => (
@@ -247,10 +263,10 @@ function ServicesSection({ items, loading }: { items?: PopularService[]; loading
  * a local AI model re-ranks it in the background, so poll while `aiPending` and swap in the AI order and reasons when ready.
  */
 function NearbyServicesSection() {
-  const citySlug = useCity((st) => st.citySlug);
-  const areaId = useCity((st) => st.areaId);
+  const { citySlug, areaId, ready } = usePageCity();
   const areaSlug = useSelectedAreaSlug(citySlug, areaId);
-  const { data, isLoading } = useQuery({
+  const { data, isPending: isLoading } = useQuery({
+    enabled: ready,
     queryKey: ['nearby-services', citySlug, areaSlug],
     queryFn: () => api.get<NearbyServices>('/api/geo/nearby-services', { city: citySlug, area: areaSlug }),
     refetchInterval: (q) => (q.state.data?.aiPending ? 5000 : false),
@@ -278,7 +294,23 @@ function NearbyServicesSection() {
           : data!.items.map((s) => <ServiceCard key={`${s.subCategorySlug}-${s.searchTerm}`} service={s} />)}
       </div>
       {!!data?.relatedCategories.length && (
-        <RelatedCategories items={data.relatedCategories} place={place ?? 'you'} citySlug={data.citySlug} aiRanked={data.aiRanked} />
+        // An area: what is near it (the rest of the city follows below). A city: everything available in it.
+        data.source === 'area' ? (
+          <RelatedCategories id="related" items={data.relatedCategories} title={`Related categories near ${place}`}
+            expandLabel={`Show all ${number(data.relatedCategories.length)} categories near ${place}`} citySlug={data.citySlug}
+            note={data.aiRanked ? 'AI picks first, from what people nearby book together' : `Within 7 km of ${place}`} />
+        ) : (
+          <RelatedCategories id="related" items={data.relatedCategories} title={`Categories in ${data.cityName ?? place ?? 'your city'}`}
+            expandLabel={`Show all ${number(data.relatedCategories.length)} categories in ${data.cityName ?? place ?? 'your city'}`} citySlug={data.citySlug}
+            note={data.aiRanked ? 'AI picks first, then everything available in the city' : 'Everything available in the city'} />
+        )
+      )}
+      {/* A selected area: the rest of the city's categories, so nothing available in the city is hidden. */}
+      {!!data?.cityCategories?.length && (
+        <RelatedCategories id="city-categories" items={data.cityCategories}
+          title={data.relatedCategories.length ? `More categories in ${data.cityName}` : `Categories in ${data.cityName}`}
+          expandLabel={`Show all ${number(data.cityCategories.length)} categories in ${data.cityName}`} citySlug={data.citySlug}
+          note={`Elsewhere in ${data.cityName}, distance from ${place}`} />
       )}
     </section>
   );
@@ -287,23 +319,25 @@ function NearbyServicesSection() {
 const RELATED_PREVIEW = 6;
 
 /**
- * Every sub-category available near the visitor: the AI's related picks first (with reasons once ready), then the rest in database order.
- * The first {@link RELATED_PREVIEW} show by default; "Show all" expands to the full list.
+ * A list of sub-categories as link cards: those near the visitor (the AI's related picks first, with reasons once ready), or for a
+ * selected area also the rest of the city's. The first {@link RELATED_PREVIEW} show by default; "Show all" expands to the full list.
  */
-function RelatedCategories({ items, place, citySlug, aiRanked }: { items: RelatedCategory[]; place: string; citySlug?: string | null; aiRanked: boolean }) {
+function RelatedCategories({ id, items, title, expandLabel, note, citySlug }: {
+  id: string; items: RelatedCategory[]; title: string; expandLabel: string; note: string; citySlug?: string | null;
+}) {
   const [showAll, setShowAll] = useState(false);
   const visible = showAll ? items : items.slice(0, RELATED_PREVIEW);
   const hidden = items.length - RELATED_PREVIEW;
   return (
-    <div className="mt-8" role="region" aria-labelledby="related-h">
-      <div className="mb-3 flex items-baseline justify-between gap-3">
-        <h3 id="related-h" className="text-base font-semibold tracking-[-0.01em] md:text-lg">
-          {showAll ? `All categories near ${place}` : `Related categories near ${place}`}
+    <div className="mt-8" role="region" aria-labelledby={`${id}-h`}>
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <h3 id={`${id}-h`} className="text-base font-semibold tracking-[-0.01em] md:text-lg">
+          {title}
           <span className="ml-2 text-sm font-normal text-muted">{number(items.length)}</span>
         </h3>
-        <span className="hidden text-xs text-muted sm:block">{aiRanked ? 'AI picks first, from what people nearby book together' : 'Available around you'}</span>
+        <span className="text-xs text-muted">{note}</span>
       </div>
-      <ul id="related-list" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <ul id={`${id}-list`} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {visible.map((c) => (
           <li key={c.slug}>
             <Link to={`/search?sub=${c.slug}${citySlug ? `&city=${citySlug}` : ''}`}
@@ -333,9 +367,9 @@ function RelatedCategories({ items, place, citySlug, aiRanked }: { items: Relate
       </ul>
       {hidden > 0 && (
         <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-          <Button variant="outlined" onClick={() => setShowAll((v) => !v)} aria-expanded={showAll} aria-controls="related-list"
+          <Button variant="outlined" onClick={() => setShowAll((v) => !v)} aria-expanded={showAll} aria-controls={`${id}-list`}
             endIcon={showAll ? <ExpandLessRounded /> : <ExpandMoreRounded />}>
-            {showAll ? 'Show fewer categories' : `Show all ${number(items.length)} categories near ${place}`}
+            {showAll ? 'Show fewer categories' : expandLabel}
           </Button>
           <Link to="/categories" className="text-sm font-semibold text-ink-2 hover:text-accent-ink">Browse every category</Link>
         </div>
@@ -404,10 +438,12 @@ function ServiceCard({ service: s }: { service: PopularService | NearbyService }
  * fallback for when the IP can't be located.
  */
 function TopPicksSection() {
-  const citySlug = useCity((st) => st.citySlug);
-  const { data: picks, isLoading } = useQuery({
+  const { citySlug, ready } = usePageCity();
+  const { data: picks, isPending: isLoading } = useQuery({
+    enabled: ready,
     queryKey: ['top-picks', citySlug],
-    queryFn: () => api.get<TopPicks>('/api/geo/top-picks', { fallbackCity: citySlug }),
+    // The chosen (or detected) city decides; with none, the visitor's IP location does.
+    queryFn: () => api.get<TopPicks>('/api/geo/top-picks', { city: citySlug, fallbackCity: citySlug }),
     refetchInterval: (q) => (q.state.data?.aiPending ? 5000 : false),
     staleTime: 10 * 60_000,
   });
@@ -524,25 +560,127 @@ function PromoBanner({ banner }: { banner: Banner }) {
   );
 }
 
-function AppDownload() {
+function AppDownload({ data }: { data?: HomeData }) {
   return (
-    <section className="card grid items-center gap-8 overflow-hidden p-6 md:grid-cols-[1.4fr_1fr] md:p-10">
+    <section className="card grid items-center gap-8 overflow-hidden p-6 md:grid-cols-[1.3fr_1fr] md:p-10">
       <div>
         <span className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-3 py-1 text-xs font-semibold text-accent-ink"><PhoneIphoneRounded sx={{ fontSize: 16 }} />Coming soon to Android & iOS</span>
         <h2 className="mt-3 text-2xl font-bold tracking-tight md:text-3xl">Calling Bell in your pocket</h2>
         <p className="mt-2 max-w-lg text-muted">Get instant alerts when your booking is confirmed, chat with businesses and see who's available nearby - wherever you are.</p>
-        <div className="mt-5 flex flex-wrap gap-3">
+        <ul className="mt-4 grid max-w-lg gap-2 text-sm text-ink-2 sm:grid-cols-2">
+          {['Live availability of businesses near you', 'Book and reschedule in a few taps', 'Chat and call businesses directly', 'Booking and offer alerts'].map((t) => (
+            <li key={t} className="flex items-start gap-2"><CheckCircleRounded sx={{ fontSize: 18 }} className="mt-px shrink-0 text-success" />{t}</li>
+          ))}
+        </ul>
+        <div className="mt-6 flex flex-wrap gap-3">
           {['Get it on Google Play', 'Download on the App Store'].map((s) => (
             <span key={s} className="rounded-lg bg-inverse px-4 py-2.5 text-sm font-semibold text-on-inverse">{s}</span>
           ))}
         </div>
       </div>
-      <div className="hidden justify-center md:flex" aria-hidden>
-        <div className="h-56 w-32 rounded-[28px] border-[6px] border-inverse bg-canvas p-2">
-          <div className="h-3 w-12 rounded-full bg-line" />
-          <div className="mt-3 space-y-2">{[0, 1, 2, 3].map((i) => <div key={i} className="h-9 rounded-lg bg-surface shadow-sm" />)}</div>
-        </div>
+      <div className="flex justify-center">
+        <AppPreview data={data} />
       </div>
     </section>
+  );
+}
+
+/**
+ * A phone showing the Calling Bell app's home screen, filled with live data: the visitor's city, its popular services and its top
+ * rated businesses (from the API, like the rest of the page). Decorative, so hidden from screen readers.
+ */
+function AppPreview({ data }: { data?: HomeData }) {
+  const { citySlug, ready } = usePageCity();
+  const { data: businesses } = useQuery({
+    queryKey: ['app-preview', citySlug],
+    queryFn: () => api.get<BusinessCard[]>('/api/businesses', { city: citySlug, sort: 'rating', page: 1, pageSize: 2 }),
+    enabled: ready,
+    staleTime: 10 * 60_000,
+  });
+  const services = data?.categories.slice(0, 4) ?? [];
+  const tabs = [
+    { icon: <HomeRounded sx={{ fontSize: 18 }} />, label: 'Home', active: true },
+    { icon: <SearchRounded sx={{ fontSize: 18 }} />, label: 'Search' },
+    { icon: <EventAvailableRounded sx={{ fontSize: 18 }} />, label: 'Bookings' },
+    { icon: <ChatBubbleOutlineRounded sx={{ fontSize: 18 }} />, label: 'Chats' },
+  ];
+  return (
+    <div aria-hidden className="pointer-events-none relative select-none">
+      {/* Soft glow behind the phone. */}
+      <div className="absolute inset-x-6 bottom-4 top-10 rounded-full bg-accent/20 blur-3xl" />
+      <div className="relative w-[248px] rounded-[40px] bg-[#0B1220] p-[9px] shadow-[0_24px_48px_-20px_rgba(11,18,32,0.55)] ring-1 ring-black/10">
+        <div className="relative flex h-[500px] flex-col overflow-hidden rounded-[32px] bg-canvas">
+          {/* Camera notch and status bar. */}
+          <div className="absolute left-1/2 top-2 h-5 w-20 -translate-x-1/2 rounded-full bg-[#0B1220]" />
+          <div className="flex items-center justify-between bg-navy px-5 pb-1 pt-2.5 text-[10px] font-semibold text-white">
+            <span>9:41</span>
+            <span className="flex items-center gap-1"><SignalCellularAltRounded sx={{ fontSize: 12 }} /><WifiRounded sx={{ fontSize: 12 }} /><BatteryFullRounded sx={{ fontSize: 12 }} /></span>
+          </div>
+
+          {/* App header: brand, location and search. */}
+          <div className="bg-navy px-3.5 pb-3.5 pt-2 text-white">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <LogoMark size={22} tone="onDark" />
+                <span className="text-[13px] font-bold tracking-[-0.02em]">Calling Bell</span>
+              </span>
+              <NotificationsNoneRounded sx={{ fontSize: 18 }} />
+            </div>
+            <p className="mt-2 flex items-center gap-0.5 text-[10px] text-on-navy-muted">
+              <PlaceOutlined sx={{ fontSize: 12 }} />{data?.cityName ?? 'Near you'}
+            </p>
+            <div className="mt-1.5 flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-2 text-[10px] text-[#667085]">
+              <SearchRounded sx={{ fontSize: 14 }} />
+              <span className="truncate">Search {services.slice(0, 2).map((c) => c.name.toLowerCase()).join(', ') || 'services'}…</span>
+            </div>
+          </div>
+
+          <div className="flex-1 space-y-3 overflow-hidden px-3 pt-3">
+            {/* Popular services in the city. */}
+            <div className="grid grid-cols-4 gap-1.5">
+              {(services.length ? services : Array.from({ length: 4 }, () => null)).map((c, i) => (
+                <div key={c?.id ?? i} className="flex flex-col items-center gap-1">
+                  {c ? <Img src={c.iconUrl ?? c.imageUrl} alt="" fallbackText={c.name} className="h-10 w-10" rounded="rounded-xl" />
+                    : <Skeleton variant="rounded" width={40} height={40} sx={{ borderRadius: '12px' }} />}
+                  <span className="w-full truncate text-center text-[8.5px] font-medium text-ink-2">{c?.name ?? ''}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Top rated businesses in the city. */}
+            <div>
+              <p className="mb-1.5 text-[11px] font-bold text-ink">Top rated near you</p>
+              <div className="space-y-2">
+                {(businesses ?? [null, null]).slice(0, 2).map((b, i) => b ? (
+                  <div key={b.id} className="flex gap-2 rounded-xl border border-line bg-surface p-2">
+                    <Img src={b.logoUrl} alt="" fallbackText={b.name} className="h-10 w-10 shrink-0" rounded="rounded-lg" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[11px] font-semibold text-ink">{b.name}</p>
+                      <p className="truncate text-[9px] text-muted">{b.subCategoryName ?? b.categoryName} · {b.area ?? b.city}</p>
+                      <div className="mt-1 flex items-center justify-between gap-1">
+                        <span className="flex min-w-0 items-center gap-0.5 truncate text-[9px] font-semibold text-ink">
+                          <StarRounded sx={{ fontSize: 11, color: '#F4A62C' }} />{b.averageRating.toFixed(1)}
+                          {b.startingPrice ? <span className="font-normal text-muted"> · from {money(b.startingPrice)}</span> : null}
+                        </span>
+                        <span className="shrink-0 rounded-md bg-accent px-2 py-0.5 text-[9px] font-bold text-on-accent">Book</span>
+                      </div>
+                    </div>
+                  </div>
+                ) : <Skeleton key={i} variant="rounded" height={58} sx={{ borderRadius: '12px' }} />)}
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom tab bar. */}
+          <div className="grid grid-cols-4 border-t border-line bg-surface px-2 pb-3 pt-1.5">
+            {tabs.map((t) => (
+              <span key={t.label} className={`flex flex-col items-center gap-0.5 text-[8.5px] font-medium ${t.active ? 'text-accent-ink' : 'text-faint'}`}>
+                {t.icon}{t.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

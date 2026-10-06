@@ -10,6 +10,13 @@ export default defineConfig({
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   server: {
     port: 5173,
+    // Transform the shell and the most visited pages as soon as the dev server starts, so the first page load doesn't wait for it.
+    warmup: {
+      clientFiles: [
+        './src/main.tsx', './src/app/router.tsx', './src/layouts/CustomerLayout.tsx', './src/features/home/HomePage.tsx',
+        './src/features/search/SearchPage.tsx', './src/features/business/BusinessPage.tsx', './src/features/categories/CategoriesPage.tsx',
+      ],
+    },
     proxy: {
       '/api': { target: api, changeOrigin: true },
       '/hubs': { target: api, changeOrigin: true, ws: true },

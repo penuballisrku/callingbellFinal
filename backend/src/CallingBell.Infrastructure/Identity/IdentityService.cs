@@ -8,7 +8,6 @@ using CallingBell.Application.Features.Auth;
 using CallingBell.Domain.Constants;
 using CallingBell.Domain.Entities;
 using CallingBell.Infrastructure.Persistence;
-using Google.Apis.Auth;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -26,76 +25,25 @@ public sealed class JwtOptions
     public int RefreshTokenDays { get; set; } = 14;
 }
 
-public sealed class GoogleAuthOptions
-{
-    public const string Section = "Authentication:Google";
-    /// <summary>OAuth 2.0 Web client id from Google Cloud Console. Empty disables Google sign-in.</summary>
-    public string ClientId { get; set; } = string.Empty;
-}
-
 internal sealed class IdentityService(
     UserManager<ApplicationUser> userManager,
     ApplicationDbContext db,
-    IOptions<JwtOptions> jwtOptions,
-    IOptions<GoogleAuthOptions> googleOptions) : IIdentityService
+    IOptions<JwtOptions> jwtOptions) : IIdentityService
 {
-    private const string GoogleProvider = "Google";
     private readonly JwtOptions _jwt = jwtOptions.Value;
-    private readonly GoogleAuthOptions _google = googleOptions.Value;
 
-    public async Task<AuthResultDto> ExternalGoogleAsync(string idToken, string accountType, CancellationToken ct)
+    public async Task<AuthResultDto> SignInWithPhoneAsync(string phoneNumber, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(_google.ClientId)) throw new BadRequestException("Google sign-in is not configured.");
+        var users = await userManager.Users.Where(u => u.PhoneNumber == phoneNumber && !u.IsDeleted).Take(2).ToListAsync(ct);
+        if (users.Count == 0) throw new BadRequestException("No account uses this mobile number.");
+        if (users.Count > 1)
+            throw new BadRequestException("This mobile number is linked to more than one account. Sign in with your email and password instead.");
 
-        GoogleJsonWebSignature.Payload payload;
-        try
-        {
-            // Verifies Google's signature, expiry, issuer and that the token was issued for our client id.
-            payload = await GoogleJsonWebSignature.ValidateAsync(idToken,
-                new GoogleJsonWebSignature.ValidationSettings { Audience = [_google.ClientId] });
-        }
-        catch (InvalidJwtException)
-        {
-            throw new BadRequestException("Google sign-in failed. Please try again.");
-        }
+        var user = users[0];
+        if (!user.IsActive) throw new ForbiddenAccessException("This account has been deactivated. Please contact support.");
+        if (await userManager.IsLockedOutAsync(user)) throw new ForbiddenAccessException("This account is temporarily locked. Try again later.");
 
-        if (!payload.EmailVerified || string.IsNullOrWhiteSpace(payload.Email))
-            throw new BadRequestException("Your Google account email is not verified.");
-
-        var user = await userManager.FindByLoginAsync(GoogleProvider, payload.Subject)
-                   ?? await userManager.FindByEmailAsync(payload.Email);
-
-        if (user is null)
-        {
-            user = new ApplicationUser
-            {
-                UserName = payload.Email,
-                Email = payload.Email,
-                EmailConfirmed = true,
-                DisplayName = string.IsNullOrWhiteSpace(payload.Name) ? payload.Email : payload.Name,
-                AvatarUrl = payload.Picture,
-                UserType = accountType == Roles.BusinessOwner ? Roles.BusinessOwner : Roles.Customer,
-                IsActive = true
-            };
-            var created = await userManager.CreateAsync(user); // no local password - Google is the credential
-            if (!created.Succeeded) throw new BadRequestException(created.Errors.First().Description);
-            await userManager.AddToRoleAsync(user, user.UserType);
-        }
-        else
-        {
-            if (user.IsDeleted) throw new BadRequestException("This account no longer exists.");
-            if (!user.IsActive) throw new ForbiddenAccessException("This account has been deactivated. Please contact support.");
-            if (await userManager.IsLockedOutAsync(user)) throw new ForbiddenAccessException("This account is temporarily locked. Try again later.");
-        }
-
-        // Link the Google identity the first time it is used (also links existing email/password accounts).
-        if (await userManager.FindByLoginAsync(GoogleProvider, payload.Subject) is null)
-        {
-            var linked = await userManager.AddLoginAsync(user, new UserLoginInfo(GoogleProvider, payload.Subject, GoogleProvider));
-            if (!linked.Succeeded) throw new BadRequestException(linked.Errors.First().Description);
-        }
-
-        user.AvatarUrl ??= payload.Picture;
+        user.PhoneNumberConfirmed = true; // the OTP proved ownership of the number
         user.LastLoginOn = DateTimeOffset.UtcNow;
         await userManager.UpdateAsync(user);
         return await IssueTokensAsync(user, ct);
@@ -137,6 +85,7 @@ internal sealed class IdentityService(
             Email = request.Email,
             DisplayName = request.DisplayName,
             PhoneNumber = NormalizePhone(request.PhoneNumber),
+            PhoneNumberConfirmed = true, // verified by OTP before registration
             UserType = request.AccountType,
             CityId = cityId,
             IsActive = true,
@@ -144,14 +93,9 @@ internal sealed class IdentityService(
             LastLoginOn = DateTimeOffset.UtcNow
         };
 
-        var result = await userManager.CreateAsync(user, request.Password);
-        if (!result.Succeeded)
-        {
-            throw new ValidationException(new Dictionary<string, string[]>
-            {
-                ["password"] = result.Errors.Select(e => e.Description).ToArray()
-            });
-        }
+        // No password: the account signs in with a mobile OTP (a password can be added later in settings).
+        var result = await userManager.CreateAsync(user);
+        if (!result.Succeeded) throw new BadRequestException(result.Errors.First().Description);
 
         await userManager.AddToRoleAsync(user, request.AccountType == Roles.BusinessOwner ? Roles.BusinessOwner : Roles.Customer);
         return await IssueTokensAsync(user, ct);
@@ -205,21 +149,31 @@ internal sealed class IdentityService(
     public async Task<bool> IsEmailAvailableAsync(string email, CancellationToken ct) =>
         await userManager.FindByEmailAsync(email.Trim()) is null;
 
+    public Task<bool> IsPhoneRegisteredAsync(string phoneNumber, CancellationToken ct, string? exceptUserId = null) =>
+        userManager.Users.AnyAsync(u => u.PhoneNumber == phoneNumber && !u.IsDeleted && u.Id != exceptUserId, ct);
+
     public async Task<AccountSettingsDto> GetAccountSettingsAsync(string userId, CancellationToken ct)
     {
         var user = await userManager.FindByIdAsync(userId) ?? throw new NotFoundException("User", userId);
         var now = DateTimeOffset.UtcNow;
         var sessions = await db.RefreshTokens.CountAsync(t => t.UserId == userId && t.RevokedAt == null && t.ExpiresAt > now, ct);
-        var google = (await userManager.GetLoginsAsync(user)).Any(l => l.LoginProvider == GoogleProvider);
-        return new AccountSettingsDto(user.DisplayName, user.Email ?? string.Empty, user.PhoneNumber, await userManager.HasPasswordAsync(user), google,
-            user.CreatedOn, user.LastLoginOn, sessions);
+        return new AccountSettingsDto(user.DisplayName, user.Email ?? string.Empty, user.PhoneNumber, await userManager.HasPasswordAsync(user),
+            user.PhoneNumberConfirmed, user.CreatedOn, user.LastLoginOn, sessions);
     }
 
     public async Task<CurrentUserDto> UpdateAccountAsync(string userId, string displayName, string phoneNumber, CancellationToken ct)
     {
         var user = await userManager.FindByIdAsync(userId) ?? throw new NotFoundException("User", userId);
+        var phone = NormalizePhone(phoneNumber.Trim());
+        if (phone != user.PhoneNumber)
+        {
+            // The mobile number is a sign-in credential, so it must stay unique.
+            if (await IsPhoneRegisteredAsync(phone, ct, exceptUserId: userId))
+                throw new ValidationException(new Dictionary<string, string[]> { ["phoneNumber"] = ["Another account already uses this mobile number."] });
+            user.PhoneNumberConfirmed = false;
+        }
         user.DisplayName = displayName.Trim();
-        user.PhoneNumber = NormalizePhone(phoneNumber.Trim());
+        user.PhoneNumber = phone;
         var result = await userManager.UpdateAsync(user);
         if (!result.Succeeded) throw new BadRequestException(result.Errors.First().Description);
         return await GetCurrentUserAsync(userId, ct);

@@ -17,3 +17,6 @@ dist/
 
 ## GeoNames city data, downloaded by the city catalogue agent (refreshed monthly)
 backend/src/CallingBell.Api/App_Data/geonames/
+
+## Semantic search vectors, rebuilt from the catalogue by the local embedding model (Ai:Embeddings)
+backend/src/CallingBell.Api/App_Data/semantic-index.json*

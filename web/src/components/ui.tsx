@@ -54,7 +54,8 @@ export function AvailabilityBadge({ status, lastSeenOn, compact }: { status: str
   const item = lookups.find((l) => l.code === status);
   const color = item?.colorHex ?? 'var(--cb-faint)';
   const live = !unavailable.has(status);
-  const label = item?.name ?? status;
+  // Until the lookup loads, "AvailableForCall" reads as "Available for call" rather than the raw code.
+  const label = item?.name ?? status.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/ (\w)/g, (_, c: string) => ` ${c.toLowerCase()}`);
   return (
     <Tooltip title={status === 'Offline' && lastSeenOn ? `Last seen ${ago(lastSeenOn)}` : (item?.description ?? '')}>
       <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink whitespace-nowrap">

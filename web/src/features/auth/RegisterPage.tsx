@@ -3,7 +3,7 @@ import { Link, Navigate, useNavigate, useSearchParams } from 'react-router';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Alert, Button, TextField, ToggleButton, ToggleButtonGroup } from '@mui/material';
+import { Alert, Button, InputAdornment, TextField, ToggleButton, ToggleButtonGroup } from '@mui/material';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { useDocumentTitle } from '@/lib/hooks';
 import { CityAutocomplete } from '@/components/CityAutocomplete';
@@ -12,15 +12,14 @@ import { EmptyState } from '@/components/ui';
 import BusinessWizard from '@/features/onboarding/BusinessWizard';
 import type { AuthResult } from '@/lib/types';
 import { AuthShell } from './LoginPage';
-import { GoogleSignInButton } from './GoogleSignInButton';
+import { MOBILE_PATTERN, PhoneVerification, phoneDigits } from './otp';
 
 const schema = z.object({
   accountType: z.enum(['Customer', 'BusinessOwner']),
   displayName: z.string().trim().min(2, 'Enter your full name').max(120),
   email: z.string().trim().email('Enter a valid email address'),
-  phoneNumber: z.string().trim().regex(/^(\+91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}$/, 'Enter a valid 10-digit mobile number'),
+  phoneNumber: z.string().trim().regex(MOBILE_PATTERN, 'Enter a valid 10-digit mobile number'),
   citySlug: z.string().optional(),
-  password: z.string().min(8, 'At least 8 characters').regex(/[A-Z]/, 'Include an uppercase letter').regex(/[a-z]/, 'Include a lowercase letter').regex(/\d/, 'Include a number'),
 });
 type Form = z.infer<typeof schema>;
 
@@ -47,21 +46,29 @@ function CustomerRegister() {
   const navigate = useNavigate();
   const setSession = useAuth((s) => s.setSession);
   const [error, setError] = useState<string | null>(null);
-  const { register, control, handleSubmit, setError: setFieldError, watch, formState: { errors, isSubmitting } } = useForm<Form>({
+  const { register, control, handleSubmit, setError: setFieldError, clearErrors, trigger, watch, formState: { errors, isSubmitting } } = useForm<Form>({
     resolver: zodResolver(schema),
     defaultValues: { accountType: params.get('type') === 'business' ? 'BusinessOwner' : 'Customer', citySlug: '' },
   });
   const type = watch('accountType');
+  const phoneNumber = watch('phoneNumber') ?? '';
+  // The OTP verification token is only valid for the number it was issued to.
+  const [verification, setVerification] = useState<{ token: string; digits: string } | null>(null);
+  const verified = !!verification && verification.digits === phoneDigits(phoneNumber);
 
   const onSubmit = async (values: Form) => {
     setError(null);
+    if (!verified) { setFieldError('phoneNumber', { message: 'Verify your mobile number to continue' }, { shouldFocus: true }); return; }
     try {
-      const { data } = await api.post<AuthResult>('/api/auth/register', { ...values, citySlug: values.citySlug || null });
+      const { data } = await api.post<AuthResult>('/api/auth/register', {
+        ...values, citySlug: values.citySlug || null, phoneVerificationToken: verification.token,
+      });
       setSession(data);
       navigate(homeFor(data.user), { replace: true });
     } catch (e) {
       if (e instanceof ApiError && e.errors) {
         Object.entries(e.errors).forEach(([field, msgs]) => setFieldError(field as keyof Form, { message: msgs[0] }));
+        if (e.errors.phoneNumber) setVerification(null); // expired or already used: verify again
       }
       setError(errorMessage(e));
     }
@@ -80,18 +87,18 @@ function CustomerRegister() {
         )} />
         <TextField label="Full name" autoComplete="name" {...register('displayName')} error={!!errors.displayName} helperText={errors.displayName?.message} />
         <TextField label="Email" type="email" autoComplete="email" {...register('email')} error={!!errors.email} helperText={errors.email?.message} />
-        <TextField label="Mobile number" autoComplete="tel" placeholder="98765 43210" {...register('phoneNumber')} error={!!errors.phoneNumber} helperText={errors.phoneNumber?.message} />
+        <TextField label="Mobile number" type="tel" autoComplete="tel" placeholder="98765 43210" {...register('phoneNumber')} error={!!errors.phoneNumber}
+          helperText={errors.phoneNumber?.message ?? 'You will sign in with a one-time code sent to this number'}
+          slotProps={{ input: { startAdornment: <InputAdornment position="start">+91</InputAdornment> } }} />
+        <PhoneVerification phoneNumber={phoneNumber} verified={verified} validatePhone={() => trigger('phoneNumber')}
+          onVerified={(token, phone) => { setVerification({ token, digits: phoneDigits(phone) }); clearErrors('phoneNumber'); }}
+          onPhoneError={(message) => setFieldError('phoneNumber', { message }, { shouldFocus: true })} />
         <Controller control={control} name="citySlug" render={({ field }) => (
           <CityAutocomplete value={field.value || null} onChange={(slug) => field.onChange(slug ?? '')} label="City" placeholder="Search your city"
             size="medium" helperText="Optional. You can choose it later." />
         )} />
-        <TextField label="Password" type="password" autoComplete="new-password" {...register('password')} error={!!errors.password}
-          helperText={errors.password?.message ?? 'At least 8 characters with upper, lower case and a number'} />
         <Button type="submit" variant="contained" size="large" fullWidth disabled={isSubmitting}>{isSubmitting ? 'Creating account…' : 'Create account'}</Button>
       </form>
-      <div className="mt-4">
-        <GoogleSignInButton label="signup_with" accountType={type} onSignedIn={(r) => navigate(homeFor(r.user), { replace: true })} />
-      </div>
       <p className="mt-6 text-center text-sm text-muted">Already have an account? <Link to="/login" className="font-semibold text-ink hover:underline">Sign in</Link></p>
     </AuthShell>
   );

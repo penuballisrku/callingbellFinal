@@ -23,7 +23,7 @@ public sealed class OwnerController : ApiControllerBase
     public async Task<ActionResult<ApiResponse<IReadOnlyList<OwnerBusinessDto>>>> Businesses(CancellationToken ct) =>
         Success(await Sender.Send(new GetOwnerBusinessesQuery(), ct));
 
-    /// <summary>Creates a business for a signed-in owner who has none yet (e.g. signed up with Google).</summary>
+    /// <summary>Creates a business for a signed-in owner who has none yet.</summary>
     [HttpPost("businesses")]
     public async Task<ActionResult<ApiResponse<CreatedBusinessDto>>> CreateBusiness(CreateOwnerBusinessCommand command, CancellationToken ct) =>
         Success(await Sender.Send(command, ct), "Your business has been created");

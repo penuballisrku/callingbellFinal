@@ -25,6 +25,21 @@ internal sealed class RefreshTokenConfiguration : IEntityTypeConfiguration<Refre
     }
 }
 
+internal sealed class OtpCodeConfiguration : IEntityTypeConfiguration<OtpCode>
+{
+    public void Configure(EntityTypeBuilder<OtpCode> b)
+    {
+        b.ToTable("OtpCodes");
+        b.Property(o => o.PhoneNumber).HasMaxLength(20);
+        b.Property(o => o.Purpose).HasMaxLength(16);
+        b.Property(o => o.CodeHash).HasMaxLength(64);
+        b.Property(o => o.VerificationTokenHash).HasMaxLength(64);
+        b.Property(o => o.IpAddress).HasMaxLength(64);
+        b.HasIndex(o => new { o.PhoneNumber, o.CreatedAt });
+        b.HasIndex(o => o.VerificationTokenHash);
+    }
+}
+
 internal sealed class GeoConfiguration :
     IEntityTypeConfiguration<City>, IEntityTypeConfiguration<Area>
 {

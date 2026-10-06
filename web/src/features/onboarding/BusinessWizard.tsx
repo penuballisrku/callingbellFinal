@@ -22,6 +22,7 @@ import type { BusinessRegistrationResult, Category, CreatedBusiness, MediaKind, 
 import { useAuth } from '@/stores/auth';
 import { useSelectedBusiness } from '@/stores/ownerBusiness';
 import { ErrorState } from '@/components/ui';
+import { phoneDigits } from '@/features/auth/otp';
 import { STEPS, defaultValues, makeWizardSchema, toFormPath, type WizardForm } from './schema';
 import { AccountStep, BusinessStep, ContactStep, MediaStep, OfferStep, PaymentStep, ReviewStep, type MediaState, type WizardData } from './steps';
 import type { StepKey } from './schema';
@@ -32,7 +33,7 @@ type Task = { key: string; label: string; status: 'pending' | 'active' | 'done' 
 
 /**
  * Multi-step business registration. `register` creates the owner account and the business together;
- * `setup` is for a signed-in owner (e.g. after Google sign-up) who has no business yet.
+ * `setup` is for a signed-in owner who has no business yet.
  */
 export default function BusinessWizard({ mode }: { mode: 'register' | 'setup' }) {
   useDocumentTitle(mode === 'register' ? 'List your business' : 'Set up your business');
@@ -55,7 +56,7 @@ function loadDraft(mode: string): WizardForm | null {
   try {
     const raw = sessionStorage.getItem(DRAFT_KEY);
     const draft = raw ? (JSON.parse(raw) as WizardForm) : null;
-    return draft?.mode === mode ? { ...draft, password: '', confirmPassword: '', acceptTerms: false } : null;
+    return draft?.mode === mode ? { ...draft, phoneVerificationToken: '', verifiedPhone: '', acceptTerms: false } : null;
   } catch { return null; }
 }
 
@@ -156,13 +157,13 @@ function Wizard({ mode, data, paymentsEnabled }: { mode: 'register' | 'setup'; d
     rename: (id, title) => setMedia((prev) => prev.map((m) => (m.id === id ? { ...m, title } : m))),
   };
 
-  // ---- Draft persistence (per tab; never stores passwords or files) ----
+  // ---- Draft persistence (per tab; never stores the phone verification token or files) ----
   useEffect(() => {
     let t: ReturnType<typeof setTimeout>;
     const sub = form.watch((values) => {
       clearTimeout(t);
       t = setTimeout(() => {
-        try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ ...values, password: '', confirmPassword: '' })); } catch { /* storage unavailable */ }
+        try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ ...values, phoneVerificationToken: '', verifiedPhone: '' })); } catch { /* storage unavailable */ }
       }, 500);
     });
     return () => { clearTimeout(t); sub.unsubscribe(); };
@@ -183,14 +184,19 @@ function Wizard({ mode, data, paymentsEnabled }: { mode: 'register' | 'setup'; d
     requestAnimationFrame(() => top.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   };
 
+  /** The OTP verification token only counts for the number it was issued to. */
+  const isPhoneVerified = () => {
+    const { phoneVerificationToken, verifiedPhone, phoneNumber } = form.getValues();
+    return !!phoneVerificationToken && verifiedPhone === phoneDigits(phoneNumber);
+  };
+
   /** Validates the current step's fields (plus cross-field rules) before moving forward. */
   const validateStep = async (index: number) => {
     const current = steps[index]!;
     const ok = await form.trigger(current.fields as unknown as FieldPath<WizardForm>[], { shouldFocus: true });
     let extra = true;
     if (current.key === 'account') {
-      const { password, confirmPassword } = form.getValues();
-      if (password && confirmPassword !== password) { form.setError('confirmPassword', { message: 'Passwords do not match' }, { shouldFocus: true }); extra = false; }
+      if (ok && !isPhoneVerified()) { form.setError('phoneNumber', { message: 'Verify your mobile number to continue' }, { shouldFocus: true }); extra = false; }
       if (emailStatus === 'taken') { form.setError('email', { message: 'This email is already registered' }); extra = false; }
     }
     if (current.key === 'offer') {
@@ -285,6 +291,11 @@ function Wizard({ mode, data, paymentsEnabled }: { mode: 'register' | 'setup'; d
 
   const onValid = async (v: WizardForm) => {
     setFormError(null);
+    if (mode === 'register' && !isPhoneVerified()) {
+      form.setError('phoneNumber', { message: 'Verify your mobile number to continue' });
+      goToKey('account');
+      return;
+    }
     setSubmitting(true);
     const b = v.business;
     const business = {
@@ -312,7 +323,7 @@ function Wizard({ mode, data, paymentsEnabled }: { mode: 'register' | 'setup'; d
     try {
       if (mode === 'register') {
         const res = await api.post<BusinessRegistrationResult>('/api/auth/register-business', {
-          displayName: v.displayName, email: v.email, phoneNumber: v.phoneNumber, password: v.password, business,
+          displayName: v.displayName, email: v.email, phoneNumber: v.phoneNumber, phoneVerificationToken: v.phoneVerificationToken, business,
         });
         setSession(res.data.auth);
         result = res.data.business;
@@ -348,6 +359,8 @@ function Wizard({ mode, data, paymentsEnabled }: { mode: 'register' | 'setup'; d
       return;
     }
     if (e instanceof ApiError && e.errors) {
+      // Expired, used or already-registered number: the owner must verify (another) number again.
+      if (e.errors.phoneNumber) { form.setValue('phoneVerificationToken', ''); form.setValue('verifiedPhone', ''); }
       const paths = Object.entries(e.errors).map(([key, msgs]) => {
         const path = toFormPath(key);
         form.setError(path as FieldPath<WizardForm>, { message: msgs[0] });
@@ -411,7 +424,7 @@ function Wizard({ mode, data, paymentsEnabled }: { mode: 'register' | 'setup'; d
               </div>
               <div className="px-5 py-6 md:px-7">
                 {formError && <Alert severity="error" sx={{ mb: 3 }}>{formError}</Alert>}
-                {restored && step === 0 && <Alert severity="info" sx={{ mb: 3 }}>We restored the details you entered earlier in this tab.{mode === 'register' ? ' Please re-enter your password.' : ''}</Alert>}
+                {restored && step === 0 && <Alert severity="info" sx={{ mb: 3 }}>We restored the details you entered earlier in this tab.{mode === 'register' ? ' Please verify your mobile number again.' : ''}</Alert>}
                 {current.key === 'account' && <AccountStep emailStatus={emailStatus} onEmailBlur={(e) => void checkEmail(e)} />}
                 {current.key === 'business' && <BusinessStep data={data} />}
                 {current.key === 'contact' && <ContactStep data={data} />}

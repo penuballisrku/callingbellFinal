@@ -22,7 +22,8 @@ public sealed record SearchPlaceMatchDto(string CitySlug, string CityName, Guid?
 public sealed record ParsedSearchDto(string Text, string Query, string? PlaceText, SearchPlaceMatchDto? Place, string? CategorySlug, string? SubCategorySlug);
 
 /// <param name="City">The city selected in the dropdown: an area name found in several cities resolves to this one first.</param>
-public sealed record ParseSearchQuery(string? Text, string? City) : IRequest<ParsedSearchDto>;
+/// <param name="ByMeaning">When the query names no category, match it by meaning with the local AI (embeddings), e.g. "tap leaking" gives Plumbers.</param>
+public sealed record ParseSearchQuery(string? Text, string? City, bool ByMeaning = true) : IRequest<ParsedSearchDto>;
 
 public sealed class ParseSearchValidator : AbstractValidator<ParseSearchQuery>
 {
@@ -37,7 +38,7 @@ public sealed class ParseSearchValidator : AbstractValidator<ParseSearchQuery>
 /// Splits a search such as "lawyers in Nellore" or "plumbers near Madhapur, Hyderabad" into what is searched for and where, and matches
 /// the place to a listed city or area (city name or slug, area name, alternate spelling or PIN code) so the location dropdown can show it.
 /// </summary>
-public sealed partial class ParseSearchHandler(IUnitOfWork uow, ReferenceDataCache reference) : IRequestHandler<ParseSearchQuery, ParsedSearchDto>
+public sealed partial class ParseSearchHandler(IUnitOfWork uow, ReferenceDataCache reference, ISemanticCatalog semantic) : IRequestHandler<ParseSearchQuery, ParsedSearchDto>
 {
     /// <summary>The last " in " / " near " separates the place: "work from home jobs in pune" keeps "work from home jobs".</summary>
     [GeneratedRegex(@"^(?<what>.+)\s+(?:in|near|around|at)\s+(?<where>[^\s].*)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
@@ -65,6 +66,8 @@ public sealed partial class ParseSearchHandler(IUnitOfWork uow, ReferenceDataCac
 
         var place = placeText is null ? null : await MatchPlaceAsync(placeText, r.City, ct);
         var (categorySlug, subSlug) = await MatchCatalogueAsync(query, ct);
+        if (categorySlug is null && subSlug is null && r.ByMeaning && await semantic.MatchAsync(query, 1, ct) is { Confident: true } match)
+            subSlug = match.Top[0].SubCategorySlug;
         return new ParsedSearchDto(text, query, placeText, place, categorySlug, subSlug);
     }
 

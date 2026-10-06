@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, CircularProgress, Skeleton, Tab, Tabs, Tooltip, useMediaQuery, type Theme } from '@mui/material';
 import AutoAwesomeRounded from '@mui/icons-material/AutoAwesomeRounded';
 import MapRounded from '@mui/icons-material/MapRounded';
@@ -19,6 +19,8 @@ import type { ExternalPlace, ExternalSearch, ExternalTier } from '@/lib/types';
 import { Img, Rating } from '@/components/ui';
 
 const PAGE = 8;
+/** Polls of the external search while the AI works (every 8 s); after that the visitor can check again by hand. */
+const MAX_POLLS = 75;
 
 /** `place`: a place typed in the search that isn't a listed city or area ("lawyers in Nellore"); results are near it instead. */
 export interface ExternalSearchParams { q?: string | null; category?: string | null; sub?: string | null; city?: string | null; areaId?: string | null; place?: string | null }
@@ -29,15 +31,24 @@ export interface ExternalSearchParams { q?: string | null; category?: string | n
  */
 export function useExternalSearch(p: ExternalSearchParams) {
   const enabled = !!(p.q?.trim() || p.category || p.sub);
-  return useQuery({
-    queryKey: ['external-search', p.q ?? '', p.category ?? '', p.sub ?? '', p.city ?? '', p.areaId ?? '', p.place ?? ''],
+  const queryKey = ['external-search', p.q ?? '', p.category ?? '', p.sub ?? '', p.city ?? '', p.areaId ?? '', p.place ?? ''];
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey,
     queryFn: () => api.get<ExternalSearch>('/api/geo/external-search', { q: p.q, category: p.category, sub: p.sub, city: p.city, area: p.areaId, place: p.place }),
     enabled,
     staleTime: 300_000,
     retry: 1,
-    // Poll while the AI is ranking or the full OpenStreetMap search is still finishing (about five minutes at most).
-    refetchInterval: (q) => ((q.state.data?.ai.aiStatus === 'pending' || q.state.data?.ai.searching) && q.state.dataUpdateCount < 40 ? 8_000 : false),
+    // Poll while the AI is ranking or writing its overview, or the full OpenStreetMap search is still finishing (ten minutes at most;
+    // the server drops AI work nobody polls for, so polling is what keeps it queued).
+    refetchInterval: (q) => {
+      const d = q.state.data;
+      return (d?.ai.aiStatus === 'pending' || d?.ai.searching || d?.insight?.status === 'pending') && q.state.dataUpdateCount < MAX_POLLS ? 8_000 : false;
+    },
   });
+  /** False once automatic refreshing has given up; the page then offers to check again by hand. */
+  const polling = (queryClient.getQueryState(queryKey)?.dataUpdateCount ?? 0) < MAX_POLLS;
+  return { ...query, polling };
 }
 
 /** Search priority: registered businesses from our database, then Google Maps, then places picked by the free AI agents. */
@@ -93,7 +104,11 @@ export function PriorityBadge({ n }: { n: number }) {
 }
 
 /** The "Google Maps Businesses" or "AI Recommended Businesses" tab's content. */
-export function ExternalResults({ ext, loading, isError, only }: { ext?: ExternalSearch; loading: boolean; isError: boolean; only: 'google' | 'ai' }) {
+export function ExternalResults({ ext, loading, isError, only, polling, onRefresh }: {
+  ext?: ExternalSearch; loading: boolean; isError: boolean; only: 'google' | 'ai';
+  /** Whether results are still refreshed automatically; when not, a pending AI overview offers to check again. */
+  polling?: boolean; onRefresh?: () => void;
+}) {
   const sourceName = only === 'google' ? 'Google Maps' : 'AI recommendations';
   if (loading) {
     return (
@@ -132,6 +147,7 @@ export function ExternalResults({ ext, loading, isError, only }: { ext?: Externa
           empty={`Google Maps has no ${what} near ${where?.label ?? 'this location'}.`}
           attribution={<>Results from Google Maps</>} />
       )}
+      {only === 'ai' && <AiInsight insight={ext.insight} stalled={polling === false} onRefresh={onRefresh} />}
       {only === 'ai' && (
         <TierSection tier={ext.ai} source="ai" title="AI Recommended Businesses" where={where}
           subtitle={ext.ai.aiStatus === 'ranked'
@@ -143,6 +159,39 @@ export function ExternalResults({ ext, loading, isError, only }: { ext?: Externa
           attribution={<>Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="underline">OpenStreetMap contributors</a></>} />
       )}
     </>
+  );
+}
+
+/** The AI's overview of these results, written by the local AI from the places found and Calling Bell's own prices and bookings. */
+function AiInsight({ insight, stalled, onRefresh }: { insight?: ExternalSearch['insight']; stalled: boolean; onRefresh?: () => void }) {
+  if (!insight || insight.status === 'off') return null;
+  if (insight.status === 'pending' && stalled) {
+    return (
+      <div className="card mb-6 flex flex-wrap items-center gap-3 p-4 text-sm text-muted" role="status">
+        <AutoAwesomeRounded sx={{ fontSize: 18 }} className="text-accent-ink" />
+        <span className="min-w-0 flex-1">The AI overview is taking longer than usual. The places below are ready to use.</span>
+        {onRefresh && <Button size="small" variant="outlined" onClick={onRefresh}>Check again</Button>}
+      </div>
+    );
+  }
+  return (
+    <section aria-labelledby="ai-insight" className="card mb-6 border-[color-mix(in_srgb,var(--cb-accent)_35%,transparent)] p-4" aria-busy={insight.status === 'pending'}>
+      <h2 id="ai-insight" className="flex items-center gap-2 text-sm font-semibold">
+        <span aria-hidden className="grid h-7 w-7 place-items-center rounded-lg bg-accent-soft text-accent-ink"><AutoAwesomeRounded sx={{ fontSize: 16 }} /></span>
+        AI overview
+      </h2>
+      {insight.status === 'pending' || !insight.text ? (
+        <div className="mt-3 space-y-1.5" role="status">
+          <Skeleton width="92%" /><Skeleton width="85%" /><Skeleton width="60%" />
+          <p className="pt-1 text-xs text-muted">Our AI assistant is reviewing these places and Calling Bell’s prices and bookings…</p>
+        </div>
+      ) : (
+        <>
+          <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-ink">{insight.text}</p>
+          <p className="mt-2 text-[11px] text-faint">Written by AI from the places below and live Calling Bell data. Check details with the business.</p>
+        </>
+      )}
+    </section>
   );
 }
 
@@ -240,6 +289,43 @@ function joinHref(p: ExternalPlace): string {
   return `/register?${params}`;
 }
 
+/** A dense place row for narrow panels such as the AI search assistant: name, rating, distance, address and quick actions. */
+export function CompactPlace({ p, source }: { p: ExternalPlace; source: 'ai' | 'google' }) {
+  const whatsApp = whatsAppHref(p);
+  return (
+    <article className="rounded-xl border border-line bg-surface p-3">
+      <div className="flex items-center gap-1.5">
+        <h3 className="min-w-0 truncate text-sm font-semibold">{p.name}</h3>
+        <span className={`inline-flex shrink-0 items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold ${source === 'ai' ? 'bg-accent-soft text-accent-ink' : 'bg-subtle text-info'}`}>
+          {source === 'ai' ? <><AutoAwesomeRounded sx={{ fontSize: 11 }} />AI pick</> : <><MapRounded sx={{ fontSize: 11 }} />Google Maps</>}
+        </span>
+      </div>
+      <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted">
+        {p.rating != null && <Rating value={p.rating} count={p.ratingCount ?? undefined} />}
+        <span className="inline-flex items-center gap-0.5"><PlaceRounded sx={{ fontSize: 14 }} />{p.distanceKm.toFixed(1)} km</span>
+        {p.kind && <span className="truncate">{p.kind}</span>}
+      </div>
+      {p.address && <p className="mt-1 truncate text-xs text-ink-2" title={p.address}>{p.address}</p>}
+      {p.aiReason && <AiReason text={p.aiReason} compact />}
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        <Button size="small" variant="outlined" startIcon={<DirectionsRounded />} href={p.directionsUrl} target="_blank" rel="noreferrer">Directions</Button>
+        {p.phone && <Button size="small" variant="outlined" startIcon={<CallRounded />} href={`tel:${p.phone.replace(/[^\d+]/g, '')}`}>Call</Button>}
+        {whatsApp && <Button size="small" variant="outlined" startIcon={<WhatsApp />} href={whatsApp} target="_blank" rel="noreferrer">WhatsApp</Button>}
+      </div>
+    </article>
+  );
+}
+
+/** Why the AI picked a place, in its own words. */
+function AiReason({ text, compact }: { text: string; compact?: boolean }) {
+  return (
+    <p className={`mt-1.5 flex items-start gap-1 rounded-lg bg-accent-soft px-2 py-1 text-accent-ink ${compact ? 'text-[11px]' : 'text-xs'}`}>
+      <AutoAwesomeRounded sx={{ fontSize: compact ? 12 : 14, mt: '1px' }} aria-hidden />
+      <span><span className="sr-only">Why the AI picked it: </span>{text}</span>
+    </p>
+  );
+}
+
 function PlaceCard({ p, source }: { p: ExternalPlace; source: 'ai' | 'google' }) {
   const hours = p.openingHours?.replace(/;\s*/g, ' · ');
   const whatsApp = whatsAppHref(p);
@@ -272,6 +358,7 @@ function PlaceCard({ p, source }: { p: ExternalPlace; source: 'ai' | 'google' })
           {p.rating != null && <Rating value={p.rating} count={p.ratingCount ?? undefined} />}
         </div>
         {p.address && <p className="mt-1 line-clamp-2 text-[13px] text-ink-2">{p.address}</p>}
+        {p.aiReason && <AiReason text={p.aiReason} />}
         {hours && (
           <Tooltip title={hours}>
             <p className="mt-1 inline-flex max-w-full items-center gap-1 text-xs text-muted"><ScheduleRounded sx={{ fontSize: 14 }} /><span className="truncate">{hours}</span></p>

@@ -275,7 +275,7 @@ export default function SearchPage() {
 
       <div className="grid gap-6 lg:grid-cols-[264px_1fr]">
         <aside className="hidden lg:block">
-          <div className="card sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto p-4">{filtersNote}{filters}</div>
+          <div className="card sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto p-4">{filtersNote}{filters}</div>
         </aside>
 
         <div className="min-w-0">
@@ -315,7 +315,8 @@ export default function SearchPage() {
 
           {tab !== 'db' ? (
             <div role="tabpanel" id={sourcePanelId(tab)} aria-labelledby={sourceTabId(tab)}>
-              <ExternalResults only={tab} ext={external.data} loading={external.isLoading} isError={external.isError} />
+              <ExternalResults only={tab} ext={external.data} loading={external.isLoading} isError={external.isError}
+                polling={external.polling} onRefresh={() => void external.refetch()} />
             </div>
           ) : (
           <div role={searchesExternal ? 'tabpanel' : undefined} id={sourcePanelId('db')} aria-labelledby={searchesExternal ? sourceTabId('db') : undefined}>

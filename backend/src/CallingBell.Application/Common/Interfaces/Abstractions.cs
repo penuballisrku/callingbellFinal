@@ -41,19 +41,62 @@ public interface ICurrentUser
 public interface IIdentityService
 {
     Task<AuthResultDto> LoginAsync(string email, string password, CancellationToken ct);
+    /// <summary>Creates an account whose mobile number has already been verified by OTP (no password).</summary>
     Task<AuthResultDto> RegisterAsync(RegisterRequest request, CancellationToken ct);
-    /// <summary>Signs in (or signs up) with a Google ID token issued to this application's client id.</summary>
-    Task<AuthResultDto> ExternalGoogleAsync(string idToken, string accountType, CancellationToken ct);
+    /// <summary>Signs in the account registered with this (normalised) mobile number, after its OTP was verified.</summary>
+    Task<AuthResultDto> SignInWithPhoneAsync(string phoneNumber, CancellationToken ct);
     Task<AuthResultDto> RefreshAsync(string refreshToken, CancellationToken ct);
     Task RevokeAsync(string refreshToken, CancellationToken ct);
     Task<CurrentUserDto> GetCurrentUserAsync(string userId, CancellationToken ct);
     Task<bool> IsEmailAvailableAsync(string email, CancellationToken ct);
+    /// <summary>Whether an active account uses this (normalised) mobile number, optionally ignoring one user.</summary>
+    Task<bool> IsPhoneRegisteredAsync(string phoneNumber, CancellationToken ct, string? exceptUserId = null);
     Task<AccountSettingsDto> GetAccountSettingsAsync(string userId, CancellationToken ct);
     Task<CurrentUserDto> UpdateAccountAsync(string userId, string displayName, string phoneNumber, CancellationToken ct);
-    /// <summary>Changes the password (or sets one for Google-only accounts, when <paramref name="currentPassword"/> is null).</summary>
+    /// <summary>Changes the password (or sets one for OTP-only accounts, when <paramref name="currentPassword"/> is null).</summary>
     Task ChangePasswordAsync(string userId, string? currentPassword, string newPassword, CancellationToken ct);
     /// <summary>Revokes every refresh token of the user except <paramref name="keepRefreshToken"/>; returns how many were revoked.</summary>
     Task<int> RevokeOtherSessionsAsync(string userId, string? keepRefreshToken, CancellationToken ct);
+}
+
+/// <summary>A sub-category the semantic index matched to a search, with its cosine similarity (0..1, higher is closer).</summary>
+public sealed record SemanticMatch(string SubCategorySlug, double Score);
+
+/// <param name="Top">The closest sub-categories, best first.</param>
+/// <param name="Confident">The best match clearly stands out from the rest of the catalogue: safe to apply directly.</param>
+/// <param name="Plausible">The request probably means one of <paramref name="Top"/>, but which one is unclear (or it is unrelated text).</param>
+/// <param name="Z">How far the best match stands out (standard deviations above the catalogue's mean similarity).</param>
+public sealed record SemanticResult(IReadOnlyList<SemanticMatch> Top, bool Confident, bool Plausible, double Z);
+
+/// <summary>
+/// Fast meaning-based matching of free text to the catalogue ("water dripping from my ceiling" gives Plumbers) using a local Ollama
+/// embedding model. The catalogue's vectors are built in the background; a query takes a few hundred milliseconds on a CPU.
+/// Null while the index is being built or Ollama is unavailable, so callers fall back to their other methods.
+/// </summary>
+public interface ISemanticCatalog
+{
+    bool IsReady { get; }
+    /// <param name="timeout">How long to wait for the model (default from settings); on timeout the result is null and the search goes on without it.</param>
+    Task<SemanticResult?> MatchAsync(string text, int top, CancellationToken ct, TimeSpan? timeout = null);
+}
+
+/// <summary>One-time codes sent to a mobile number for sign-in and sign-up. Phone numbers are passed normalised.</summary>
+public interface IPhoneOtpService
+{
+    /// <summary>Generates and texts a new code (invalidating earlier ones for the same purpose), enforcing resend limits.</summary>
+    Task<OtpChallengeDto> SendAsync(string phoneNumber, OtpPurpose purpose, CancellationToken ct);
+    /// <summary>Checks and consumes the latest code; throws a validation error on a wrong, expired or exhausted code.</summary>
+    Task VerifyAsync(string phoneNumber, OtpPurpose purpose, string code, CancellationToken ct);
+    /// <summary>Verifies a sign-up code and returns a short-lived token proving the number was verified.</summary>
+    Task<PhoneVerificationDto> VerifyForSignUpAsync(string phoneNumber, string code, CancellationToken ct);
+    /// <summary>Marks a sign-up verification token as used; throws if it is unknown, expired, used or for another number.</summary>
+    Task ConsumeVerificationAsync(string phoneNumber, string verificationToken, CancellationToken ct);
+}
+
+/// <summary>Sends text messages (OTP codes). Implemented in Infrastructure.</summary>
+public interface ISmsSender
+{
+    Task SendAsync(string phoneNumber, string message, CancellationToken ct);
 }
 
 /// <summary>Pushes real-time events (SignalR). Implemented in the API layer.</summary>
@@ -285,9 +328,25 @@ public sealed record GooglePhotoAttribution(string DisplayName, string? Uri);
 public sealed record AiSearchIntent(IReadOnlyList<string> SubCategorySlugs, string Model, DateTimeOffset GeneratedOn);
 
 /// <summary>The AI's choice of the places that fit a search, best first (ids from the candidates given).</summary>
-public sealed record AiPlaceRanking(IReadOnlyList<string> Relevant, string Model, DateTimeOffset GeneratedOn);
+/// <param name="Reasons">Why each picked place fits, in plain words, by place id (from the details it was given only).</param>
+public sealed record AiPlaceRanking(IReadOnlyList<string> Relevant, string Model, DateTimeOffset GeneratedOn,
+    IReadOnlyDictionary<string, string>? Reasons = null);
 
-public sealed record AiPlaceCandidate(string Id, string Name, string? Kind);
+/// <param name="Details">What else is known, in plain words, e.g. "1.2 km away, phone listed, hours Mo-Sa 09:00-20:00".</param>
+public sealed record AiPlaceCandidate(string Id, string Name, string? Kind, string? Details = null);
+
+/// <summary>The AI's plain-language answer to a visitor's question, written only from the platform facts it was given.</summary>
+public sealed record AiAnswer(string Text, string Model, DateTimeOffset GeneratedOn);
+
+/// <summary>
+/// What the AI read from a message to the search assistant, in the platform's search terms. Flags are only set when the visitor asked
+/// for them. <paramref name="ServiceSlug"/> is one of the candidate sub-categories it was given (or null).
+/// </summary>
+/// <param name="Place">A place named in the message (locality or city), as written.</param>
+/// <param name="Urgent">Needed right now or today.</param>
+/// <param name="Sort">"rating", "price", "reviews" or "distance".</param>
+public sealed record AiRequestReading(string? ServiceSlug, string? Place, bool Verified, bool HomeVisit, bool Urgent, bool OpenNow, bool Video,
+    bool Booking, decimal? MinRating, string? Sort, string Model, DateTimeOffset GeneratedOn);
 
 /// <summary>
 /// Local AI help for searches that go beyond the platform: understanding a free-text search, and choosing which nearby real places fit it.
@@ -302,4 +361,20 @@ public interface ISearchAssistant
     AiPlaceRanking? GetRanking(string key);
     bool IsRankingPending(string key);
     void RequestRanking(string key, string query, string place, IReadOnlyList<AiPlaceCandidate> candidates);
+    AiAnswer? GetAnswer(string key);
+    bool IsAnswerPending(string key);
+    /// <summary>Queues a plain-language answer to <paramref name="question"/> using only <paramref name="facts"/> (live database figures).</summary>
+    void RequestAnswer(string key, string question, string facts);
+    /// <summary>
+    /// Queues a short conversational reply to a search request, describing the results in <paramref name="facts"/>; read it with
+    /// <see cref="GetAnswer"/>.
+    /// </summary>
+    void RequestReply(string key, string message, string facts);
+    AiRequestReading? GetReading(string key);
+    bool IsReadingPending(string key);
+    /// <summary>
+    /// Queues reading <paramref name="message"/> into search filters. <paramref name="current"/> describes the search it may refine;
+    /// <paramref name="services"/> are the sub-categories it may name (empty when the service is already known).
+    /// </summary>
+    void RequestReading(string key, string message, string? current, IReadOnlyList<(string Slug, string Name)> services);
 }

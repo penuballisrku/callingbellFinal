@@ -324,7 +324,7 @@ export default function CategoriesPage() {
       {data && (
         // Marquee: categories (jump to a section) and popular services (open results). Sticky on phones and tablets, where it is the
         // navigation; on desktop the sidebar takes that role.
-        <div className="sticky top-16 z-30 -mx-4 mb-8 space-y-2 border-y border-line bg-canvas/95 px-4 py-3 backdrop-blur md:-mx-6 md:px-6 lg:static lg:mx-0 lg:rounded-xl lg:border lg:bg-surface lg:px-4">
+        <div className="sticky top-[72px] z-30 -mx-4 mb-8 space-y-2 border-y border-line bg-canvas/95 px-4 py-3 backdrop-blur md:-mx-6 md:px-6 lg:static lg:mx-0 lg:rounded-xl lg:border lg:bg-surface lg:px-4">
           {term ? (
             // Searching: matching categories (jump to section) and sub-categories (open results), standing still.
             <div role="region" aria-label="Matching categories" aria-live="polite" className="flex max-h-40 flex-wrap gap-2 overflow-y-auto">

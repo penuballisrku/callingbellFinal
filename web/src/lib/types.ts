@@ -84,6 +84,8 @@ export interface NearbyService extends Omit<PopularService, 'altText'> { altText
 export interface NearbyServices {
   placeName?: string | null; cityName?: string | null; citySlug?: string | null; source: 'area' | 'ip' | 'city' | 'none';
   aiRanked: boolean; aiPending: boolean; aiModel?: string | null; items: NearbyService[]; relatedCategories: RelatedCategory[];
+  /** Selected area only: the city's categories that aren't near the area (`relatedCategories` then holds the near ones). */
+  cityCategories?: RelatedCategory[];
 }
 /** A sub-category that complements the popular services nearby; `reason` comes from the local AI model once ready. */
 export interface RelatedCategory {
@@ -112,6 +114,19 @@ export interface HomeData {
   citySlug?: string | null; cityName?: string | null; heroBanners: Banner[]; promoBanners: Banner[]; categories: SubCategory[];
   popularServices: PopularService[];
   stats: { businesses: number; cities: number; reviews: number; bookingsCompleted: number };
+}
+
+/** AI search assistant (POST /api/search/assistant). Filter names match GET /api/businesses. */
+export interface AssistantFilters {
+  q?: string | null; category?: string | null; sub?: string | null; city?: string | null; areaId?: string | null; minRating?: number | null;
+  availability?: string | null; openNow: boolean; verifiedOnly: boolean; homeService: boolean; videoConsultation: boolean; onlineBooking: boolean;
+  sort?: string | null;
+}
+export interface AssistantStarters { cityName?: string | null; cityHasListings: boolean; prompts: string[] }
+export interface AssistantChip { key: keyof AssistantFilters; label: string }
+export interface AssistantReply {
+  message: string; understood?: string | null; filters: AssistantFilters; chips: AssistantChip[]; results: BusinessCard[]; total: number;
+  suggestions: string[]; relaxed: string[]; aiPending: boolean; aiUsed: boolean;
 }
 
 export interface AppliedFilters { q?: string | null; categorySlug?: string | null; categoryName?: string | null; subSlug?: string | null; subName?: string | null; citySlug?: string | null; cityName?: string | null; openNow: boolean; availability?: string | null; areaName?: string | null; areaMatches?: number | null }
@@ -205,7 +220,7 @@ export interface OwnerOverview {
   recentPhotos: OwnerMediaItem[]; videos: OwnerMediaItem[]; photoCount: number; activities: Activity[]; pendingPayment?: PendingPayment | null;
 }
 export interface AccountSettings {
-  displayName: string; email: string; phoneNumber?: string | null; hasPassword: boolean; googleLinked: boolean; createdOn: string;
+  displayName: string; email: string; phoneNumber?: string | null; hasPassword: boolean; phoneVerified: boolean; createdOn: string;
   lastLoginOn?: string | null; activeSessions: number;
 }
 
@@ -247,11 +262,15 @@ export interface ExternalPlace {
   rating?: number | null; ratingCount?: number | null; distanceKm: number; directionsUrl: string; sourceUrl?: string | null;
   /** Google Maps only: photo served through /api/places/photo, with its author (Google requires the credit to be shown). */
   photoUrl?: string | null; photoCredit?: string | null; photoCreditUrl?: string | null;
+  /** AI tier only: why the AI picked this place, in plain words. */
+  aiReason?: string | null;
 }
 /** status: ready | off (not configured) | unavailable | skipped. aiStatus (AI tier): ranked | pending (poll) | off. */
 /** searching (AI tier): the full OpenStreetMap search is still running; these results are partial (poll). */
 export interface ExternalTier { status: 'ready' | 'off' | 'unavailable' | 'skipped'; aiStatus?: 'ranked' | 'pending' | 'off' | null; total: number; duplicates: number; items: ExternalPlace[]; searching?: boolean }
-export interface ExternalSearch { query?: string | null; placeName?: string | null; cityName?: string | null; origin?: string | null; ai: ExternalTier; google: ExternalTier }
+/** The AI's overview of the results, written from live data: "pending" while it is being written (poll). */
+export interface ExternalInsight { status: 'ready' | 'pending' | 'off'; text?: string | null }
+export interface ExternalSearch { query?: string | null; placeName?: string | null; cityName?: string | null; origin?: string | null; ai: ExternalTier; google: ExternalTier; insight?: ExternalInsight | null }
 
 /* ---------- Google Places (GET /api/places/search) ---------- */
 export interface GooglePhotoAttribution { displayName: string; uri?: string | null }

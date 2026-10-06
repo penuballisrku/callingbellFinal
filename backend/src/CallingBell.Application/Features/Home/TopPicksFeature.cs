@@ -22,8 +22,9 @@ public sealed record TopPickCategoryDto(string Name, string Slug, string Categor
 public sealed record TopPicksDto(string? CityName, string? CitySlug, string? PlaceName, string LocationSource, int TotalInCity,
     bool AiEnriched, bool AiPending, string? AiModel, IReadOnlyList<TopPickCategoryDto> Categories);
 
-/// <param name="FallbackCitySlug">Used only when the IP can't be placed near a listed city (e.g. the city chosen in the selector).</param>
-public sealed record GetTopPicksQuery(string? ClientIp, string? FallbackCitySlug, double RadiusKm) : IRequest<TopPicksDto>;
+/// <param name="FallbackCitySlug">Used only when the IP can't be placed near a listed city.</param>
+/// <param name="CitySlug">The city the visitor chose in the selector: takes precedence over the IP (whose coordinates are still used inside it).</param>
+public sealed record GetTopPicksQuery(string? ClientIp, string? FallbackCitySlug, double RadiusKm, string? CitySlug = null) : IRequest<TopPicksDto>;
 
 /// <summary>
 /// Category list for the "Top picks" section, specific to the visitor's city. Database results come first and are returned immediately
@@ -40,8 +41,10 @@ public sealed class GetTopPicksHandler(IUnitOfWork uow, VisitorOriginResolver or
     public async Task<TopPicksDto> Handle(GetTopPicksQuery r, CancellationToken ct)
     {
         // Always the IP address's city; the fallback city only when the IP can't be located near a listed city.
-        var origin = await origins.ResolveAsync(r.ClientIp, null, null, r.RadiusKm, ct)
-                     ?? await origins.ResolveAsync(null, r.FallbackCitySlug, null, r.RadiusKm, ct);
+        var origin = !string.IsNullOrWhiteSpace(r.CitySlug)
+            ? await origins.ResolveAsync(r.ClientIp, r.CitySlug, null, r.RadiusKm, ct)
+            : await origins.ResolveAsync(r.ClientIp, null, null, r.RadiusKm, ct)
+              ?? await origins.ResolveAsync(null, r.FallbackCitySlug, null, r.RadiusKm, ct);
         if (origin is null) return new TopPicksDto(null, null, null, "none", 0, false, false, null, []);
 
         var cityId = origin.CityId;

@@ -42,6 +42,8 @@ internal sealed class OllamaChatClient(IHttpClientFactory httpFactory, IOptions<
 {
     public const string HttpClientName = "ollama";
     internal static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    /// <summary>Request bodies leave out unset fields (e.g. no "format" for a plain-text answer).</summary>
+    private static readonly JsonSerializerOptions RequestJson = new(JsonSerializerDefaults.Web) { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
 
     /// <summary>
     /// While Ollama is unavailable every call fails at once for <see cref="AiOptions.RetryAfterMinutes"/> instead of trying again,
@@ -53,18 +55,25 @@ internal sealed class OllamaChatClient(IHttpClientFactory httpFactory, IOptions<
 
     /// <summary>Sends one system + user message and returns the model's JSON reply text (null when empty).</summary>
     /// <param name="maxOutputTokens">Overrides <see cref="AiOptions.MaxOutputTokens"/> for tasks with longer answers.</param>
-    public async Task<string?> ChatJsonAsync(string system, string user, CancellationToken ct, int? maxOutputTokens = null)
+    public Task<string?> ChatJsonAsync(string system, string user, CancellationToken ct, int? maxOutputTokens = null) =>
+        ChatAsync(system, user, json: true, temperature: 0.2, maxOutputTokens, ct);
+
+    /// <summary>Sends one system + user message and returns the model's plain-text reply (null when empty).</summary>
+    public Task<string?> ChatTextAsync(string system, string user, CancellationToken ct, int? maxOutputTokens = null) =>
+        ChatAsync(system, user, json: false, temperature: 0.3, maxOutputTokens, ct);
+
+    private async Task<string?> ChatAsync(string system, string user, bool json, double temperature, int? maxOutputTokens, CancellationToken ct)
     {
         var o = options.Value;
-        if (DateTime.UtcNow.Ticks < Interlocked.Read(ref _unavailableUntilTicks))
+        if (DateTime.UtcNow.Ticks < Interlocked.Read(ref _unavailableUntilTicks) && !await CameBackAsync(o, ct))
             throw new AiUnavailableException($"Ollama at {o.BaseUrl} is unavailable");
         var body = new
         {
-            model = o.Model, stream = false, format = "json", keep_alive = o.KeepAlive,
+            model = o.Model, stream = false, format = json ? "json" : null, keep_alive = o.KeepAlive,
             // Caps the answer length so a runaway reply can't tie up the shared model.
             options = o.Threads > 0
-                ? (object)new { temperature = 0.2, num_predict = maxOutputTokens ?? o.MaxOutputTokens, num_thread = o.Threads }
-                : new { temperature = 0.2, num_predict = maxOutputTokens ?? o.MaxOutputTokens },
+                ? (object)new { temperature, num_predict = maxOutputTokens ?? o.MaxOutputTokens, num_thread = o.Threads }
+                : new { temperature, num_predict = maxOutputTokens ?? o.MaxOutputTokens },
             messages = new object[] { new { role = "system", content = system }, new { role = "user", content = user } },
         };
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -72,7 +81,7 @@ internal sealed class OllamaChatClient(IHttpClientFactory httpFactory, IOptions<
         HttpResponseMessage sent;
         try
         {
-            sent = await httpFactory.CreateClient(HttpClientName).PostAsJsonAsync($"{o.BaseUrl.TrimEnd('/')}/api/chat", body, Json, cts.Token);
+            sent = await httpFactory.CreateClient(HttpClientName).PostAsJsonAsync($"{o.BaseUrl.TrimEnd('/')}/api/chat", body, RequestJson, cts.Token);
         }
         catch (HttpRequestException ex) when (ex.InnerException is SocketException)
         {
@@ -88,13 +97,42 @@ internal sealed class OllamaChatClient(IHttpClientFactory httpFactory, IOptions<
         return string.IsNullOrWhiteSpace(chat?.Message?.Content) ? null : chat.Message.Content;
     }
 
+    /// <summary>When the last check during a back-off ran; checks are at most <see cref="ProbeEvery"/> apart.</summary>
+    private long _lastProbeTicks;
+    private static readonly TimeSpan ProbeEvery = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// During a back-off, a quick check (at most every <see cref="ProbeEvery"/>) of whether Ollama has been started since, so AI comes back
+    /// within seconds instead of after <see cref="AiOptions.RetryAfterMinutes"/>. Ends the back-off when it answers.
+    /// </summary>
+    private async Task<bool> CameBackAsync(AiOptions o, CancellationToken ct)
+    {
+        var now = DateTime.UtcNow.Ticks;
+        var last = Interlocked.Read(ref _lastProbeTicks);
+        if (now - last < ProbeEvery.Ticks || Interlocked.CompareExchange(ref _lastProbeTicks, now, last) != last) return false;
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(2));
+            using var response = await httpFactory.CreateClient(HttpClientName).GetAsync($"{o.BaseUrl.TrimEnd('/')}/api/version", cts.Token);
+            if (!response.IsSuccessStatusCode) return false;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException && !ct.IsCancellationRequested)
+        {
+            return false;
+        }
+        Interlocked.Exchange(ref _unavailableUntilTicks, 0);
+        logger.LogInformation("AI is available again: Ollama at {BaseUrl} is answering.", o.BaseUrl);
+        return true;
+    }
+
     /// <summary>Starts the back-off, logging only when it wasn't already in effect.</summary>
     private AiUnavailableException Unavailable(AiOptions o, string reason, Exception? inner)
     {
         var minutes = Math.Max(1, o.RetryAfterMinutes);
         var now = DateTime.UtcNow.Ticks;
         if (Interlocked.Exchange(ref _unavailableUntilTicks, DateTime.UtcNow.AddMinutes(minutes).Ticks) < now)
-            logger.LogWarning("AI is unavailable: {Reason}, or set Ai:Enabled to false. Database results are shown; retrying in {Minutes} min.",
+            logger.LogWarning("AI is unavailable: {Reason}, or set Ai:Enabled to false. Database results are shown meanwhile; AI resumes as soon as Ollama answers (checked every 15 s, full retry in {Minutes} min).",
                 reason, minutes);
         return new AiUnavailableException(reason, inner);
     }

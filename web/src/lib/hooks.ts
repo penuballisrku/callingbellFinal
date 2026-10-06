@@ -2,6 +2,40 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './api';
 import type { Category, City, CityAreas, CountryCatalog, Lookup, Lookups } from './types';
+import { useCity } from '@/stores/city';
+
+/** <c>areaId</c> is set with <c>areaSlug</c>, so the area can be selected without loading the city list. */
+export interface VisitorDistrict {
+  citySlug: string; cityName: string; state: string; areaSlug?: string | null; areaId?: string | null; matchedBy: 'area' | 'city' | 'distance';
+}
+/** Approximate visitor location from the IP (the IP itself is never sent to the browser). */
+interface VisitorLocation {
+  place?: string | null; region?: string | null; district?: VisitorDistrict | null;
+  country?: string | null; postcode?: string | null; latitude?: number | null; longitude?: number | null;
+}
+
+/** The listed city (district) the visitor is browsing from, detected on the server from their IP address. */
+export function useVisitorDistrict() {
+  return useQuery({
+    queryKey: ['geo', 'district'],
+    queryFn: () => api.get<VisitorLocation>('/api/geo/district'),
+    select: (d) => d.district ?? null,
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+/**
+ * The city (and area) a page should show: the visitor's choice, else their detected district. For a first-time visitor
+ * <c>ready</c> stays false until detection has answered (a quick request), so pages load their city's content once instead of
+ * loading the generic content first and then again for the city.
+ */
+export function usePageCity() {
+  const { citySlug, areaId, source } = useCity();
+  const district = useVisitorDistrict();
+  if (source !== null) return { citySlug, areaId, ready: true };
+  return { citySlug: district.data?.citySlug ?? citySlug, areaId: district.data?.areaId ?? areaId, ready: !district.isPending };
+}
 
 export function useDebounced<T>(value: T, delay = 350): T {
   const [debounced, setDebounced] = useState(value);
@@ -74,10 +108,13 @@ export function useCityAreas(citySlug?: string | null) {
 
 /** Slug of the selected area (by id) within the selected city: from the cities payload, else from the city's full area list. */
 export function useSelectedAreaSlug(citySlug: string | null, areaId: string | null): string | null {
+  // The detected area is named in the district response: no need to wait for the city list.
+  const { data: district } = useVisitorDistrict();
+  const detected = areaId && district?.areaId === areaId && district.citySlug === citySlug ? district.areaSlug ?? null : null;
   const { data: cities } = useCities();
   const inline = areaId ? cities?.find((c) => c.slug === citySlug)?.areas.find((a) => a.id === areaId) : undefined;
-  const { areas } = useCityAreas(areaId && !inline && cities ? citySlug : null);
-  return inline?.slug ?? (areaId ? areas.find((a) => a.id === areaId)?.slug ?? null : null);
+  const { areas } = useCityAreas(areaId && !detected && !inline && cities ? citySlug : null);
+  return detected ?? inline?.slug ?? (areaId ? areas.find((a) => a.id === areaId)?.slug ?? null : null);
 }
 
 /** Full category → sub-category tree with business counts, shared by every screen that lists or filters categories. */

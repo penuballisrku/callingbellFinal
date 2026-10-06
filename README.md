@@ -67,30 +67,59 @@ All accounts use the password `CallingBell@2026`. The login page also has one-cl
 
 Every owner logs in as `<first.last>@demo.callingbell.in`; see `04_Businesses.sql`. All contact details use the non-routable `demo.callingbell.in` domain.
 
-## Google sign-in
+## Mobile OTP sign-up and sign-in
 
-"Continue with Google" appears on the sign-in and register pages once a Google OAuth Client ID is configured. It stays hidden until then.
+New accounts verify their mobile number with a one-time SMS code instead of choosing a password. Sign-in defaults to mobile OTP; email and password still work for accounts that have a password, including the demo accounts.
 
-1. In [Google Cloud Console](https://console.cloud.google.com/apis/credentials), create an **OAuth client ID** of type **Web application**.
-2. Under **Authorized JavaScript origins**, add `http://localhost:5173` and your production site origin. No redirect URI is needed, because the button uses popup mode.
-3. Give the Client ID to the API by setting `Authentication:Google:ClientId`, either in `appsettings.json` or with:
-   ```powershell
-   cd backend/src/CallingBell.Api
-   dotnet user-secrets init
-   dotnet user-secrets set "Authentication:Google:ClientId" "<id>.apps.googleusercontent.com"
-   ```
-   It is a public identifier, not a secret, and the web app reads it from `GET /api/auth/providers`.
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/auth/otp/send` `{ phoneNumber, purpose: "SignIn" \| "SignUp" }` | Texts a code. `SignIn` needs an existing account; `SignUp` needs an unused number. |
+| `POST /api/auth/otp/sign-in` `{ phoneNumber, code }` | Verifies the code and returns the normal access token and refresh token. |
+| `POST /api/auth/otp/verify` `{ phoneNumber, code }` | Verifies a sign-up code and returns a `verificationToken`. |
+| `POST /api/auth/register`, `POST /api/auth/register-business` | Take `phoneVerificationToken` instead of `password`. The token is single-use and tied to the number. |
 
-Flow:
-- **Verification:** the browser receives a Google ID token. `POST /api/auth/google` verifies its signature, expiry, issuer and audience (your Client ID), and requires a verified email.
-- **Account handling:**
-  - First-time users get an account; the register page's account-type toggle decides between Customer and Business owner.
-  - Existing accounts with the same email are linked through `AspNetUserLogins`.
-  - Deactivated or locked accounts are refused.
-- **Session:** the response is the normal Calling Bell access token and refresh token.
+- **Storage:** codes live in `dbo.OtpCodes`, created by `00_Schema.sql`. Only SHA-256 hashes are stored.
+- **Limits:** all settings are under `Authentication:Otp`. Codes expire after 5 minutes. A number can request one code every 30 seconds and 5 per hour. A code allows 5 wrong attempts. Each endpoint is also covered by the `auth` rate limit.
+- **SMS delivery:** the default `ISmsSender` is `LoggingSmsSender`, which only writes the message to the API log. For production, register a real gateway (such as MSG91 or Twilio) that implements `ISmsSender`.
+- **Development:** `appsettings.Development.json` sets `ExposeCodeInResponse: true`, so the sign-in and sign-up screens show the code. Never enable this in production.
+- **Passwords:** an OTP-only account can add a password later under *Settings*.
+
+## Local AI (Ollama)
+
+Two free local models. Nothing is sent to a third-party service.
+
+```powershell
+ollama pull qwen3-embedding:0.6b   # fast meaning-based search (required for it)
+ollama pull llama2:latest           # chat model: summaries, recommendations, hard search cases
+```
+
+**Semantic search (`Ai:Embeddings`)**
+- **How it works:** maps what people type to categories by meaning, so "water dripping from my ceiling" finds Plumbers and "toothache" finds Dentists, in about 0.2–1 s on a CPU. Every sub-category is embedded from its name, description and the services businesses list under it.
+- **Index:** built in the background at start-up (about 2 minutes the first time) and saved to `App_Data/semantic-index.json`. Restarts then load it instantly, and only changed catalogue texts are re-embedded, every 30 minutes.
+- **Where it's used:**
+  - Ask AI
+  - "Suggested by AI" in the search box dropdown (`GET /api/search/suggest/ai`)
+  - Searches like "tap leaking in Madhapur"
+  - Map results beyond the platform
+- **Confidence:** a match is applied only when it clearly stands out from the rest of the catalogue (`ConfidentZ`). Ambiguous requests (`PlausibleZ`) go to the chat model, which chooses among the top 5 candidates in seconds. Unrelated text such as "hello" isn't forced onto a category.
+- **CPU threads:** keep `Ai:Threads` + `Ai:Embeddings:Threads` at or below the CPU core count (2 + 2 on 4 cores) so searches stay fast while chat jobs run.
+
+## AI search assistant
+
+The **Ask AI** button in the header (and the link under the home page search box) opens a chat panel. Visitors describe what they need in their own words, for example "AC not cooling, need someone today in Madhapur" or "top rated tutors who can come home". The panel answers with matching listed businesses, the filters it applied (each one removable), and follow-up suggestions. Follow-ups such as "only verified ones" or "cheapest first" refine the previous search.
+
+`POST /api/search/assistant` `{ message, context, city, areaId }` returns `{ message, filters, chips, results, total, suggestions, relaxed, aiPending }`. Send the previous answer's `filters` as `context` to continue a conversation.
+
+1. **Rules (instant):** urgency, open now, verified, home visit, video consultation, online booking, star rating and sort order are read from the wording. Places go through the same parser as the search box.
+2. **Catalogue matching:** the service type is matched to sub-category names, then to the services listed businesses offer. Everything comes from the database.
+3. **Local AI:** if neither matches, semantic search (above) usually understands the request instantly. When it isn't sure, the chat model picks the service type in the background. Meanwhile the answer shows keyword matches and sets `aiPending: true`. The panel repeats the request every 5 seconds, for up to 3 minutes. With `Ai:Enabled` false, or Ollama not running, the assistant still works on rules and keywords alone.
+4. **No dead ends:** if nothing matches every filter, filters are dropped one at a time (rating, open now, availability and so on). The answer says which were dropped.
+
+It is rate-limited by the `assistant` policy (40 requests per minute per IP). "See all results" opens the search page with the same filters.
 
 ## Not yet implemented
 
-- **Phase 2 and later:** ChatHub and chat persistence, staff management, video consultation, OTP login.
+- **Phase 2 and later:** ChatHub and chat persistence, staff management, video consultation.
+- **SMS gateway:** OTP codes are logged rather than texted until a real `ISmsSender` is registered.
 - **Search:** runs on SQL Server only; Elasticsearch is not wired in.
 - **Payments:** plan upgrades and ad payments record invoices, but there is no payment gateway integration.

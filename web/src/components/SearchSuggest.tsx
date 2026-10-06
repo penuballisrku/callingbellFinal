@@ -56,6 +56,10 @@ export async function resolveSearchHref(text: string, picked: SearchSuggestion |
 }
 
 const groupTitles:[keyof Omit<SearchSuggestions, 'query'>, string][] = [['categories', 'Categories'], ['services', 'Services'], ['businesses', 'Businesses']];
+
+/** "Suggested by AI" (GET /api/search/suggest/ai) is asked for phrases only, once typing pauses a little longer. */
+const AI_MIN_CHARS = 8;
+const AI_DEBOUNCE_MS = 600;
 const kindLabel: Record<SearchSuggestion['kind'], string> = { Category: 'Category', SubCategory: 'Category', Service: 'Service', Business: 'Business' };
 
 /** Bolds the first case-insensitive occurrence of the typed text. */
@@ -100,7 +104,22 @@ export function SearchSuggest({ value, onChange, citySlug, onSelect, inputClassN
     placeholderData: keepPreviousData,
   });
 
-  const groups = useMemo(() => (data ? groupTitles.map(([key, title]) => ({ title, items: data[key] })).filter((g) => g.items.length) : []), [data]);
+  // Categories the local AI matches by meaning ("water dripping from ceiling" → Plumbers). Separate from the name-based list so typing
+  // never waits for the model; the group appears at the top when it arrives.
+  const aiTerm = useDebounced(trimmed, AI_DEBOUNCE_MS);
+  const { data: aiData } = useQuery({
+    queryKey: ['search-suggest-ai', aiTerm.toLowerCase()],
+    queryFn: () => api.get<SearchSuggestion[]>('/api/search/suggest/ai', { q: aiTerm }),
+    enabled: open && aiTerm.length >= AI_MIN_CHARS && aiTerm.includes(' '),
+    staleTime: 300_000,
+  });
+
+  const groups = useMemo(() => {
+    const byName = data ? groupTitles.map(([key, title]) => ({ title, items: data[key] })).filter((g) => g.items.length) : [];
+    const listed = new Set(byName.flatMap((g) => g.items).map((s) => s.slug));
+    const ai = aiTerm === trimmed ? (aiData ?? []).filter((s) => !listed.has(s.slug)) : [];
+    return ai.length ? [{ title: 'Suggested by AI', items: ai }, ...byName] : byName;
+  }, [data, aiData, aiTerm, trimmed]);
   const flat = useMemo(() => groups.flatMap((g) => g.items), [groups]);
   const showPanel = open && trimmed.length >= SUGGEST_MIN_CHARS;
   const waiting = showPanel && (!data || term !== trimmed) && flat.length === 0;

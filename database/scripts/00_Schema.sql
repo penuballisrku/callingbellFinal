@@ -739,5 +739,32 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Areas_ExternalRef' AND
     CREATE INDEX IX_Areas_ExternalRef ON dbo.Areas (CityId, ExternalRef) WHERE ExternalRef IS NOT NULL;
 GO
 
+/* ---------- Mobile OTP sign-in / sign-up ----------
+   One row per code sent. Codes and verification tokens are stored as SHA-256 hashes only.
+   Purpose: 'SignIn' | 'SignUp'. A verified sign-up code issues a verification token that
+   registration must present (VerificationUsedAt is set when an account is created with it). */
+IF OBJECT_ID('dbo.OtpCodes', 'U') IS NULL
+CREATE TABLE dbo.OtpCodes (
+    Id                    uniqueidentifier NOT NULL CONSTRAINT PK_OtpCodes PRIMARY KEY,
+    PhoneNumber           nvarchar(20)     NOT NULL,
+    Purpose               nvarchar(16)     NOT NULL,
+    CodeHash              nvarchar(64)     NOT NULL,
+    Attempts              int              NOT NULL CONSTRAINT DF_OtpCodes_Attempts DEFAULT (0),
+    ExpiresAt             datetimeoffset   NOT NULL,
+    ConsumedAt            datetimeoffset   NULL,
+    VerificationTokenHash nvarchar(64)     NULL,
+    VerificationExpiresAt datetimeoffset   NULL,
+    VerificationUsedAt    datetimeoffset   NULL,
+    IpAddress             nvarchar(64)     NULL,
+    CreatedAt             datetimeoffset   NOT NULL CONSTRAINT DF_OtpCodes_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+    CONSTRAINT CK_OtpCodes_Purpose CHECK (Purpose IN (N'SignIn', N'SignUp'))
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_OtpCodes_PhoneNumber_CreatedAt' AND object_id = OBJECT_ID('dbo.OtpCodes'))
+    CREATE INDEX IX_OtpCodes_PhoneNumber_CreatedAt ON dbo.OtpCodes (PhoneNumber, CreatedAt);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_OtpCodes_VerificationTokenHash' AND object_id = OBJECT_ID('dbo.OtpCodes'))
+    CREATE INDEX IX_OtpCodes_VerificationTokenHash ON dbo.OtpCodes (VerificationTokenHash) WHERE VerificationTokenHash IS NOT NULL;
+GO
+
 PRINT '00_Schema.sql completed';
 GO

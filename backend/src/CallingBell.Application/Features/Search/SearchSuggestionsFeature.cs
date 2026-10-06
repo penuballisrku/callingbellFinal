@@ -69,3 +69,36 @@ public sealed class GetSearchSuggestionsHandler(IUnitOfWork uow) : IRequestHandl
             businesses);
     }
 }
+
+// ===================== Suggestions by meaning (local AI) =====================
+
+/// <summary>Sub-categories the local AI matches by meaning ("water dripping from the ceiling" gives Plumbers).</summary>
+public sealed record GetMeaningSuggestionsQuery(string? Q) : IRequest<IReadOnlyList<SearchSuggestionDto>>;
+
+/// <summary>
+/// The search box's "Suggested by AI" group. Separate from (and slower than) the name-based suggestions, so typing never waits for
+/// the model: the client asks once the visitor pauses on a phrase. Only confident matches, plus close runners-up.
+/// </summary>
+public sealed class GetMeaningSuggestionsHandler(IUnitOfWork uow, ISemanticCatalog semantic)
+    : IRequestHandler<GetMeaningSuggestionsQuery, IReadOnlyList<SearchSuggestionDto>>
+{
+    public const int MinLength = 8;
+    private const int MaxLength = 120;
+
+    public async Task<IReadOnlyList<SearchSuggestionDto>> Handle(GetMeaningSuggestionsQuery request, CancellationToken ct)
+    {
+        var q = (request.Q ?? string.Empty).Trim();
+        if (q.Length > MaxLength) q = q[..MaxLength];
+        // Phrases ("tap leaking", "water dripping from ceiling"), not single words, which the name-based suggestions cover.
+        if (q.Length < MinLength || !q.Contains(' ')) return [];
+
+        var result = await semantic.MatchAsync(q, 3, ct);
+        if (result is not { Confident: true }) return [];
+        var top = result.Top[0].Score;
+        var slugs = result.Top.Where(m => top - m.Score <= 0.03).Select(m => m.SubCategorySlug).ToList();
+        var subs = await uow.Repository<SubCategory>().QueryNoTracking().Where(s => slugs.Contains(s.Slug))
+            .Select(s => new SearchSuggestionDto("SubCategory", s.Name, s.Category.Name, s.IconUrl, s.Slug, s.Slug, null))
+            .ToDictionaryAsync(s => s.Slug, ct);
+        return slugs.Where(subs.ContainsKey).Select(slug => subs[slug]).ToList(); // best match first
+    }
+}

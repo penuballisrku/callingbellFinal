@@ -8,8 +8,10 @@ import { AvailabilityBadge, Img, Rating, VerifiedMark } from './ui';
 import { money } from '@/lib/format';
 import type { BusinessCard as Card } from '@/lib/types';
 
-export function BusinessCard({ b, layout = 'grid' }: { b: Card; layout?: 'grid' | 'row' }) {
+/** `compact` is a dense row for narrow panels such as the AI search assistant. */
+export function BusinessCard({ b, layout = 'grid', onOpen }: { b: Card; layout?: 'grid' | 'row' | 'compact'; onOpen?: () => void }) {
   if (layout === 'row') return <BusinessRow b={b} />;
+  if (layout === 'compact') return <BusinessCompact b={b} onOpen={onOpen} />;
   return (
     <Link to={`/b/${b.slug}`}
       className="group card flex h-full flex-col overflow-hidden">
@@ -38,6 +40,29 @@ export function BusinessCard({ b, layout = 'grid' }: { b: Card; layout?: 'grid' 
           <span className="text-muted">{b.startingPrice ? <>From <span className="font-semibold text-ink">{money(b.startingPrice)}</span></> : (b.isOpenNow ? 'Open now' : 'View services')}</span>
           <span className={`font-medium ${b.isOpenNow ? 'text-success' : 'text-muted'}`}>{b.isOpenNow ? 'Open' : 'Closed'}</span>
         </div>
+      </div>
+    </Link>
+  );
+}
+
+function BusinessCompact({ b, onOpen }: { b: Card; onOpen?: () => void }) {
+  return (
+    <Link to={`/b/${b.slug}`} onClick={onOpen} className="group flex gap-3 rounded-xl border border-line bg-surface p-3 transition-colors hover:border-line-strong">
+      <Img src={b.logoUrl} alt={`${b.name} logo`} className="h-12 w-12 shrink-0" rounded="rounded-lg" fallbackText={b.name} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <h3 className="truncate text-sm font-semibold group-hover:underline">{b.name}</h3>
+          {b.isVerified && <VerifiedMark />}
+          {b.isSponsored && <span className="shrink-0 rounded bg-subtle px-1.5 py-0.5 text-[10px] font-semibold text-muted">Sponsored</span>}
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs">
+          <Rating value={b.averageRating} count={b.reviewCount} />
+          <AvailabilityBadge status={b.availabilityStatus} lastSeenOn={b.lastSeenOn} compact />
+        </div>
+        <p className="mt-1 truncate text-xs text-muted">
+          {b.area ? `${b.area}, ` : ''}{b.city}{b.distanceKm != null && ` · ${b.distanceKm.toFixed(1)} km`}
+          {b.startingPrice ? ` · From ${money(b.startingPrice)}` : ''}
+        </p>
       </div>
     </Link>
   );

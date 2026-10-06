@@ -100,6 +100,10 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("public-search", context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1) }));
+    // The AI search assistant: one request per message, plus a few repeats while the local AI is still working on one.
+    options.AddPolicy("assistant", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 40, Window = TimeSpan.FromMinutes(1) }));
     options.OnRejected = async (context, ct) =>
     {
         context.HttpContext.Response.ContentType = "application/json";

@@ -9,9 +9,11 @@ namespace CallingBell.Application.Features.Geo;
 /// <summary>
 /// The listed city whose district the visitor is browsing from. <paramref name="MatchedBy"/> is "area" (the IP's place name is one of
 /// the city's areas), "city" (it is the city itself) or "distance" (within the district radius of the city centre).
-/// <paramref name="AreaSlug"/> is set only for an "area" match.
+/// <paramref name="AreaSlug"/> (and its <paramref name="AreaId"/>) is set when an area matched, so the client can select it without
+/// loading the city list first.
 /// </summary>
-public sealed record VisitorDistrictDto(string CitySlug, string CityName, string State, string? AreaSlug, string MatchedBy, double? DistanceKm);
+public sealed record VisitorDistrictDto(string CitySlug, string CityName, string State, string? AreaSlug, string MatchedBy, double? DistanceKm,
+    Guid? AreaId = null);
 
 /// <summary>
 /// Approximate visitor location from the IP address (the IP itself is never returned).
@@ -93,6 +95,8 @@ public sealed class GetVisitorDistrictHandler(IIpLocationService locator, IUnitO
                     .MinBy(x => x.Km);
                 if (nearest is not null && nearest.Km <= NearestAreaKm) district = district with { AreaSlug = nearest.Slug };
             }
+            if (district.AreaSlug is { } areaSlug)
+                district = district with { AreaId = detected.Areas.FirstOrDefault(a => a.IsTop && a.Slug == areaSlug)?.Id };
             // Load the detected city's areas: discover them if never done or stale.
             if (detected.AreasDiscoveredOn is null || detected.AreasDiscoveredOn < DateTimeOffset.UtcNow - GetCityAreasHandler.RefreshAfter)
                 discovery.Request(detected.Id);
@@ -111,7 +115,7 @@ public sealed class GetVisitorDistrictHandler(IIpLocationService locator, IUnitO
                 .Select(a => new
                 {
                     a.CityId,
-                    Area = new DistrictArea(a.Slug, a.Name, a.Pincode, a.AltNames, a.Latitude, a.Longitude, a.ParentAreaId == null,
+                    Area = new DistrictArea(a.Id, a.Slug, a.Name, a.Pincode, a.AltNames, a.Latitude, a.Longitude, a.ParentAreaId == null,
                         // A sub-locality resolves to the area it belongs to.
                         a.ParentArea != null ? a.ParentArea.Slug : a.Slug),
                 })
@@ -123,7 +127,7 @@ public sealed class GetVisitorDistrictHandler(IIpLocationService locator, IUnitO
     private sealed record DistrictCity(Guid Id, string Slug, string Name, string State, decimal? Latitude, decimal? Longitude,
         DateTimeOffset? AreasDiscoveredOn, List<DistrictArea> Areas);
 
-    private sealed record DistrictArea(string Slug, string Name, string Pincode, string? AltNames, decimal? Latitude, decimal? Longitude, bool IsTop,
+    private sealed record DistrictArea(Guid Id, string Slug, string Name, string Pincode, string? AltNames, decimal? Latitude, decimal? Longitude, bool IsTop,
         string AreaSlug);
 
     private static bool Same(string a, string b) => string.Equals(a.Trim(), b.Trim(), StringComparison.OrdinalIgnoreCase);
