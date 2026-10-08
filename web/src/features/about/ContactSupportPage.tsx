@@ -1,24 +1,17 @@
 import { Link } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
 import { Button } from '@mui/material';
-import { api } from '@/lib/api';
 import { useDocumentTitle } from '@/lib/hooks';
-import type { ContentBlock, MarketingPage } from '@/lib/types';
+import type { ContentBlock } from '@/lib/types';
 import { ErrorState, SectionHeader } from '@/components/ui';
 import { isOwner, useAuth } from '@/stores/auth';
 import {
-  BlockIcon, ClosingCta, ContentPageSkeleton, DividedList, FaqList, FeaturePanel, IconCardGrid, PageHero, paragraphs,
-} from '@/features/content/ContentBlocks';
+  BlockIcon, ClosingCta, ContentPageSkeleton, DividedList, FaqList, FeaturePanel, IconCardGrid, PageHero, paragraphs, useMarketingPage } from '@/features/content/ContentBlocks';
 
 /** "Contact support": every word, topic and contact channel comes from MarketingContent (PageKey "ContactSupport"). */
 export default function ContactSupportPage() {
   useDocumentTitle('Contact support');
   const user = useAuth((st) => st.user);
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['content', 'ContactSupport'],
-    queryFn: () => api.get<MarketingPage>('/api/content/pages/ContactSupport'),
-    staleTime: 300_000,
-  });
+  const { data, isLoading, isError, refetch } = useMarketingPage('ContactSupport');
 
   if (isError) return <div className="container-page py-16"><ErrorState onRetry={() => refetch()} /></div>;
   if (isLoading || !data) return <ContentPageSkeleton />;

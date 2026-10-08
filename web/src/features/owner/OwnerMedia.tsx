@@ -101,7 +101,7 @@ export default function OwnerMedia() {
 
   return (
     <>
-      <PageHeader title="Photos & videos" crumbs={[{ label: 'Dashboard', to: '/business' }, { label: 'Photos & videos' }]}
+      <PageHeader title="Photos & videos" crumbs={[{ label: 'Dashboard', to: '/owner' }, { label: 'Photos & videos' }]}
         subtitle="Great photos and a short video help customers trust you before they call." />
 
       <div className="grid gap-6 xl:grid-cols-[1fr_340px]">

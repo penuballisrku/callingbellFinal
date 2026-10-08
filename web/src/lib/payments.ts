@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { api, errorMessage } from './api';
-import type { CheckoutOrder, PaymentConfig, PaymentResult } from './types';
+import type { CheckoutOrder, PaymentConfig, PaymentResult, Plan } from './types';
+import { currencyDigits } from './format';
 
 /** Whether online checkout is available (Razorpay keys configured on the server). */
 export function usePaymentConfig() {
@@ -8,10 +9,33 @@ export function usePaymentConfig() {
 }
 
 export const GST_RATE = 0.18;
-export const priceBreakdown = (subtotal: number) => {
-  const tax = Math.round(subtotal * GST_RATE * 100) / 100;
-  return { subtotal, tax, total: Math.round((subtotal + tax) * 100) / 100 };
+
+/** A plan's tax: from the plan as priced for a country (GET /api/plans?country=); India's 18% GST when not given. */
+type Taxed = Pick<Plan, 'currencyCode' | 'taxName' | 'taxRate'>;
+const INDIA: Taxed = { currencyCode: 'INR', taxName: 'GST', taxRate: GST_RATE };
+
+/** Subtotal, tax and total for a plan price, rounded to the currency's smallest unit exactly as the server charges it. */
+export const priceBreakdown = (subtotal: number, plan?: Taxed | null) => {
+  const p = plan ?? INDIA;
+  const unit = 10 ** currencyDigits(p.currencyCode);
+  const tax = Math.round(subtotal * (p.taxRate ?? 0) * unit) / unit;
+  return { subtotal, tax, total: Math.round((subtotal + tax) * unit) / unit };
 };
+
+/** "GST (18%)" for the order summary; null where no tax is charged (then the row is left out). */
+export const taxLabel = (plan?: Taxed | null) => {
+  const p = plan ?? INDIA;
+  return p.taxRate > 0 ? `${p.taxName || 'Tax'} (${Number((p.taxRate * 100).toFixed(2))}%)` : null;
+};
+
+/** Short note after a price: "+ 18% GST", or "" where no tax is added. */
+export const taxNote = (plan?: Taxed | null) => {
+  const p = plan ?? INDIA;
+  return p.taxRate > 0 ? `+ ${Number((p.taxRate * 100).toFixed(2))}% ${p.taxName || 'tax'}` : '';
+};
+
+/** GSTIN only applies to Indian invoices. */
+export const asksForGstin = (plan?: Taxed | null) => (plan ?? INDIA).currencyCode === 'INR';
 
 /* ---------- Razorpay Checkout (https://razorpay.com/docs/payments/payment-gateway/web-integration/standard/) ---------- */
 

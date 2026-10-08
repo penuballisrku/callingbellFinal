@@ -8,6 +8,8 @@ const api = process.env.VITE_API_PROXY ?? 'http://localhost:5080';
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
+  // Identifies this build: the browser's saved page data (src/lib/queryCache.ts) is dropped when it changes.
+  define: { 'import.meta.env.VITE_BUILD_ID': JSON.stringify(String(Date.now())) },
   server: {
     port: 5173,
     // Transform the shell and the most visited pages as soon as the dev server starts, so the first page load doesn't wait for it.
@@ -20,6 +22,9 @@ export default defineConfig({
     proxy: {
       '/api': { target: api, changeOrigin: true },
       '/hubs': { target: api, changeOrigin: true, ws: true },
+      // Crawler files come from the API (built from the database), as in production.
+      '/robots.txt': { target: api, changeOrigin: true },
+      '^/sitemap[\w-]*\.xml$': { target: api, changeOrigin: true },
     },
   },
   build: {

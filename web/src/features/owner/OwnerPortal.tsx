@@ -53,16 +53,16 @@ export default function OwnerPortal() {
   });
 
   const nav = [
-    { to: '/business', label: 'Dashboard', icon: <SpaceDashboardOutlined fontSize="small" />, end: true },
-    { to: '/business/leads', label: 'Leads', icon: <InboxOutlined fontSize="small" />, badge: counts.data?.leads },
-    { to: '/business/bookings', label: 'Bookings', icon: <EventNoteOutlined fontSize="small" />, badge: counts.data?.bookings },
-    { to: '/business/reviews', label: 'Reviews', icon: <RateReviewOutlined fontSize="small" /> },
-    { to: '/business/services', label: 'Services', icon: <HandymanOutlined fontSize="small" /> },
-    { to: '/business/profile', label: 'Business profile', icon: <StorefrontOutlined fontSize="small" /> },
-    { to: '/business/media', label: 'Photos & videos', icon: <PermMediaOutlined fontSize="small" /> },
-    { to: '/business/plan', label: 'Plan & billing', icon: <WorkspacePremiumOutlined fontSize="small" /> },
-    { to: '/business/advertising', label: 'Advertising', icon: <CampaignOutlined fontSize="small" /> },
-    { to: '/business/settings', label: 'Settings', icon: <SettingsOutlined fontSize="small" /> },
+    { to: '/owner', label: 'Dashboard', icon: <SpaceDashboardOutlined fontSize="small" />, end: true },
+    { to: '/owner/leads', label: 'Leads', icon: <InboxOutlined fontSize="small" />, badge: counts.data?.leads },
+    { to: '/owner/bookings', label: 'Bookings', icon: <EventNoteOutlined fontSize="small" />, badge: counts.data?.bookings },
+    { to: '/owner/reviews', label: 'Reviews', icon: <RateReviewOutlined fontSize="small" /> },
+    { to: '/owner/services', label: 'Services', icon: <HandymanOutlined fontSize="small" /> },
+    { to: '/owner/profile', label: 'Business profile', icon: <StorefrontOutlined fontSize="small" /> },
+    { to: '/owner/media', label: 'Photos & videos', icon: <PermMediaOutlined fontSize="small" /> },
+    { to: '/owner/plan', label: 'Plan & billing', icon: <WorkspacePremiumOutlined fontSize="small" /> },
+    { to: '/owner/advertising', label: 'Advertising', icon: <CampaignOutlined fontSize="small" /> },
+    { to: '/owner/settings', label: 'Settings', icon: <SettingsOutlined fontSize="small" /> },
   ];
 
   const header = business ? (
@@ -80,7 +80,7 @@ export default function OwnerPortal() {
     <BusinessContext.Provider value={business ?? null}>
       <Routes>
         <Route element={<PortalLayout title="Business portal" nav={nav} headerExtra={header}
-          footer={business && <Button fullWidth size="small" variant="outlined" component={Link} to={`/b/${business.slug}`} target="_blank" endIcon={<OpenInNewRounded fontSize="small" />}
+          footer={business && <Button fullWidth size="small" variant="outlined" component={Link} to={`/business/${business.slug}`} target="_blank" endIcon={<OpenInNewRounded fontSize="small" />}
             sx={{ color: 'var(--cb-on-navy)', borderColor: 'rgba(255,255,255,.2)', bgcolor: 'transparent', boxShadow: 'none', '&:hover': { bgcolor: 'rgba(255,255,255,.06)', borderColor: 'rgba(255,255,255,.35)' } }}>View public profile</Button>} />}>
           {isLoading ? <Route path="*" element={<Skeleton variant="rounded" height={400} />} /> : !business ? (
             <>
@@ -89,7 +89,7 @@ export default function OwnerPortal() {
               <Route path="*" element={
                 <EmptyState icon={<RocketLaunchOutlined />} title="Let's set up your business"
                   message="Add your business details, services, photos and videos. It takes about 5 minutes, and customers can find you once our team approves your listing."
-                  action={<Button variant="contained" color="secondary" size="large" component={Link} to="/business/setup">Set up your business</Button>} />
+                  action={<Button variant="contained" color="secondary" size="large" component={Link} to="/owner/setup">Set up your business</Button>} />
               } />
             </>
           ) : (
@@ -105,7 +105,7 @@ export default function OwnerPortal() {
               <Route path="media" element={<OwnerMedia />} />
               <Route path="settings" element={<OwnerSettings />} />
               <Route path="setup" element={<BusinessWizard mode="setup" />} />
-              <Route path="*" element={<Navigate to="/business" replace />} />
+              <Route path="*" element={<Navigate to="/owner" replace />} />
             </>
           )}
         </Route>

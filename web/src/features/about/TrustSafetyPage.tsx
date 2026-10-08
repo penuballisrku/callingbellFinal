@@ -1,23 +1,15 @@
 import { Link } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
 import { Button } from '@mui/material';
-import { api } from '@/lib/api';
 import { number } from '@/lib/format';
 import { useDocumentTitle } from '@/lib/hooks';
-import type { MarketingPage } from '@/lib/types';
 import { ErrorState } from '@/components/ui';
 import {
-  ClosingCta, ContentPageSkeleton, DividedList, FaqList, FeaturePanel, IconCardGrid, IntroSection, NumberedSteps, PageHero, StatsStrip,
-} from '@/features/content/ContentBlocks';
+  ClosingCta, ContentPageSkeleton, DividedList, FaqList, FeaturePanel, IconCardGrid, IntroSection, NumberedSteps, PageHero, StatsStrip, useMarketingPage } from '@/features/content/ContentBlocks';
 
 /** "Trust & safety": every word comes from MarketingContent (PageKey "TrustSafety"); the numbers are live platform stats. */
 export default function TrustSafetyPage() {
   useDocumentTitle('Trust & safety');
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['content', 'TrustSafety'],
-    queryFn: () => api.get<MarketingPage>('/api/content/pages/TrustSafety'),
-    staleTime: 300_000,
-  });
+  const { data, isLoading, isError, refetch } = useMarketingPage('TrustSafety');
 
   if (isError) return <div className="container-page py-16"><ErrorState onRetry={() => refetch()} /></div>;
   if (isLoading || !data) return <ContentPageSkeleton />;

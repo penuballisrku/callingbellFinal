@@ -268,7 +268,7 @@ export default function CategoriesPage() {
             </div>
           </div>
         )}
-        {single && <PageHeader title={pluralize(single.businessCount, 'business', 'businesses')} crumbs={[{ label: 'Home', to: '/' }, { label: 'Categories', to: '/categories' }, { label: single.name }]}
+        {single && <PageHeader headingLevel="h2" title={pluralize(single.businessCount, 'business', 'businesses')} crumbs={[{ label: 'Home', to: '/' }, { label: 'Categories', to: '/categories' }, { label: single.name }]}
           actions={<Button component={Link} to={`/nearby?category=${single.slug}`} variant="outlined" startIcon={<TravelExploreRounded />}>Explore nearby on Google Maps</Button>} />}
         {isLoading || !single ? <Skeleton variant="rounded" height={260} /> : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">

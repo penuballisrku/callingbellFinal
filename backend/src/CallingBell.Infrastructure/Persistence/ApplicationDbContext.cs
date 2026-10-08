@@ -26,10 +26,12 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<SubCategory> SubCategories => Set<SubCategory>();
     public DbSet<PopularService> PopularServices => Set<PopularService>();
+    public DbSet<PopularSearch> PopularSearches => Set<PopularSearch>();
     public DbSet<LookupValue> LookupValues => Set<LookupValue>();
     public DbSet<Media> Media => Set<Media>();
     public DbSet<CountryCatalog> CountryCatalogs => Set<CountryCatalog>();
     public DbSet<Business> Businesses => Set<Business>();
+    public DbSet<BusinessSlugHistory> BusinessSlugHistory => Set<BusinessSlugHistory>();
     public DbSet<BusinessService> BusinessServices => Set<BusinessService>();
     public DbSet<BusinessHour> BusinessHours => Set<BusinessHour>();
     public DbSet<BusinessImage> BusinessImages => Set<BusinessImage>();
@@ -42,10 +44,12 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<Booking> Bookings => Set<Booking>();
     public DbSet<Favorite> Favorites => Set<Favorite>();
     public DbSet<SubscriptionPlan> SubscriptionPlans => Set<SubscriptionPlan>();
+    public DbSet<CountryPricing> CountryPricing => Set<CountryPricing>();
     public DbSet<BusinessSubscription> BusinessSubscriptions => Set<BusinessSubscription>();
     public DbSet<Advertisement> Advertisements => Set<Advertisement>();
     public DbSet<Banner> Banners => Set<Banner>();
     public DbSet<MarketingContent> MarketingContent => Set<MarketingContent>();
+    public DbSet<MarketingContentImage> MarketingContentImages => Set<MarketingContentImage>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<PaymentOrder> PaymentOrders => Set<PaymentOrder>();
     public DbSet<Notification> Notifications => Set<Notification>();

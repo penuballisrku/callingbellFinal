@@ -26,9 +26,11 @@ public sealed record RelatedCategoryDto(string Name, string Slug, string Categor
 /// <param name="RelatedCategories">Sub-categories near the visitor. For a selected area only those with a business within
 /// <see cref="GetNearbyServicesHandler.NearKm"/> of it; the rest of the city's are in <paramref name="CityCategories"/>.</param>
 /// <param name="CityCategories">Area searches only: the city's other sub-categories, most businesses first.</param>
+/// <param name="Catalog">True when nothing is listed in the city yet: items and categories come from the platform-wide catalogue
+/// (national figures, no distances) and the AI picks what suits the place.</param>
 public sealed record NearbyServicesDto(string? PlaceName, string? CityName, string? CitySlug, string Source,
     bool AiRanked, bool AiPending, string? AiModel, IReadOnlyList<NearbyServiceDto> Items, IReadOnlyList<RelatedCategoryDto> RelatedCategories,
-    IReadOnlyList<RelatedCategoryDto> CityCategories);
+    IReadOnlyList<RelatedCategoryDto> CityCategories, bool Catalog = false);
 
 /// <param name="ClientIp">Visitor IP, located server-side for precise coordinates.</param>
 /// <param name="CitySlug">The city the visitor is browsing; when it isn't the IP's city, the city centre is used instead.</param>
@@ -38,15 +40,18 @@ public sealed record GetNearbyServicesQuery(string? ClientIp, string? CitySlug, 
 /// <summary>
 /// Popular services near the visitor. The shortlist is computed from the database (recent bookings weighted by proximity, then rating);
 /// a local AI model then re-ranks it for the place and season in the background (see <see cref="IServiceRecommender"/>), and suggests
-/// related sub-categories available nearby that complement those services.
+/// related sub-categories available nearby that complement those services. A city with listings but no recent bookings is ranked by
+/// rating; a city with no listings at all falls back to the platform-wide catalogue, from which the AI picks what suits the place.
 /// </summary>
-public sealed class GetNearbyServicesHandler(IUnitOfWork uow, VisitorOriginResolver origins, IServiceRecommender ai)
+public sealed class GetNearbyServicesHandler(IUnitOfWork uow, VisitorOriginResolver origins, IServiceRecommender ai, ReferenceDataCache reference)
     : IRequestHandler<GetNearbyServicesQuery, NearbyServicesDto>
 {
     private const int Show = 8;
     private const int Shortlist = 14;
     private const int RelatedAiPicks = 6;
     private const int RelatedShortlist = 10;
+    /// <summary>Without local listings the AI chooses from more of the catalogue, since local demand can't narrow it.</summary>
+    private const int CatalogRelatedShortlist = 24;
     /// <summary>For a selected area, a category counts as near it when one of its businesses is within this distance.</summary>
     public const double NearKm = 7;
 
@@ -84,7 +89,7 @@ public sealed class GetNearbyServicesHandler(IUnitOfWork uow, VisitorOriginResol
             })
             .ToList();
 
-        var ranked = located
+        var scored = located
             .GroupBy(v => Key(v.x.SubSlug, v.x.Name))
             .Select(g =>
             {
@@ -104,7 +109,27 @@ public sealed class GetNearbyServicesHandler(IUnitOfWork uow, VisitorOriginResol
                         rating, reviews, g.Sum(v => v.x.Bookings), nearest is { } km ? Math.Round(km, 1) : null, null),
                 };
             })
-            .Where(c => c.Dto.BookingCount > 0)
+            .ToList();
+        // Listings but no recent bookings in the city: rank what is listed by rating instead of showing nothing.
+        if (scored.Any(c => c.Dto.BookingCount > 0)) scored = scored.Where(c => c.Dto.BookingCount > 0).ToList();
+
+        // Nothing listed in the city yet: the platform-wide catalogue (national figures, no distances); the AI picks for the place.
+        var catalogOnly = located.Count == 0;
+        if (catalogOnly)
+        {
+            // National figures, the same for every empty city: kept in memory with the other reference data (10 minutes).
+            scored = (await reference.GetDerivedAsync("nearby|catalog-services", () => GetHomeHandler.PopularServices(uow, since, ct), ct))
+                .Select(p => new
+                {
+                    Key = Key(p.SubCategorySlug, p.SearchTerm),
+                    Score = (double)p.BookingCount,
+                    Dto = new NearbyServiceDto(p.Name, p.SearchTerm, p.SubCategoryName, p.SubCategorySlug, p.CategoryName, p.CategorySlug,
+                        p.ColorHex, p.ImageUrl, p.IconUrl, p.StartingPrice, p.PriceUnit, p.Rating, p.ReviewCount, p.BookingCount, null, null),
+                })
+                .ToList();
+        }
+
+        var ranked = scored
             // One service per sub-category (its strongest) so a single busy business can't fill the whole list.
             .GroupBy(c => c.Dto.SubCategorySlug)
             .Select(g => g.OrderByDescending(c => c.Score).First())
@@ -128,6 +153,25 @@ public sealed class GetNearbyServicesHandler(IUnitOfWork uow, VisitorOriginResol
                 };
             })
             .ToList();
+        if (catalogOnly)
+        {
+            // The whole active catalogue, most booked nationally first; no local business counts or distances.
+            subStats = (await reference.GetDerivedAsync("nearby|catalog-subs", () => uow.Repository<SubCategory>().QueryNoTracking()
+                    .Where(s => s.IsActive && s.Category.IsActive)
+                    .Select(s => new
+                    {
+                        s.Name, s.Slug, Cat = s.Category.Name, CatSlug = s.Category.Slug, s.Category.ColorHex, s.IconUrl, s.ImageUrl,
+                        Bookings = bookings.Count(b => b.Business.SubCategoryId == s.Id),
+                    })
+                    .ToListAsync(ct), ct))
+                .Select(s => new
+                {
+                    Demand = (double)s.Bookings,
+                    s.Bookings,
+                    Dto = new RelatedCategoryDto(s.Name, s.Slug, s.Cat, s.CatSlug, s.ColorHex, s.IconUrl, s.ImageUrl, 0, null, null),
+                })
+                .ToList();
+        }
         // Every nearby sub-category, those sharing a category with the popular services first. The AI chooses from the top of this
         // list (minus what the database already shows above); the client gets all of it so it can offer "show all".
         var shownSubs = ranked.Take(Show).Select(c => c.Dto.SubCategorySlug).ToHashSet();
@@ -140,9 +184,10 @@ public sealed class GetNearbyServicesHandler(IUnitOfWork uow, VisitorOriginResol
             .ThenByDescending(s => shownCategories.Contains(s.Dto.CategorySlug))
             .ThenByDescending(s => s.Demand).ThenByDescending(s => s.Dto.BusinessCount).ThenBy(s => s.Dto.NearestKm ?? double.MaxValue)
             .ToList();
-        var relatedRanked = relatedAll.Where(s => !shownSubs.Contains(s.Dto.Slug)).Take(RelatedShortlist).ToList();
+        var relatedRanked = relatedAll.Where(s => !shownSubs.Contains(s.Dto.Slug))
+            .Take(catalogOnly ? CatalogRelatedShortlist : RelatedShortlist).ToList();
 
-        var cacheKey = $"{origin.CitySlug}|{origin.Source}|{origin.PlaceKey}";
+        var cacheKey = $"{origin.CitySlug}|{origin.Source}|{origin.PlaceKey}{(catalogOnly ? "|catalog" : "")}";
         var ranking = ai.GetCached(cacheKey);
         if (ranking is null && ai.IsEnabled && ranked.Count > 0)
         {
@@ -151,7 +196,7 @@ public sealed class GetNearbyServicesHandler(IUnitOfWork uow, VisitorOriginResol
                     c.Dto.Rating, c.Dto.NearestKm, c.Dto.StartingPrice)).ToList(),
                 RelatedAiPicks,
                 relatedRanked.Select(s => new AiCategoryCandidate(s.Dto.Slug, s.Dto.Name, s.Dto.CategoryName, s.Dto.BusinessCount, s.Bookings,
-                    s.Dto.NearestKm)).ToList()));
+                    s.Dto.NearestKm)).ToList(), catalogOnly));
         }
 
         IEnumerable<NearbyServiceDto> items = ranked.Select(c => c.Dto);
@@ -180,14 +225,20 @@ public sealed class GetNearbyServicesHandler(IUnitOfWork uow, VisitorOriginResol
         var available = related.Where(d => !finalSubs.Contains(d.Slug)).ToList();
         // A selected area: what is near it (AI suggestions first, then the closest), and separately the rest of the city.
         List<RelatedCategoryDto> near = available, city = [];
-        if (isArea)
+        if (isArea && catalogOnly)
+        {
+            // No distances without listings: the AI's picks for the area are "near", the rest of the catalogue is the city's.
+            near = available.Where(d => d.Reason is not null).ToList();
+            city = available.Where(d => d.Reason is null).ToList();
+        }
+        else if (isArea)
         {
             near = available.Where(Near).OrderByDescending(d => d.Reason is not null).ThenBy(d => d.NearestKm).ToList();
             city = available.Where(d => !Near(d)).OrderByDescending(d => d.BusinessCount).ThenBy(d => d.Name).ToList();
         }
         return new NearbyServicesDto(origin.PlaceName, origin.CityName, origin.CitySlug, origin.Source,
             ranking is not null, ranking is null && ai.IsPending(cacheKey), ranking?.Model ?? (ai.IsEnabled ? ai.Model : null),
-            shown, near, city);
+            shown, near, city, catalogOnly);
     }
 
     private static string Key(string subSlug, string serviceName) => $"{subSlug}|{serviceName}";

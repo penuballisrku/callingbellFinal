@@ -130,6 +130,28 @@ public class PopularService : AuditableEntity
     public SubCategory SubCategory { get; set; } = null!;
 }
 
+/// <summary>
+/// A "Popular searches" entry on Explore nearby. <see cref="SearchText"/> is what is searched for on Google Maps; when it is a
+/// sub-category's name, picking it opens that sub-category. Ranked by <see cref="SearchCount"/> (searches made on Explore nearby, counted
+/// by the API), then <see cref="SortOrder"/>. <see cref="CountryCode"/> null shows the entry in every country.
+/// </summary>
+public class PopularSearch : AuditableEntity
+{
+    public string Code { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+    public string SearchText { get; set; } = string.Empty;
+    public Guid? CategoryId { get; set; }
+    public Guid? SubCategoryId { get; set; }
+    public string? CountryCode { get; set; }
+    public int SortOrder { get; set; }
+    public int SearchCount { get; set; }
+    public DateTimeOffset? LastSearchedOn { get; set; }
+    public bool IsActive { get; set; } = true;
+
+    public Category? Category { get; set; }
+    public SubCategory? SubCategory { get; set; }
+}
+
 /// <summary>A country whose cities the city catalogue agent has imported (from GeoNames) into <see cref="State"/> and <see cref="City"/>.</summary>
 public class CountryCatalog : ISoftDeletable
 {

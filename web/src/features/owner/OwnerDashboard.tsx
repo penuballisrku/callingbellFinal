@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Button, LinearProgress, Skeleton } from '@mui/material';
 import { api } from '@/lib/api';
 import { ago, dateTime, money, moneyPrecise, number } from '@/lib/format';
-import { useDocumentTitle } from '@/lib/hooks';
+import { useBusinessPlans, useDocumentTitle } from '@/lib/hooks';
 import type { OwnerDashboard as Dashboard, OwnerOverview } from '@/lib/types';
 import { TrendChart, BarsChart, RankedBars } from '@/components/charts';
 import { EmptyState, ErrorState, KpiCard, KpiSkeletons, PageHeader, Panel, StatusBadge } from '@/components/ui';
@@ -12,7 +12,6 @@ import { useBusiness } from './OwnerPortal';
 import { useAuth } from '@/stores/auth';
 import { ActivityPanel, BusinessOverviewCard, CompletionPanel, MediaPanel, PlanPanel, WelcomeBanner } from './OwnerOverviewPanels';
 import { PlanCheckoutDialog } from './PlanCheckoutDialog';
-import type { Plan } from '@/lib/types';
 
 export default function OwnerDashboard() {
   const business = useBusiness();
@@ -28,7 +27,8 @@ export default function OwnerDashboard() {
     queryFn: () => api.get<OwnerOverview>(`/api/owner/businesses/${business.id}/overview`),
   });
   const [params, setParams] = useSearchParams();
-  const plans = useQuery({ queryKey: ['plans'], queryFn: () => api.get<Plan[]>('/api/plans'), staleTime: 600_000 });
+  // Priced for this business's country, like its checkout.
+  const plans = useBusinessPlans(business.id);
   const [payOpen, setPayOpen] = useState(false);
   const pending = overview.data?.pendingPayment;
   const pendingPlan = plans.data?.find((p) => p.code === pending?.planCode) ?? null;
@@ -41,7 +41,7 @@ export default function OwnerDashboard() {
   return (
     <>
       <PageHeader title={`Good ${greeting()}, ${firstName}`} subtitle="Here's how your business performed in the last 30 days."
-        actions={<><Button variant="outlined" component={Link} to="/business/leads">View leads</Button><Button variant="contained" component={Link} to="/business/bookings">Manage bookings</Button></>} />
+        actions={<><Button variant="outlined" component={Link} to="/owner/leads">View leads</Button><Button variant="contained" component={Link} to="/owner/bookings">Manage bookings</Button></>} />
 
       {params.get('welcome') && <WelcomeBanner name={business.name} onDismiss={() => setParams({}, { replace: true })} />}
       {pending && pendingPlan && (
@@ -49,9 +49,9 @@ export default function OwnerDashboard() {
           <div className="min-w-0 flex-1 text-sm">
             <div className="font-semibold text-ink">Complete your {pending.planName} payment</div>
             <div className="text-ink-2">{pending.status === 'Failed' && pending.failureReason ? `Your last attempt failed: ${pending.failureReason} ` : 'Your payment was not completed. '}
-              You are on the Free plan until you pay {moneyPrecise(pending.total)} ({pending.billingCycle.toLowerCase()}).</div>
+              You are on the Free plan until you pay {moneyPrecise(pending.total, pending.currency)} ({pending.billingCycle.toLowerCase()}).</div>
           </div>
-          <Button variant="contained" color="secondary" onClick={() => setPayOpen(true)}>Pay {moneyPrecise(pending.total)}</Button>
+          <Button variant="contained" color="secondary" onClick={() => setPayOpen(true)}>Pay {moneyPrecise(pending.total, pending.currency)}</Button>
         </div>
       )}
       <PlanCheckoutDialog businessId={business.id} plan={pendingPlan} cycle={pending?.billingCycle === 'Annual' ? 'Annual' : 'Monthly'} open={payOpen}
@@ -115,7 +115,7 @@ export default function OwnerDashboard() {
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-2">
-        <Panel title="Recent leads" action={<Button size="small" component={Link} to="/business/leads">View all</Button>} noPad>
+        <Panel title="Recent leads" action={<Button size="small" component={Link} to="/owner/leads">View all</Button>} noPad>
           {isLoading ? <div className="p-5"><Skeleton height={200} /></div> : !data!.recentLeads.length ? <EmptyState title="No leads yet" message="Leads from your profile and search will appear here." /> : (
             <ul className="divide-y divide-line">
               {data!.recentLeads.map((l) => (
@@ -131,7 +131,7 @@ export default function OwnerDashboard() {
             </ul>
           )}
         </Panel>
-        <Panel title="Upcoming bookings" action={<Button size="small" component={Link} to="/business/bookings">View all</Button>} noPad>
+        <Panel title="Upcoming bookings" action={<Button size="small" component={Link} to="/owner/bookings">View all</Button>} noPad>
           {isLoading ? <div className="p-5"><Skeleton height={200} /></div> : !data!.upcomingBookings.length ? <EmptyState title="No upcoming bookings" message="New bookings will show up here instantly." /> : (
             <ul className="divide-y divide-line">
               {data!.upcomingBookings.map((b) => (

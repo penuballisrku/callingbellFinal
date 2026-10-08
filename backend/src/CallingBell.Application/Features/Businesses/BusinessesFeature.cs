@@ -239,6 +239,9 @@ public sealed record BusinessDetailDto
     public DateTimeOffset? VerifiedOn { get; init; }
     public string? CategoryColor { get; init; }
     public string? CitySlug { get; init; }
+    /// <summary>State and country of the business's city (country as an ISO code, e.g. "IN").</summary>
+    public string? State { get; init; }
+    public string? CountryCode { get; init; }
     public string? PlanName { get; init; }
     public bool IsFavorite { get; init; }
     public IReadOnlyList<ServiceDto> Services { get; init; } = [];
@@ -271,6 +274,7 @@ public sealed class GetBusinessBySlugHandler(IUnitOfWork uow, ICurrentUser user)
         {
             b.Description, b.AddressLine, b.Landmark, b.Pincode, b.Latitude, b.Longitude, b.PhoneNumber, b.WhatsAppNumber, b.Email, b.Website,
             b.YearEstablished, b.TeamSize, b.Languages, b.VerifiedOn, CategoryColor = b.Category.ColorHex, CitySlug = b.CityRef != null ? b.CityRef.Slug : null,
+            State = b.CityRef != null ? b.CityRef.State.Name : null, CountryCode = b.CityRef != null ? b.CityRef.State.CountryCode : null,
             b.CategoryId, b.SubCategoryId, b.CityId,
             PlanName = b.Subscriptions.Where(s => (s.Status == SubscriptionStatuses.Active || s.Status == SubscriptionStatuses.Trial) && s.StartDate <= today && s.EndDate >= today)
                 .OrderByDescending(s => s.StartDate).Select(s => s.Plan.Name).FirstOrDefault()
@@ -321,7 +325,7 @@ public sealed class GetBusinessBySlugHandler(IUnitOfWork uow, ICurrentUser user)
             Description = info.Description, AddressLine = info.AddressLine, Landmark = info.Landmark, Pincode = info.Pincode,
             Latitude = info.Latitude, Longitude = info.Longitude, PhoneNumber = info.PhoneNumber, WhatsAppNumber = info.WhatsAppNumber,
             Email = info.Email, Website = info.Website, YearEstablished = info.YearEstablished, TeamSize = info.TeamSize, Languages = info.Languages,
-            VerifiedOn = info.VerifiedOn, CategoryColor = info.CategoryColor, CitySlug = info.CitySlug, PlanName = info.PlanName,
+            VerifiedOn = info.VerifiedOn, CategoryColor = info.CategoryColor, CitySlug = info.CitySlug, State = info.State, CountryCode = info.CountryCode, PlanName = info.PlanName,
             IsFavorite = isFavorite, Services = services, Hours = hours, Images = images, Videos = videos, SocialLinks = socialLinks, RatingBreakdown = breakdown,
             RecentReviews = recent, Similar = similar
         };

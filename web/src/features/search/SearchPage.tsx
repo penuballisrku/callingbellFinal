@@ -19,6 +19,7 @@ import { useCity } from '@/stores/city';
 import { SearchSuggest } from '@/components/SearchSuggest';
 import { PlaceholderTicker } from '@/components/PlaceholderTicker';
 import { ExternalResults, type ResultSource, sourcePanelId, sourceTabId, SourceTabs, useExternalSearch } from './ExternalResults';
+import { ResultDetailDrawer, type SelectedResult } from './ResultDetail';
 import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import VerifiedRounded from '@mui/icons-material/VerifiedRounded';
 import LocationOffRounded from '@mui/icons-material/LocationOffRounded';
@@ -51,6 +52,8 @@ export default function SearchPage() {
   const [text, setText] = useState(params.get('q') ?? '');
   const debounced = useDebounced(text);
   const [drawer, setDrawer] = useState(false);
+  // The result whose details are open in the side panel; the results, filters and scroll position stay as they are underneath.
+  const [selected, setSelected] = useState<SelectedResult | null>(null);
   const queryClient = useQueryClient();
   const { enqueueSnackbar } = useSnackbar();
 
@@ -147,7 +150,7 @@ export default function SearchPage() {
 
   // On this page suggestions refine the current results instead of navigating away (businesses still open their profile).
   const applySuggestion = (s: SearchSuggestion) => {
-    if (s.kind === 'Business') { navigate(`/b/${s.slug}`); return; }
+    if (s.kind === 'Business') { navigate(`/business/${s.slug}`); return; }
     const q = s.kind === 'Service' ? s.label : '';
     setText(q);
     if (s.kind === 'Category') update({ category: s.slug, sub: null, q: null });
@@ -316,7 +319,9 @@ export default function SearchPage() {
           {tab !== 'db' ? (
             <div role="tabpanel" id={sourcePanelId(tab)} aria-labelledby={sourceTabId(tab)}>
               <ExternalResults only={tab} ext={external.data} loading={external.isLoading} isError={external.isError}
-                polling={external.polling} onRefresh={() => void external.refetch()} />
+                polling={external.polling} onRefresh={() => void external.refetch()}
+                moreGoogle={external.moreGoogle} loadingMoreGoogle={external.loadingMoreGoogle}
+                onSelect={(place, source) => setSelected({ kind: 'place', source, place })} />
             </div>
           ) : (
           <div role={searchesExternal ? 'tabpanel' : undefined} id={sourcePanelId('db')} aria-labelledby={searchesExternal ? sourceTabId('db') : undefined}>
@@ -370,7 +375,7 @@ export default function SearchPage() {
                     <section key={g.key} aria-label={g.label ?? 'Results'}>
                       {g.label && <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">{g.label}</h2>}
                       {/* One business per row. */}
-                      <ul className="space-y-3">{g.items.map((b) => <li key={b.id}><BusinessCard b={b} layout="row" /></li>)}</ul>
+                      <ul className="space-y-3">{g.items.map((b) => <li key={b.id}><BusinessCard b={b} layout="row" onSelect={(x) => setSelected({ kind: 'business', slug: x.slug, name: x.name })} /></li>)}</ul>
                     </section>
                   ))}
                 </div>
@@ -393,6 +398,8 @@ export default function SearchPage() {
         <div className="overflow-y-auto p-5">{filtersNote}{filters}</div>
         <div className="border-t border-line p-4"><Button fullWidth variant="contained" size="large" onClick={() => setDrawer(false)}>Show {data ? number(data.pagination.totalCount) : ''} results</Button></div>
       </Drawer>
+
+      <ResultDetailDrawer selected={selected} onClose={() => setSelected(null)} />
     </div>
   );
 }

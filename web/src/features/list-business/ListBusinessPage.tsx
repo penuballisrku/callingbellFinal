@@ -1,19 +1,18 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
 import { Button, Skeleton } from '@mui/material';
 import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 import PlayArrowRounded from '@mui/icons-material/PlayArrowRounded';
 import FormatQuoteRounded from '@mui/icons-material/FormatQuoteRounded';
 import TrendingUpRounded from '@mui/icons-material/TrendingUpRounded';
 import CheckCircleRounded from '@mui/icons-material/CheckCircleRounded';
-import { api } from '@/lib/api';
 import { compactNumber, moneyExact, number } from '@/lib/format';
-import { useDocumentTitle } from '@/lib/hooks';
+import { useDocumentTitle, usePlans } from '@/lib/hooks';
 import { homeFor, isOwner, useAuth } from '@/stores/auth';
 import type { ContentBlock, MarketingPage, Plan } from '@/lib/types';
 import { ErrorState, Img, SectionHeader, VerifiedMark } from '@/components/ui';
-import { BlockIcon, Eyebrow, FaqList, NumberedSteps, paragraphs } from '@/features/content/ContentBlocks';
+import { useVisitorCountryName } from '@/components/VisitorCountry';
+import { BlockIcon, Eyebrow, FaqList, NumberedSteps, paragraphs, useMarketingPage } from '@/features/content/ContentBlocks';
 
 /** Desktop image with a lighter mobile source; falls back gracefully (never a broken image). */
 function Photo({ block, className, aspect, eager, rounded = 'rounded-none' }: { block: ContentBlock; className?: string; aspect?: string; eager?: boolean; rounded?: string }) {
@@ -35,12 +34,8 @@ function Credit({ block, className = 'text-muted' }: { block: ContentBlock; clas
 
 export default function ListBusinessPage() {
   useDocumentTitle('List your business');
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['content', 'ListYourBusiness'],
-    queryFn: () => api.get<MarketingPage>('/api/content/pages/ListYourBusiness'),
-    staleTime: 300_000,
-  });
-  const plans = useQuery({ queryKey: ['plans'], queryFn: () => api.get<Plan[]>('/api/plans'), staleTime: 600_000 });
+  const { data, isLoading, isError, refetch } = useMarketingPage('ListYourBusiness');
+  const plans = usePlans();
 
   if (isError) return <div className="container-page py-16"><ErrorState onRetry={() => refetch()} /></div>;
   if (isLoading || !data) return <PageSkeleton />;
@@ -247,10 +242,12 @@ function Highlights({ items }: { items: ContentBlock[] }) {
 }
 
 function Gallery({ items }: { items: ContentBlock[] }) {
+  const country = useVisitorCountryName();
   if (!items.length) return null;
   return (
     <section aria-labelledby="gallery-h">
-      <SectionHeader title="Built for every kind of local business" subtitle="From neighbourhood stores to clinics and home-service experts across India." />
+      <SectionHeader title="Built for every kind of local business"
+        subtitle={`From neighbourhood stores to clinics and home-service experts${country ? ` across ${country}` : ''}.`} />
       <h2 id="gallery-h" className="sr-only">Businesses on Calling Bell</h2>
       <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-3">
         {items.map((g, i) => (
@@ -344,7 +341,7 @@ function Testimonials({ items }: { items: ContentBlock[] }) {
                 {t.subtitle && <div className="text-xs text-muted">{t.subtitle}{b ? `, ${b.name}` : ''}</div>}
                 {b && (
                   <>
-                    <Link to={`/b/${b.slug}`} className="mt-3 flex items-center gap-2.5 rounded-lg hover:underline">
+                    <Link to={`/business/${b.slug}`} className="mt-3 flex items-center gap-2.5 rounded-lg hover:underline">
                       <Img src={b.logoUrl} alt="" className="h-9 w-9 shrink-0" fallbackText={b.name} />
                       <span className="min-w-0 text-sm">
                         <span className="flex items-center gap-1 font-medium"><span className="truncate">{b.name}</span>{b.isVerified && <VerifiedMark />}</span>
@@ -372,7 +369,7 @@ function PlansTeaser({ plans, loading }: { plans?: Plan[]; loading: boolean }) {
   if (!loading && !plans?.length) return null;
   return (
     <section aria-labelledby="plans-h">
-      <SectionHeader title="Plans that grow with you" subtitle="Start free and upgrade only when you need more leads and visibility. Prices exclude 18% GST."
+      <SectionHeader title="Plans that grow with you" subtitle={`Start free and upgrade only when you need more leads and visibility.${plans?.[0]?.taxRate ? ` Prices exclude ${Number((plans[0].taxRate * 100).toFixed(2))}% ${plans[0].taxName ?? 'tax'}.` : ''}`}
         action={<Link to="/pricing" className="hidden items-center gap-1 text-sm font-semibold sm:inline-flex">Compare all features <ArrowForwardRounded sx={{ fontSize: 18 }} /></Link>} />
       <h2 id="plans-h" className="sr-only">Plans</h2>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
@@ -380,7 +377,7 @@ function PlansTeaser({ plans, loading }: { plans?: Plan[]; loading: boolean }) {
           <Link key={p.code} to="/pricing" className={`card relative flex flex-col p-4 ${p.isPopular ? '!border-accent' : ''}`}>
             {p.isPopular && <span className="absolute -top-2.5 left-4 rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold text-on-accent">Most popular</span>}
             <span className="font-semibold">{p.name}</span>
-            <span className="mt-2 text-xl font-bold tracking-tight">{p.monthlyPrice === 0 ? 'Free' : moneyExact(p.monthlyPrice)}
+            <span className="mt-2 text-xl font-bold tracking-tight">{p.monthlyPrice === 0 ? 'Free' : moneyExact(p.monthlyPrice, p)}
               {p.monthlyPrice > 0 && <span className="text-xs font-normal text-muted"> /month</span>}</span>
             <span className="mt-1 text-xs text-muted">{number(p.leadCredits)} lead credits a month</span>
             {p.tagline && <span className="mt-2 line-clamp-2 text-xs text-ink-2">{p.tagline}</span>}

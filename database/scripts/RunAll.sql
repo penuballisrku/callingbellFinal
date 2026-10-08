@@ -37,3 +37,7 @@
 :r $(ScriptDir)\22_AboutContent.sql
 :r $(ScriptDir)\23_TrustSafetyContent.sql
 :r $(ScriptDir)\24_ContactSupportContent.sql
+:r $(ScriptDir)\25_CountryPricing.sql
+:r $(ScriptDir)\26_CountryImages.sql
+:r $(ScriptDir)\27_Seo.sql
+:r $(ScriptDir)\28_PopularSearches.sql

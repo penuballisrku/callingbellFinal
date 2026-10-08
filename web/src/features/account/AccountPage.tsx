@@ -62,7 +62,7 @@ function Bookings({ scope }: { scope: 'upcoming' | 'past' }) {
             <Img src={b.businessLogoUrl} alt="" className="h-14 w-14 shrink-0" fallbackText={b.businessName} />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <Link to={`/b/${b.businessSlug}`} className="font-semibold hover:underline">{b.businessName}</Link>
+                <Link to={`/business/${b.businessSlug}`} className="font-semibold hover:underline">{b.businessName}</Link>
                 <StatusBadge type="BookingStatus" code={b.status} />
               </div>
               <p className="text-sm text-ink-2">{b.serviceName} · {dateTime(b.scheduledStart)}</p>
@@ -117,7 +117,7 @@ function Enquiries() {
           <div key={e.id} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-start">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <Link to={`/b/${e.businessSlug}`} className="font-semibold hover:underline">{e.businessName}</Link>
+                <Link to={`/business/${e.businessSlug}`} className="font-semibold hover:underline">{e.businessName}</Link>
                 <StatusBadge type="EnquiryType" code={e.enquiryType} />
                 <StatusBadge type="EnquiryStatus" code={e.status} />
               </div>

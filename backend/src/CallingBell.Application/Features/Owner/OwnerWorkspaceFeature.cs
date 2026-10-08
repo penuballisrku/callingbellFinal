@@ -370,13 +370,13 @@ public sealed record CompletionItemDto(string Key, string Label, string Hint, bo
 public sealed record ProfileCompletionDto(int Percent, int Completed, int Total, IReadOnlyList<CompletionItemDto> Items);
 
 public sealed record ActivePlanDto(string Code, string Name, string Status, string BillingCycle, DateTime StartDate, DateTime EndDate, decimal Amount,
-    int LeadCredits, int LeadsThisMonth, int MaxServices, int MaxImages, IReadOnlyList<string> Features, int? TrialDaysLeft);
+    int LeadCredits, int LeadsThisMonth, int MaxServices, int MaxImages, IReadOnlyList<string> Features, int? TrialDaysLeft, string Currency = "INR");
 
 public sealed record ActivityDto(string Type, string Title, string Description, DateTimeOffset OccurredOn, string? LinkUrl);
 
 /// <summary>A paid-plan checkout that was started but not completed (shown as "Complete your payment").</summary>
 public sealed record PendingPaymentDto(Guid OrderId, string PlanCode, string PlanName, string BillingCycle, decimal Total, string Status,
-    string? FailureReason, DateTimeOffset CreatedOn);
+    string? FailureReason, DateTimeOffset CreatedOn, string Currency = "INR");
 
 public sealed record OwnerOverviewDto(OwnerBusinessCardDto Business, ProfileCompletionDto Completion, ActivePlanDto? Plan,
     IReadOnlyList<OwnerMediaItemDto> RecentPhotos, IReadOnlyList<OwnerMediaItemDto> Videos, int PhotoCount, IReadOnlyList<ActivityDto> Activities,
@@ -412,17 +412,17 @@ public sealed class GetOwnerOverviewHandler(IUnitOfWork uow, ICurrentUser user) 
         // ---- Profile completion ----
         var items = new List<CompletionItemDto>
         {
-            new("logo", "Upload your logo", "Businesses with a logo are recognised faster in search.", owned.LogoUrl != null, "/business/media"),
-            new("cover", "Add a cover image", "A banner photo makes your profile look complete.", owned.CoverImageUrl != null, "/business/media"),
-            new("description", "Write a detailed description", "Aim for at least 150 characters about what you do.", owned.Description.Length >= 150, "/business/profile"),
-            new("photos", "Add 3 or more photos", "Show your work, premises and team.", photoCount >= 3, "/business/media"),
-            new("video", "Upload a promotional video", "Videos help customers trust you before they call.", videos.Count > 0, "/business/media"),
-            new("services", "List 3 or more services", "Clear services and prices bring better leads.", card.ServiceCount >= 3, "/business/services"),
-            new("hours", "Set your working hours", "Needed for \"open now\" search and booking slots.", hasHours, "/business/profile"),
-            new("contact", "Add WhatsApp and email", "Give customers more ways to reach you.", owned.WhatsAppNumber != null && owned.Email != null, "/business/profile"),
-            new("social", "Link a website or social profile", "Customers like to see your online presence.", owned.Website != null || socialCount > 0, "/business/profile"),
+            new("logo", "Upload your logo", "Businesses with a logo are recognised faster in search.", owned.LogoUrl != null, "/owner/media"),
+            new("cover", "Add a cover image", "A banner photo makes your profile look complete.", owned.CoverImageUrl != null, "/owner/media"),
+            new("description", "Write a detailed description", "Aim for at least 150 characters about what you do.", owned.Description.Length >= 150, "/owner/profile"),
+            new("photos", "Add 3 or more photos", "Show your work, premises and team.", photoCount >= 3, "/owner/media"),
+            new("video", "Upload a promotional video", "Videos help customers trust you before they call.", videos.Count > 0, "/owner/media"),
+            new("services", "List 3 or more services", "Clear services and prices bring better leads.", card.ServiceCount >= 3, "/owner/services"),
+            new("hours", "Set your working hours", "Needed for \"open now\" search and booking slots.", hasHours, "/owner/profile"),
+            new("contact", "Add WhatsApp and email", "Give customers more ways to reach you.", owned.WhatsAppNumber != null && owned.Email != null, "/owner/profile"),
+            new("social", "Link a website or social profile", "Customers like to see your online presence.", owned.Website != null || socialCount > 0, "/owner/profile"),
             new("verified", "Get verified", owned.VerificationStatus == VerificationStatuses.Pending ? "Your documents are being reviewed by our team." : "Verified businesses earn a trust badge.",
-                owned.VerificationStatus == VerificationStatuses.Verified, "/business/profile"),
+                owned.VerificationStatus == VerificationStatuses.Verified, "/owner/profile"),
         };
         var done = items.Count(i => i.Done);
         var completion = new ProfileCompletionDto((int)Math.Round(done * 100.0 / items.Count), done, items.Count, items);
@@ -433,34 +433,34 @@ public sealed class GetOwnerOverviewHandler(IUnitOfWork uow, ICurrentUser user) 
         var sub = await uow.Repository<BusinessSubscription>().QueryNoTracking()
             .Where(s => s.BusinessId == id && (s.Status == SubscriptionStatuses.Active || s.Status == SubscriptionStatuses.Trial) && s.StartDate <= today && s.EndDate >= today)
             .OrderByDescending(s => s.StartDate)
-            .Select(s => new { s.Plan, s.Status, s.BillingCycle, s.StartDate, s.EndDate, s.Amount })
+            .Select(s => new { s.Plan, s.Status, s.BillingCycle, s.StartDate, s.EndDate, s.Amount, s.Currency })
             .FirstOrDefaultAsync(ct);
         var plan = sub is null ? null : new ActivePlanDto(sub.Plan.Code, sub.Plan.Name, sub.Status, sub.BillingCycle, sub.StartDate, sub.EndDate, sub.Amount,
             sub.Plan.LeadCredits, leadsThisMonth, sub.Plan.MaxServices, sub.Plan.MaxImages,
             sub.Plan.Features.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
-            sub.Status == SubscriptionStatuses.Trial ? (int)(sub.EndDate - today).TotalDays : null);
+            sub.Status == SubscriptionStatuses.Trial ? (int)(sub.EndDate - today).TotalDays : null, sub.Currency);
 
         // ---- Recent activity (merged from the business's own records) ----
         var activities = new List<ActivityDto>
         {
-            new("BusinessCreated", "Business profile created", $"{owned.Name} was submitted for review.", owned.CreatedOn, "/business/profile")
+            new("BusinessCreated", "Business profile created", $"{owned.Name} was submitted for review.", owned.CreatedOn, "/owner/profile")
         };
         if (owned.ModifiedOn is { } modified && modified > owned.CreatedOn.AddMinutes(5))
-            activities.Add(new("ProfileUpdated", "Profile updated", "Your business details were changed.", modified, "/business/profile"));
+            activities.Add(new("ProfileUpdated", "Profile updated", "Your business details were changed.", modified, "/owner/profile"));
 
         activities.AddRange(await uow.Repository<Enquiry>().QueryNoTracking().Where(e => e.BusinessId == id).OrderByDescending(e => e.CreatedOn).Take(6)
-            .Select(e => new ActivityDto("Lead", $"New {e.EnquiryType.ToLower()} from {e.CustomerName}", e.Message, e.CreatedOn, "/business/leads")).ToListAsync(ct));
+            .Select(e => new ActivityDto("Lead", $"New {e.EnquiryType.ToLower()} from {e.CustomerName}", e.Message, e.CreatedOn, "/owner/leads")).ToListAsync(ct));
         activities.AddRange(await uow.Repository<Booking>().QueryNoTracking().Where(bk => bk.BusinessId == id).OrderByDescending(bk => bk.CreatedOn).Take(6)
-            .Select(bk => new ActivityDto("Booking", $"Booking {bk.BookingNumber} · {bk.Status}", bk.CustomerName + " booked " + bk.Service.Name, bk.CreatedOn, "/business/bookings")).ToListAsync(ct));
+            .Select(bk => new ActivityDto("Booking", $"Booking {bk.BookingNumber} · {bk.Status}", bk.CustomerName + " booked " + bk.Service.Name, bk.CreatedOn, "/owner/bookings")).ToListAsync(ct));
         activities.AddRange(await uow.Repository<Review>().QueryNoTracking().Where(rv => rv.BusinessId == id).OrderByDescending(rv => rv.CreatedOn).Take(4)
-            .Select(rv => new ActivityDto("Review", $"{rv.Rating}★ review from {rv.Customer.DisplayName}", rv.Title ?? rv.Comment, rv.CreatedOn, "/business/reviews")).ToListAsync(ct));
+            .Select(rv => new ActivityDto("Review", $"{rv.Rating}★ review from {rv.Customer.DisplayName}", rv.Title ?? rv.Comment, rv.CreatedOn, "/owner/reviews")).ToListAsync(ct));
         activities.AddRange(await photos.OrderByDescending(i => i.CreatedOn).Take(3)
-            .Select(i => new ActivityDto("Photo", "Photo added", i.Caption ?? "A new photo was added to your gallery.", i.CreatedOn, "/business/media")).ToListAsync(ct));
+            .Select(i => new ActivityDto("Photo", "Photo added", i.Caption ?? "A new photo was added to your gallery.", i.CreatedOn, "/owner/media")).ToListAsync(ct));
         activities.AddRange(videos.OrderByDescending(v => v.CreatedOn).Take(3)
-            .Select(v => new ActivityDto("Video", "Video uploaded", v.Title ?? "Promotional video", v.CreatedOn, "/business/media")));
+            .Select(v => new ActivityDto("Video", "Video uploaded", v.Title ?? "Promotional video", v.CreatedOn, "/owner/media")));
         activities.AddRange(await uow.Repository<BusinessSubscription>().QueryNoTracking().Where(s => s.BusinessId == id).OrderByDescending(s => s.CreatedOn).Take(2)
             .Select(s => new ActivityDto("Plan", s.Status == SubscriptionStatuses.Trial ? $"{s.Plan.Name} trial started" : $"{s.Plan.Name} plan · {s.Status}",
-                s.BillingCycle + " billing", s.CreatedOn, "/business/plan")).ToListAsync(ct));
+                s.BillingCycle + " billing", s.CreatedOn, "/owner/plan")).ToListAsync(ct));
 
         // ---- Unfinished checkout for a plan the business doesn't have yet ----
         var since = DateTimeOffset.UtcNow.AddDays(-14);
@@ -469,7 +469,7 @@ public sealed class GetOwnerOverviewHandler(IUnitOfWork uow, ICurrentUser user) 
         var pending = await orders
             .Where(o => o.Status != PaymentOrderStatuses.Paid && o.CreatedOn >= since && (lastPaid == null || o.CreatedOn > lastPaid))
             .OrderByDescending(o => o.CreatedOn)
-            .Select(o => new PendingPaymentDto(o.Id, o.Plan.Code, o.Plan.Name, o.BillingCycle, o.TotalAmount, o.Status, o.FailureReason, o.CreatedOn))
+            .Select(o => new PendingPaymentDto(o.Id, o.Plan.Code, o.Plan.Name, o.BillingCycle, o.TotalAmount, o.Status, o.FailureReason, o.CreatedOn, o.Currency))
             .FirstOrDefaultAsync(ct);
         if (pending is not null && plan?.Code == pending.PlanCode) pending = null;
 
@@ -477,7 +477,7 @@ public sealed class GetOwnerOverviewHandler(IUnitOfWork uow, ICurrentUser user) 
             .Select(o => new ActivityDto("Payment",
                 o.Status == PaymentOrderStatuses.Paid ? $"Payment received · {o.Plan.Name}" : $"Payment {o.Status.ToLower()} · {o.Plan.Name}",
                 o.Status == PaymentOrderStatuses.Paid ? (o.InvoiceNumber ?? o.OrderNumber) : (o.FailureReason ?? o.OrderNumber),
-                o.PaidOn ?? o.ModifiedOn ?? o.CreatedOn, "/business/plan")).ToListAsync(ct));
+                o.PaidOn ?? o.ModifiedOn ?? o.CreatedOn, "/owner/plan")).ToListAsync(ct));
 
         return new OwnerOverviewDto(card, completion, plan, recentPhotos, videos, photoCount,
             activities.OrderByDescending(a => a.OccurredOn).Take(12).ToList(), pending);

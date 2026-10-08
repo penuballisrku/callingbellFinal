@@ -31,12 +31,20 @@ export interface Category {
 export interface Area { id: string; name: string; slug: string; pincode: string }
 /** A city's area with search aliases: alternate spellings and the sub-localities (neighbourhoods) inside it. */
 export interface CityArea { id: string; name: string; slug: string; pincode: string; areaType?: string | null; altNames: string[]; subLocalities: string[] }
-export interface CityAreas { citySlug: string; cityName: string; state: string; discovering: boolean; discoveredOn?: string | null; subLocalityCount: number; areas: CityArea[] }
+export interface CityAreas { citySlug: string; cityName: string; state: string; stateSlug?: string | null; discovering: boolean; discoveredOn?: string | null; subLocalityCount: number; areas: CityArea[] }
 export interface City { id: string; name: string; slug: string; state: string; imageUrl?: string | null; isPopular: boolean; businessCount: number; areas: Area[] }
+/** A country visitors can browse (GET /api/locations/countries). cityCount 0: its cities are imported when it is first chosen. */
+export interface Country { code: string; name: string; cityCount: number }
+/** A state / province / region with listed cities (GET /api/locations/states?country=). */
+export interface StateRegion { id: string; name: string; slug: string; cityCount: number }
 export interface Plan {
   id: string; code: string; name: string; tagline?: string | null; monthlyPrice: number; annualPrice: number; leadCredits: number;
   includesFeaturedListing: boolean; includesPrioritySupport: boolean; features: string[]; imageUrl?: string | null; badgeColor?: string | null; isPopular: boolean;
   maxServices: number; maxImages: number;
+  /** Prices are in this currency, at fair local prices for the country asked for (GET /api/plans?country=); INR as set otherwise. */
+  currencyCode: string; locale: string;
+  /** Tax added at checkout (e.g. GST 0.18 in India); 0 where none is charged. */
+  taxName?: string | null; taxRate: number;
 }
 export type SuggestionKind = 'Category' | 'SubCategory' | 'Service' | 'Business';
 export interface SearchSuggestion { kind: SuggestionKind; label: string; detail?: string | null; imageUrl?: string | null; slug: string; subCategorySlug?: string | null; rating?: number | null }
@@ -86,6 +94,8 @@ export interface NearbyServices {
   aiRanked: boolean; aiPending: boolean; aiModel?: string | null; items: NearbyService[]; relatedCategories: RelatedCategory[];
   /** Selected area only: the city's categories that aren't near the area (`relatedCategories` then holds the near ones). */
   cityCategories?: RelatedCategory[];
+  /** Nothing listed in the city yet: items and categories are the platform-wide catalogue (no distances or local counts), picked by the AI. */
+  catalog?: boolean;
 }
 /** A sub-category that complements the popular services nearby; `reason` comes from the local AI model once ready. */
 export interface RelatedCategory {
@@ -107,8 +117,10 @@ export interface LocalReview {
   businessName: string; businessSlug: string; businessLogoUrl?: string | null; subCategoryName?: string | null; area?: string | null; city: string;
 }
 export interface LocalReviews {
-  placeName?: string | null; cityName?: string | null; scope: 'area' | 'city' | 'all'; reviewCount: number; averageRating: number;
+  placeName?: string | null; cityName?: string | null; scope: 'area' | 'city' | 'state' | 'country' | 'all'; reviewCount: number; averageRating: number;
   aiSummary?: string | null; aiPending: boolean; reviews: LocalReview[];
+  /** The place the reviews are from (area, city, state or country name); null when they are from everywhere. */
+  scopeName?: string | null;
 }
 export interface HomeData {
   citySlug?: string | null; cityName?: string | null; heroBanners: Banner[]; promoBanners: Banner[]; categories: SubCategory[];
@@ -139,6 +151,8 @@ export interface BusinessDetail {
   card: BusinessCard; description: string; addressLine?: string | null; landmark?: string | null; pincode?: string | null;
   latitude?: number | null; longitude?: number | null; phoneNumber?: string | null; whatsAppNumber?: string | null; email?: string | null; website?: string | null;
   yearEstablished?: number | null; teamSize?: number | null; languages?: string | null; verifiedOn?: string | null; categoryColor?: string | null; citySlug?: string | null;
+  /** The business's city's state and country (ISO code, e.g. "IN"). */
+  state?: string | null; countryCode?: string | null;
   planName?: string | null; isFavorite: boolean; services: Service[]; hours: Hours[]; images: BusinessImage[]; ratingBreakdown: Record<string, number>;
   videos: BusinessVideo[]; socialLinks: SocialLink[];
   recentReviews: Review[]; similar: BusinessCard[];
@@ -171,8 +185,8 @@ export interface OwnerList<T> { page: { items: T[]; meta: Pagination }; statusCo
 export interface OwnerReview { id: string; rating: number; title?: string | null; comment: string; customerName: string; status: string; ownerReply?: string | null; repliedOn?: string | null; isVerifiedVisit: boolean; createdOn: string }
 export interface OwnerService { id: string; name: string; description: string; price: number; priceUnit?: string | null; durationMinutes: number; type: string; isPopular: boolean; isActive: boolean; bookingCount: number }
 export interface OwnerProfile { id: string; name: string; tagline?: string | null; description: string; phoneNumber?: string | null; whatsAppNumber?: string | null; email?: string | null; website?: string | null; addressLine?: string | null; landmark?: string | null; acceptsOnlineBooking: boolean; offersVideoConsultation: boolean; offersHomeService: boolean; hours: Hours[] }
-export interface SubscriptionHistory { subscriptionNumber: string; planName: string; billingCycle: string; startDate: string; endDate: string; amount: number; status: string }
-export interface Invoice { invoiceNumber: string; paymentType: string; amount: number; taxAmount: number; totalAmount: number; paymentMode: string; status: string; paidOn: string }
+export interface SubscriptionHistory { subscriptionNumber: string; planName: string; billingCycle: string; startDate: string; endDate: string; amount: number; status: string; currency: string }
+export interface Invoice { invoiceNumber: string; paymentType: string; amount: number; taxAmount: number; totalAmount: number; paymentMode: string; status: string; paidOn: string; currency: string }
 export interface OwnerSubscription { current?: SubscriptionHistory | null; currentPlanCode?: string | null; plans: Plan[]; history: SubscriptionHistory[]; invoices: Invoice[] }
 export interface OwnerAd { id: string; campaignCode: string; adType: string; title: string; description?: string | null; startDate: string; endDate: string; budget: number; amountSpent: number; impressions: number; clicks: number; ctr: number; status: string; targetCity?: string | null; targetCategory?: string | null }
 
@@ -200,8 +214,9 @@ export interface CheckoutOrder {
 export interface PaymentResult {
   orderId: string; orderNumber: string; status: 'Created' | 'Paid' | 'Failed' | 'Cancelled'; planName: string; billingCycle: string;
   activeFrom?: string | null; activeUntil?: string | null; invoiceNumber?: string | null; total: number; paymentMethod?: string | null; failureReason?: string | null;
+  currency: string;
 }
-export interface PendingPayment { orderId: string; planCode: string; planName: string; billingCycle: string; total: number; status: string; failureReason?: string | null; createdOn: string }
+export interface PendingPayment { orderId: string; planCode: string; planName: string; billingCycle: string; total: number; status: string; failureReason?: string | null; createdOn: string; currency: string }
 export interface BusinessRegistrationResult { auth: AuthResult; business: CreatedBusiness }
 
 export interface OwnerBusinessCard {
@@ -212,7 +227,7 @@ export interface OwnerBusinessCard {
 export interface CompletionItem { key: string; label: string; hint: string; done: boolean; linkUrl: string }
 export interface ActivePlan {
   code: string; name: string; status: string; billingCycle: string; startDate: string; endDate: string; amount: number; leadCredits: number;
-  leadsThisMonth: number; maxServices: number; maxImages: number; features: string[]; trialDaysLeft?: number | null;
+  leadsThisMonth: number; maxServices: number; maxImages: number; features: string[]; trialDaysLeft?: number | null; currency: string;
 }
 export interface Activity { type: string; title: string; description: string; occurredOn: string; linkUrl?: string | null }
 export interface OwnerOverview {
@@ -264,10 +279,34 @@ export interface ExternalPlace {
   photoUrl?: string | null; photoCredit?: string | null; photoCreditUrl?: string | null;
   /** AI tier only: why the AI picked this place, in plain words. */
   aiReason?: string | null;
+  latitude?: number | null; longitude?: number | null;
+  /** Google Maps only: open right now by Google's opening hours (null when unknown). */
+  openNow?: boolean | null;
+}
+/** Any other field a place's source returned (e.g. OpenStreetMap "Wheelchair: Yes"). */
+export interface PlaceField { label: string; value: string }
+/**
+ * Everything known about a Google Maps or AI recommended search result (GET /api/places/details), combined from its sources. Fields a source
+ * doesn't have are null or empty.
+ */
+export interface PlaceDetails {
+  source: 'google' | 'osm'; sourceId: string; name: string; category?: string | null; tags: string[]; description?: string | null;
+  address?: string | null; city?: string | null; state?: string | null; country?: string | null; postalCode?: string | null;
+  latitude?: number | null; longitude?: number | null; phone?: string | null; internationalPhone?: string | null; mobile?: string | null;
+  email?: string | null; website?: string | null; socialLinks: SocialLink[]; openingHours: string[]; openNow?: boolean | null;
+  rating?: number | null; ratingCount?: number | null; priceLevel?: string | null; businessStatus?: string | null;
+  photos: { url: string; width?: number | null; height?: number | null; attributions: { displayName: string; uri?: string | null }[] }[];
+  mapsUrl?: string | null; sourceUrl?: string | null; googlePlaceId?: string | null; otherFields: PlaceField[]; dataSources: string[];
+}/** Details for a place looked up on Google Maps by name and location (GET /api/places/contact): phone, rating, open now and a photo. */
+export interface PlaceContact {
+  found: boolean; phone?: string | null; internationalPhone?: string | null; website?: string | null; mapsUrl?: string | null;
+  rating?: number | null; ratingCount?: number | null; openNow?: boolean | null;
+  photoUrl?: string | null; photoCredit?: string | null; photoCreditUrl?: string | null;
 }
 /** status: ready | off (not configured) | unavailable | skipped. aiStatus (AI tier): ranked | pending (poll) | off. */
 /** searching (AI tier): the full OpenStreetMap search is still running; these results are partial (poll). */
-export interface ExternalTier { status: 'ready' | 'off' | 'unavailable' | 'skipped'; aiStatus?: 'ranked' | 'pending' | 'off' | null; total: number; duplicates: number; items: ExternalPlace[]; searching?: boolean }
+/** nextPageToken (Google tier): more results exist; pass it as googlePage to load the next 20. */
+export interface ExternalTier { status: 'ready' | 'off' | 'unavailable' | 'skipped'; aiStatus?: 'ranked' | 'pending' | 'off' | null; total: number; duplicates: number; items: ExternalPlace[]; searching?: boolean; nextPageToken?: string | null }
 /** The AI's overview of the results, written from live data: "pending" while it is being written (poll). */
 export interface ExternalInsight { status: 'ready' | 'pending' | 'off'; text?: string | null }
 export interface ExternalSearch { query?: string | null; placeName?: string | null; cityName?: string | null; origin?: string | null; ai: ExternalTier; google: ExternalTier; insight?: ExternalInsight | null }
@@ -278,6 +317,17 @@ export interface GooglePlacePhoto { url: string; width?: number | null; height?:
 export interface GooglePlace {
   name: string; address?: string | null; rating?: number | null; userRatingCount?: number | null; latitude?: number | null; longitude?: number | null;
   distanceKm?: number | null; directionsUrl: string; photos: GooglePlacePhoto[];
+  /** Google place id, for the details page (/nearby/place/:id). */
+  id?: string | null;
+  /** The place's Google Maps page. */
+  mapsUrl: string;
+  /** As written locally; internationalPhone has the country code. */
+  phone?: string | null; internationalPhone?: string | null; openNow?: boolean | null;
+}
+/** A "Popular searches" entry on Explore nearby (dbo.PopularSearches). subCategorySlug is set when the search is exactly that service. */
+export interface PopularSearch {
+  code: string; label: string; searchText: string; categorySlug?: string | null; subCategorySlug?: string | null; group?: string | null;
+  iconUrl?: string | null; colorHex?: string | null; searchCount: number;
 }
 export interface GooglePlacesLocation { lat: number; lon: number; source: 'coordinates' | 'area' | 'city'; areaName?: string | null; cityName?: string | null; citySlug?: string | null }
 export interface GooglePlacesPage { query: string; location: GooglePlacesLocation; places: GooglePlace[]; nextPageToken?: string | null }
@@ -285,4 +335,24 @@ export interface GooglePlacesPage { query: string; location: GooglePlacesLocatio
 /** The visitor's country and its city catalogue (GET /api/geo/country-catalog). importing: the city catalogue agent is still working; poll. */
 export interface CountryCatalog {
   countryCode: string; countryName?: string | null; stateCount: number; cityCount: number; importing: boolean; importedOn?: string | null; note?: string | null;
+}
+
+/* ---------- SEO (GET /api/seo?path=) ---------- */
+export interface SeoLink { name: string; url: string; count?: number | null }
+export interface SeoLinkGroup { title: string; links: SeoLink[] }
+export interface SeoFaq { question: string; answer: string }
+export interface SeoDocument {
+  title: string; description: string; canonicalUrl: string; robots: string; language: string; ogType: string;
+  imageUrl?: string | null; imageAlt?: string | null; breadcrumbs: SeoLink[]; jsonLd: string[]; lastModified?: string | null;
+}
+export interface SeoPageContent { heading?: string | null; summary?: string | null; faq: SeoFaq[]; links: SeoLinkGroup[]; updatedOn?: string | null }
+/** A category or location landing page: its businesses, a factual summary, questions answered from the data and related links. */
+export interface LandingPage {
+  kind: 'category' | 'location'; path: string; title: string; description: string; heading: string; summary: string; place?: string | null;
+  categoryName?: string | null; businessCount: number; indexable: boolean; breadcrumbs: SeoLink[]; businesses: BusinessCard[];
+  links: SeoLinkGroup[]; faq: SeoFaq[];
+}
+export interface SeoPage {
+  kind: 'Home' | 'Business' | 'Category' | 'Location' | 'Static' | 'Search' | 'Private' | 'Redirect' | 'NotFound' | 'Gone';
+  statusCode: number; redirectTo?: string | null; document: SeoDocument; content: SeoPageContent; landing?: LandingPage | null;
 }

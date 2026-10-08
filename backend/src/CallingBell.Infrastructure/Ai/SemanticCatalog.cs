@@ -37,6 +37,11 @@ public sealed class EmbeddingOptions
     /// searches stay fast while chat jobs run (4 cores: 2 + 2). Keep it fixed: Ollama reloads the model when it changes.
     /// </summary>
     public int Threads { get; set; } = 2;
+    /// <summary>
+    /// Context window per request (Ollama num_ctx), in tokens. Queries and catalogue entries are short; a small window keeps the loaded
+    /// model small (embedding models default to long windows). Keep it fixed: Ollama reloads the model when it changes. 0 = model default.
+    /// </summary>
+    public int ContextLength { get; set; } = 1024;
     /// <summary>How long Ollama keeps the (small) embedding model loaded, so searches don't wait for it to load again.</summary>
     public string KeepAlive { get; set; } = "24h";
     /// <summary>A search waits at most this long for its vector, so a slow model never holds up a page.</summary>
@@ -153,7 +158,7 @@ internal sealed class SemanticCatalog(
         var body = new
         {
             model = options.Value.Model, input, keep_alive = options.Value.KeepAlive,
-            options = options.Value.Threads > 0 ? (object)new { num_thread = options.Value.Threads } : new { },
+            options = EmbedOptions(options.Value),
         };
         using var response = await httpFactory.CreateClient(OllamaChatClient.HttpClientName)
             .PostAsJsonAsync($"{o.BaseUrl.TrimEnd('/')}/api/embed", body, OllamaChatClient.Json, ct);
@@ -163,6 +168,14 @@ internal sealed class SemanticCatalog(
         var reply = await response.Content.ReadFromJsonAsync<EmbedResponse>(OllamaChatClient.Json, ct);
         if (reply?.Embeddings is not { } vectors || vectors.Length != input.Count) throw new InvalidOperationException("Ollama returned no embeddings");
         return vectors.Select(Normalised).ToArray();
+    }
+
+    internal static Dictionary<string, object> EmbedOptions(EmbeddingOptions o)
+    {
+        var options = new Dictionary<string, object>();
+        if (o.Threads > 0) options["num_thread"] = o.Threads;
+        if (o.ContextLength > 0) options["num_ctx"] = o.ContextLength;
+        return options;
     }
 
     internal void Publish(string[] slugs, float[][] vectors, IReadOnlyDictionary<string, string[]> keywords) =>

@@ -47,7 +47,7 @@ public sealed class GetHomeHandler(IUnitOfWork uow) : IRequestHandler<GetHomeQue
         var categories = await CatalogQueries.FeaturedSubCategories(uow).ToListAsync(ct);
 
         var since = DateTimeOffset.UtcNow.AddDays(-90);
-        var popularServices = await PopularServices(since, ct);
+        var popularServices = await PopularServices(uow, since, ct);
 
 
         var stats = new PlatformStatsDto(
@@ -64,7 +64,7 @@ public sealed class GetHomeHandler(IUnitOfWork uow) : IRequestHandler<GetHomeQue
     /// Curated list from dbo.PopularServices with live price / rating / booking figures; entries no active business offers are hidden.
     /// Falls back to the most-booked services (unrated) when nothing has been curated.
     /// </summary>
-    private async Task<IReadOnlyList<PopularServiceDto>> PopularServices(DateTimeOffset since, CancellationToken ct)
+    internal static async Task<IReadOnlyList<PopularServiceDto>> PopularServices(IUnitOfWork uow, DateTimeOffset since, CancellationToken ct)
     {
         var offered = uow.Repository<BusinessService>().QueryNoTracking().Where(s => s.IsActive && s.Business.Status == BusinessStatuses.Active);
         var recentBookings = uow.Repository<Booking>().QueryNoTracking().Where(b => b.CreatedOn >= since);

@@ -2,11 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
-import { Button, CircularProgress, IconButton, MenuItem, Skeleton, TextField, ToggleButton, ToggleButtonGroup, Tooltip } from '@mui/material';
+import { Button, CircularProgress, IconButton, MenuItem, Skeleton, TextField, Tooltip } from '@mui/material';
 import SearchRounded from '@mui/icons-material/SearchRounded';
 import MyLocationRounded from '@mui/icons-material/MyLocationRounded';
 import PlaceOutlined from '@mui/icons-material/PlaceOutlined';
-import DirectionsRounded from '@mui/icons-material/DirectionsRounded';
 import ChevronLeftRounded from '@mui/icons-material/ChevronLeftRounded';
 import ChevronRightRounded from '@mui/icons-material/ChevronRightRounded';
 import TravelExploreRounded from '@mui/icons-material/TravelExploreRounded';
@@ -16,18 +15,22 @@ import StarRounded from '@mui/icons-material/StarRounded';
 import NearMeOutlined from '@mui/icons-material/NearMeOutlined';
 import MapOutlined from '@mui/icons-material/MapOutlined';
 import ContentCopyRounded from '@mui/icons-material/ContentCopyRounded';
-import GridViewRounded from '@mui/icons-material/GridViewRounded';
-import ViewListRounded from '@mui/icons-material/ViewListRounded';
 import InfoOutlined from '@mui/icons-material/InfoOutlined';
+import TrendingUpRounded from '@mui/icons-material/TrendingUpRounded';
+import ExpandMoreRounded from '@mui/icons-material/ExpandMoreRounded';
+import ExpandLessRounded from '@mui/icons-material/ExpandLessRounded';
 import { api, ApiError } from '@/lib/api';
 import { useCategories, useDocumentTitle } from '@/lib/hooks';
-import { number } from '@/lib/format';
-import type { Category, GooglePlace, GooglePlacesPage, SubCategory } from '@/lib/types';
+import { compactNumber, number } from '@/lib/format';
+import type { Category, ExternalPlace, GooglePlace, GooglePlacesPage, PopularSearch, SubCategory } from '@/lib/types';
 import { useCity } from '@/stores/city';
 import { namesPlace, parseSearch, placeLabel as formatPlace } from '@/lib/searchParse';
-import { CitySelect } from '@/layouts/CustomerLayout';
+import { CitySelect } from '@/components/LocationPicker';
 import { EmptyState, ErrorState, Img } from '@/components/ui';
 import { PlaceholderTicker } from '@/components/PlaceholderTicker';
+import { PlaceActions } from './PlaceParts';
+import { countryName, useBrowsingCountryCode, useVisitorCountry } from '@/components/VisitorCountry';
+import { ResultDetailDrawer } from '@/features/search/ResultDetail';
 
 interface Coords { lat: number; lon: number }
 
@@ -35,7 +38,6 @@ interface Coords { lat: number; lon: number }
 interface IpLocation { place?: string | null; district?: { cityName: string } | null; latitude?: number | null; longitude?: number | null }
 
 type SortKey = 'best' | 'rating' | 'reviews' | 'distance';
-type ViewKey = 'grid' | 'list';
 
 const sorts: { value: SortKey; label: string }[] = [
   { value: 'best', label: 'Best match' },
@@ -66,6 +68,8 @@ function sortPlaces(places: GooglePlace[], sort: SortKey): GooglePlace[] {
  * Without a city it searches around the visitor's shared location, or their approximate location from their IP.
  */
 export default function PlacesPage() {
+  // The result whose details are open, in the same side panel as the search page; the list stays as it was underneath.
+  const [selected, setSelected] = useState<GooglePlace | null>(null);
   useDocumentTitle('Explore nearby');
   const { enqueueSnackbar } = useSnackbar();
   const [params, setParams] = useSearchParams();
@@ -73,7 +77,6 @@ export default function PlacesPage() {
   const categorySlug = params.get('category');
   const subSlug = params.get('sub');
   const sort = (sorts.some((s) => s.value === params.get('sort')) ? params.get('sort') : 'best') as SortKey;
-  const view: ViewKey = params.get('view') === 'list' ? 'list' : 'grid';
   const [input, setInput] = useState(q);
   useEffect(() => setInput(q), [q]);
 
@@ -156,7 +159,7 @@ export default function PlacesPage() {
       if ('place' in next) { if (next.place) p.set('place', next.place); else p.delete('place'); }
       return p;
     });
-  const setOption = (key: 'sort' | 'view', value: string, fallback: string) => {
+  const setOption = (key: 'sort', value: string, fallback: string) => {
     const p = new URLSearchParams(params);
     if (value === fallback) p.delete(key); else p.set(key, value);
     setParams(p, { replace: true });
@@ -275,7 +278,7 @@ export default function PlacesPage() {
               action={<Button variant="contained" startIcon={<MyLocationRounded />} onClick={locate} disabled={locating}>Use my current location</Button>} />
           </div>
         ) : !textQuery ? (
-          <QuickStart categories={categories} onPick={(s) => setSearch({ category: s.categorySlug, sub: s.slug })} />
+          <PopularSearches onPick={(s) => setSearch(s.subCategorySlug ? { category: s.categorySlug ?? undefined, sub: s.subCategorySlug } : { q: s.searchText })} />
         ) : (
           <>
             <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
@@ -296,15 +299,11 @@ export default function PlacesPage() {
                   slotProps={{ htmlInput: { 'aria-label': 'Sort by' } }}>
                   {sorts.map((s) => <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>)}
                 </TextField>
-                <ToggleButtonGroup size="small" exclusive value={view} onChange={(_, v: ViewKey | null) => v && setOption('view', v, 'grid')} aria-label="Layout">
-                  <ToggleButton value="grid" aria-label="Grid view"><GridViewRounded fontSize="small" /></ToggleButton>
-                  <ToggleButton value="list" aria-label="List view"><ViewListRounded fontSize="small" /></ToggleButton>
-                </ToggleButtonGroup>
               </div>
             </div>
 
             {results.isLoading ? (
-              <PlaceSkeletons view={view} />
+              <PlaceSkeletons />
             ) : results.isError ? (
               <div className="card"><ErrorState message={results.error.message} onRetry={() => void results.refetch()} /></div>
             ) : places.length === 0 ? (
@@ -314,9 +313,9 @@ export default function PlacesPage() {
               </div>
             ) : (
               <>
-                <ul className={view === 'grid' ? 'grid gap-5 sm:grid-cols-2 lg:grid-cols-3' : 'space-y-4'}>
+                <ul className="space-y-3">
                   {places.map((p, i) => (
-                    <li key={`${p.name}-${p.latitude}-${p.longitude}-${i}`} className="min-w-0"><PlaceCard place={p} layout={view} /></li>
+                    <li key={`${p.name}-${p.latitude}-${p.longitude}-${i}`} className="min-w-0"><PlaceRow place={p} onSelect={setSelected} /></li>
                   ))}
                 </ul>
                 {results.hasNextPage && (
@@ -337,8 +336,18 @@ export default function PlacesPage() {
           </>
         )}
       </section>
+      <ResultDetailDrawer selected={selected ? { kind: 'place', source: 'google', place: toExternalPlace(selected) } : null} onClose={() => setSelected(null)} />
     </div>
   );
+}
+
+/** A Google Maps result in the shape the search page's details panel takes (ids there are "google:<place id>"). */
+function toExternalPlace(p: GooglePlace): ExternalPlace {
+  return {
+    id: `google:${p.id}`, name: p.name, address: p.address, phone: p.phone, rating: p.rating, ratingCount: p.userRatingCount,
+    distanceKm: p.distanceKm ?? Number.NaN, directionsUrl: p.directionsUrl, sourceUrl: p.mapsUrl, photoUrl: p.photos[0]?.url,
+    latitude: p.latitude, longitude: p.longitude, openNow: p.openNow,
+  };
 }
 
 /* ---------- Category rails ---------- */
@@ -443,140 +452,182 @@ function SubCategoryRail({ category, activeSlug, onPick }: { category: Category;
   );
 }
 
-/* ---------- Before a search: popular services from the catalogue ---------- */
+/* ---------- Before a search: popular searches from the database ---------- */
 
-function QuickStart({ categories, onPick }: { categories?: Category[]; onPick: (s: SubCategory) => void }) {
-  const popular = useMemo(() => (categories ?? []).flatMap((c) => c.subCategories)
-    .sort((a, b) => b.businessCount - a.businessCount).slice(0, 8), [categories]);
+/** Shown first; "Show more" reveals the rest (up to POPULAR_MAX). Three rows of four on wide screens. */
+const POPULAR_FIRST = 12;
+const POPULAR_MAX = 48;
+
+/**
+ * The most searched services and searches for the country being browsed (dbo.PopularSearches via GET /api/places/popular-searches,
+ * ranked by searches made here). A service opens its category; a typed search ("Emergency plumber") is searched as text.
+ */
+function PopularSearches({ onPick }: { onPick: (s: PopularSearch) => void }) {
+  const visitor = useVisitorCountry();
+  const country = useBrowsingCountryCode();
+  const [expanded, setExpanded] = useState(false);
+  const { data, isPending: isLoading, isError, refetch } = useQuery({
+    queryKey: ['popular-searches', country ?? ''],
+    queryFn: () => api.get<PopularSearch[]>('/api/places/popular-searches', { country, limit: POPULAR_MAX }),
+    staleTime: 5 * 60_000,
+    // Once the country is known (or couldn't be), so the list loads once, for the right country.
+    enabled: !visitor.isLoading,
+  });
+  const items = data ?? [];
+  const shown = expanded ? items : items.slice(0, POPULAR_FIRST);
+  const countryLabel = country ? countryName(country) : null;
+
   return (
     <div>
-      <div className="mb-4">
-        <h2 className="text-xl font-bold tracking-[-0.01em]">Popular searches</h2>
-        <p className="mt-0.5 text-sm text-muted">Pick a service to see places near you, or choose a category above.</p>
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 className="text-xl font-bold tracking-[-0.01em]">Popular searches</h2>
+          <p className="mt-0.5 text-sm text-muted">
+            What people search for most{countryLabel ? ` in ${countryLabel}` : ''}. Pick one to see places near you, or choose a category above.
+          </p>
+        </div>
+        {items.length > POPULAR_FIRST && (
+          <span className="text-xs text-muted tabular">{expanded ? `All ${items.length}` : `${POPULAR_FIRST} of ${items.length}`}</span>
+        )}
       </div>
-      {popular.length === 0 ? (
+      {isLoading ? (
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-hidden>
+          {Array.from({ length: POPULAR_FIRST }, (_, i) => <li key={i}><Skeleton variant="rounded" height={68} sx={{ borderRadius: '12px' }} /></li>)}
+        </ul>
+      ) : isError ? (
+        <div className="card"><ErrorState message="We couldn’t load popular searches." onRetry={() => void refetch()} /></div>
+      ) : items.length === 0 ? (
         <div className="card"><EmptyState icon={<TravelExploreRounded />} title="What are you looking for?" message="Search for any service or business above." /></div>
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {popular.map((s) => (
-            <li key={s.id}>
-              <button type="button" onClick={() => onPick(s)}
-                className="card flex w-full items-center gap-3 p-3 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
-                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl" style={{ background: `${s.colorHex ?? '#667085'}1f` }}>
-                  <Img src={s.iconUrl} alt="" className="icon-boost h-6 w-6" rounded="rounded" fit="contain" fallbackText={s.name} />
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate text-[15px] font-semibold">{s.name}</span>
-                  <span className="block truncate text-xs text-muted">{s.categoryName}</span>
-                </span>
-                <ChevronRightRounded className="ml-auto shrink-0 text-faint" fontSize="small" />
-              </button>
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul id="popular-searches" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {shown.map((s, i) => (
+              <li key={s.code}>
+                <button type="button" onClick={() => onPick(s)}
+                  className="card group flex w-full items-center gap-3 p-3 text-left transition-[border-color,box-shadow] hover:border-line-strong hover:shadow-[var(--cb-shadow-md)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl" style={{ background: `${s.colorHex ?? '#667085'}1f` }}>
+                    {s.iconUrl
+                      ? <Img src={s.iconUrl} alt="" className="icon-boost h-6 w-6" rounded="rounded" fit="contain" fallbackText={s.label} />
+                      : <SearchRounded sx={{ fontSize: 22, color: s.colorHex ?? '#667085' }} />}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[15px] font-semibold">{s.label}</span>
+                    <span className="flex min-w-0 items-center gap-1 text-xs text-muted">
+                      {i < 3 && !expanded && <TrendingUpRounded sx={{ fontSize: 14 }} className="shrink-0 text-accent-ink" aria-label="Trending" />}
+                      {s.group && <span className="min-w-0 truncate">{s.group}</span>}
+                      {s.searchCount > 0 && <span className="shrink-0 tabular">{s.group && '· '}{compactNumber(s.searchCount)} searches</span>}
+                    </span>
+                  </span>
+                  <ChevronRightRounded className="shrink-0 text-faint transition-transform group-hover:translate-x-0.5" fontSize="small" />
+                </button>
+              </li>
+            ))}
+          </ul>
+          {items.length > POPULAR_FIRST && (
+            <div className="mt-5 flex justify-center">
+              <Button variant="outlined" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded} aria-controls="popular-searches"
+                endIcon={expanded ? <ExpandLessRounded /> : <ExpandMoreRounded />} sx={{ minWidth: 200 }}>
+                {expanded ? 'Show fewer' : `Show ${items.length - POPULAR_FIRST} more`}
+              </Button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
 }
 
-/* ---------- Result cards ---------- */
+/* ---------- Result rows ---------- */
 
-function PlaceCard({ place: p, layout }: { place: GooglePlace; layout: ViewKey }) {
+/**
+ * One business per row: photo, name, rating, distance, open now and address, then the actions. Below 1024px the actions sit under the
+ * details (an even five-column bar on phones); from 1024px they share the row. Call and WhatsApp stay in place, disabled, when Google
+ * Maps has no number, so every row lines up the same way.
+ */
+function PlaceRow({ place: p, onSelect }: { place: GooglePlace; onSelect: (p: GooglePlace) => void }) {
   const { enqueueSnackbar } = useSnackbar();
-  const [index, setIndex] = useState(0);
-  const photo = p.photos[index];
-  const count = p.photos.length;
-  const step = (d: number) => setIndex((i) => (i + d + count) % count);
+  const photo = p.photos[0];
   const rated = p.rating != null && !!p.userRatingCount;
   const copyAddress = async () => {
     if (!p.address) return;
     try { await navigator.clipboard.writeText(`${p.name}, ${p.address}`); enqueueSnackbar('Address copied', { variant: 'success' }); }
     catch { enqueueSnackbar('Couldn’t copy the address', { variant: 'warning' }); }
   };
-  const list = layout === 'list';
-  const arrow = {
-    position: 'absolute', top: '50%', transform: 'translateY(-50%)', bgcolor: 'rgba(255,255,255,0.92)', color: '#161616',
-    '&:hover': { bgcolor: '#fff' }, boxShadow: 'var(--cb-shadow-sm)',
-  } as const;
 
   return (
-    <article className={`card group flex h-full overflow-hidden transition-[border-color,box-shadow] hover:border-line-strong hover:shadow-[var(--cb-shadow-md)] ${list ? 'flex-col sm:flex-row' : 'flex-col'}`}>
-      <div className={`relative shrink-0 ${list ? 'sm:w-64' : ''}`}>
-        <Img src={photo?.url} alt={photo ? `Photo of ${p.name}` : p.name} fallbackText={p.name} rounded="rounded-none" aspect="4/3" className="h-full w-full" />
-        {/* Rating and distance over the photo; a soft gradient keeps them legible on any image. */}
-        <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/45 to-transparent" />
-        {rated && (
-          <span className="absolute left-2.5 top-2.5 inline-flex items-center gap-0.5 rounded-md bg-white/95 px-1.5 py-0.5 text-xs font-bold text-[#161616] shadow-sm"
-            aria-label={`Rated ${p.rating!.toFixed(1)} out of 5 from ${p.userRatingCount} reviews`}>
-            <StarRounded sx={{ fontSize: 14, color: '#F4A62C' }} />{p.rating!.toFixed(1)}
-            <span className="font-medium text-[#667085]">({number(p.userRatingCount!)})</span>
-          </span>
-        )}
-        {p.distanceKm != null && (
-          <span className="absolute right-2.5 top-2.5 inline-flex items-center gap-0.5 rounded-md bg-black/60 px-1.5 py-0.5 text-xs font-medium text-white tabular">
-            <PlaceOutlined sx={{ fontSize: 13 }} />{p.distanceKm.toFixed(1)} km
-          </span>
-        )}
-        {count > 1 && (
-          <>
-            {/* Arrows show on hover/focus with a mouse; always on touch screens. */}
-            <div className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100">
-              <IconButton size="small" aria-label="Previous photo" onClick={() => step(-1)} sx={{ ...arrow, left: 8 }}><ChevronLeftRounded fontSize="small" /></IconButton>
-              <IconButton size="small" aria-label="Next photo" onClick={() => step(1)} sx={{ ...arrow, right: 8 }}><ChevronRightRounded fontSize="small" /></IconButton>
-            </div>
-            <span className="absolute inset-x-0 bottom-2 flex justify-center gap-1" aria-label={`Photo ${index + 1} of ${count}`}>
-              {p.photos.map((_, i) => (
-                <span key={i} aria-hidden className={`h-1.5 rounded-full transition-all ${i === index ? 'w-4 bg-white' : 'w-1.5 bg-white/60'}`} />
-              ))}
-            </span>
-          </>
-        )}
-      </div>
-
-      <div className="flex min-w-0 flex-1 flex-col p-4">
-        <h3 className="line-clamp-2 text-base font-semibold leading-snug">{p.name}</h3>
-        {!rated && <p className="mt-1 text-xs text-muted">No ratings yet</p>}
-        {p.address && (
-          <p className="mt-2 flex items-start gap-1.5 text-[13px] text-ink-2">
-            <PlaceOutlined sx={{ fontSize: 16, mt: '1px' }} className="shrink-0 text-muted" />
-            <span className={list ? 'line-clamp-3' : 'line-clamp-2'}>{p.address}</span>
+    <article className="card group relative flex flex-col gap-3 p-3 transition-[border-color,box-shadow] hover:border-line-strong hover:shadow-[var(--cb-shadow-md)] sm:p-4 lg:flex-row lg:items-center lg:gap-6">
+      <div className="flex min-w-0 flex-1 gap-3 sm:gap-4">
+        <Img src={photo?.url} alt={photo ? `Photo of ${p.name}` : p.name} fallbackText={p.name} aspect="1/1" width={96} height={96}
+          className="h-[72px] w-[72px] shrink-0 sm:h-24 sm:w-24" />
+        <div className="min-w-0 flex-1">
+          <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug text-ink sm:text-base">
+            {/* The button covers the whole row (the actions, copy button and photo credit sit above it), so any part of the row opens the
+                details panel, as on the search page. */}
+            {p.id ? (
+              <button type="button" onClick={() => onSelect(p)} aria-haspopup="dialog"
+                className="rounded-sm text-left group-hover:underline underline-offset-2 after:absolute after:inset-0 after:rounded-xl after:content-[''] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cb-accent)]">
+                {p.name}
+              </button>
+            ) : p.name}
+          </h3>
+          <p className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[13px] text-muted">
+            {rated ? (
+              <span className="inline-flex items-center gap-0.5" aria-label={`Rated ${p.rating!.toFixed(1)} out of 5 from ${number(p.userRatingCount!)} reviews`}>
+                <StarRounded sx={{ fontSize: 16, color: '#F4A62C' }} aria-hidden />
+                <span className="font-semibold text-ink tabular">{p.rating!.toFixed(1)}</span>
+                <span className="tabular">({number(p.userRatingCount!)})</span>
+              </span>
+            ) : <span>No ratings yet</span>}
+            {p.distanceKm != null && (
+              <span className="inline-flex items-center gap-0.5 tabular"><NearMeOutlined sx={{ fontSize: 14 }} aria-hidden />{p.distanceKm.toFixed(1)} km</span>
+            )}
+            {p.openNow != null && (
+              <span className={`inline-flex items-center gap-1 font-medium ${p.openNow ? 'text-success' : 'text-danger'}`}>
+                <span aria-hidden className={`h-1.5 w-1.5 rounded-full ${p.openNow ? 'bg-success' : 'bg-danger'}`} />{p.openNow ? 'Open now' : 'Closed'}
+              </span>
+            )}
           </p>
-        )}
-        {photo && photo.attributions.length > 0 && (
-          <p className="mt-2 truncate text-[11px] text-faint">
-            Photo: {photo.attributions.map((a, i) => (
-              <span key={a.displayName}>{i > 0 && ', '}{a.uri
-                ? <a href={a.uri} target="_blank" rel="noreferrer nofollow" className="underline-offset-2 hover:underline">{a.displayName}</a>
-                : a.displayName}</span>
-            ))}
-          </p>
-        )}
-        <div className="mt-auto flex items-center gap-2 pt-4">
-          <Button variant="contained" size="small" startIcon={<DirectionsRounded />} href={p.directionsUrl} target="_blank" rel="noreferrer"
-            sx={{ flex: list ? '0 0 auto' : 1 }}>
-            Directions
-          </Button>
           {p.address && (
-            <Tooltip title="Copy name and address">
-              <IconButton size="small" aria-label={`Copy address of ${p.name}`} onClick={() => void copyAddress()}
-                sx={{ border: 1, borderColor: 'divider', borderRadius: '8px' }}>
-                <ContentCopyRounded sx={{ fontSize: 16 }} />
-              </IconButton>
-            </Tooltip>
+            <p className="mt-1.5 flex items-start gap-1 text-[13px] text-ink-2">
+              <PlaceOutlined sx={{ fontSize: 16, mt: '1px' }} className="shrink-0 text-muted" aria-hidden />
+              <span className="line-clamp-2 min-w-0 lg:line-clamp-1">{p.address}</span>
+              <Tooltip title="Copy name and address">
+                <IconButton size="small" aria-label={`Copy address of ${p.name}`} onClick={() => void copyAddress()} sx={{ p: '2px', mt: '-1px', color: 'text.secondary', position: 'relative', zIndex: 1 }}>
+                  <ContentCopyRounded sx={{ fontSize: 14 }} />
+                </IconButton>
+              </Tooltip>
+            </p>
+          )}
+          {photo && photo.attributions.length > 0 && (
+            <p className="relative z-[1] mt-1 w-fit max-w-full truncate text-[11px] text-faint">
+              Photo: {photo.attributions.map((a, i) => (
+                <span key={a.displayName}>{i > 0 && ', '}{a.uri
+                  ? <a href={a.uri} target="_blank" rel="noreferrer nofollow" className="underline-offset-2 hover:underline">{a.displayName}</a>
+                  : a.displayName}</span>
+              ))}
+            </p>
           )}
         </div>
       </div>
+
+      <PlaceActions place={{ ...p, mapsUrl: p.mapsUrl ?? p.directionsUrl }} compactMid
+        className="border-t border-line pt-3 lg:shrink-0 lg:flex-nowrap lg:border-0 lg:pt-0" />
     </article>
   );
 }
 
-function PlaceSkeletons({ view }: { view: ViewKey }) {
+function PlaceSkeletons() {
   return (
-    <ul className={view === 'grid' ? 'grid gap-5 sm:grid-cols-2 lg:grid-cols-3' : 'space-y-4'} aria-hidden>
+    <ul className="space-y-3" aria-hidden>
       {Array.from({ length: 6 }, (_, i) => (
-        <li key={i} className={`card flex overflow-hidden ${view === 'list' ? 'flex-col sm:flex-row' : 'flex-col'}`}>
-          <Skeleton variant="rectangular" sx={{ aspectRatio: '4/3', height: 'auto', width: { xs: '100%', sm: view === 'list' ? 256 : '100%' }, flexShrink: 0 }} />
-          <div className="flex-1 p-4"><Skeleton width="70%" height={24} /><Skeleton width="90%" /><Skeleton width="60%" /><Skeleton variant="rounded" height={32} sx={{ mt: 2 }} /></div>
+        <li key={i} className="card flex flex-col gap-3 p-3 sm:p-4 lg:flex-row lg:items-center lg:gap-6">
+          <div className="flex flex-1 gap-3 sm:gap-4">
+            <Skeleton variant="rounded" sx={{ width: { xs: 72, sm: 96 }, height: { xs: 72, sm: 96 }, flexShrink: 0, borderRadius: '8px' }} />
+            <div className="flex-1"><Skeleton width="55%" height={24} /><Skeleton width="35%" /><Skeleton width="80%" /></div>
+          </div>
+          <div className="grid grid-cols-5 gap-1.5 sm:flex sm:gap-2">
+            {Array.from({ length: 5 }, (_, j) => <Skeleton key={j} variant="rounded" sx={{ height: { xs: 50, sm: 36 }, width: { sm: 96 }, borderRadius: '8px' }} />)}
+          </div>
         </li>
       ))}
     </ul>

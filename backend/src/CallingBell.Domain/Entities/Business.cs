@@ -164,3 +164,17 @@ public class PlatformDailyStat : BaseEntity
     public int Sessions { get; set; }
     public int Searches { get; set; }
 }
+
+/// <summary>
+/// A slug a business used to have. Its old address answers with a permanent redirect to the current one, so links and search results
+/// that point at it keep working. Rows are written by a database trigger whenever Businesses.Slug changes (any code path).
+/// </summary>
+public class BusinessSlugHistory
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid BusinessId { get; set; }
+    public string Slug { get; set; } = string.Empty;
+    public DateTimeOffset CreatedOn { get; set; }
+
+    public Business Business { get; set; } = null!;
+}

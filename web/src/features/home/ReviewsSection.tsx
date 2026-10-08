@@ -1,18 +1,17 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { IconButton, Skeleton, useMediaQuery } from '@mui/material';
 import ChevronLeftRounded from '@mui/icons-material/ChevronLeftRounded';
 import ChevronRightRounded from '@mui/icons-material/ChevronRightRounded';
-import AutoAwesomeRounded from '@mui/icons-material/AutoAwesomeRounded';
 import VerifiedRounded from '@mui/icons-material/VerifiedRounded';
 import FormatQuoteRounded from '@mui/icons-material/FormatQuoteRounded';
 import { api } from '@/lib/api';
-import { useSelectedAreaSlug } from '@/lib/hooks';
+import { usePageCity, useSelectedAreaSlug } from '@/lib/hooks';
 import { ago, date, initials, number } from '@/lib/format';
 import type { LocalReviews } from '@/lib/types';
-import { useCity } from '@/stores/city';
 import { Img, SectionHeader, Stars } from '@/components/ui';
+import { countryName, useBrowsingCountryCode } from '@/components/VisitorCountry';
 
 const SEEN_KEY = 'cb-seen-reviews';
 const REFRESH_MS = 120_000;
@@ -26,28 +25,33 @@ function rememberSeen(ids: string[]) {
 }
 
 /**
- * Customer reviews: real published reviews of businesses near the visitor (IP area, chosen area, or city), a different set on each
- * visit and every 2 minutes, in an auto-advancing carousel. The summary above them is written by the local AI from those same
- * real reviews; until it is ready (or if AI is off) a summary computed from the data is shown.
+ * Customer reviews: real published reviews from the selected (or IP-detected) area, widened by the API to the city, state, country
+ * and then everywhere when a place has too few; a different set on each visit and every 2 minutes, in an auto-advancing carousel.
+ * The summary above them is written from those same real reviews once ready; until then (or if that is off) one computed from the data.
  */
 export function ReviewsSection() {
-  const citySlug = useCity((s) => s.citySlug);
-  const areaId = useCity((s) => s.areaId);
+  // Asked once the place is known (the IP location has answered), so no request goes out for a partial place first.
+  const { citySlug, areaId, ready } = usePageCity();
   const areaSlug = useSelectedAreaSlug(citySlug, areaId);
+  const country = useBrowsingCountryCode();
 
   // A new random set on load and every REFRESH_MS, without user interaction.
   const [round, setRound] = useState(0);
   useEffect(() => { const t = setInterval(() => setRound((r) => r + 1), REFRESH_MS); return () => clearInterval(t); }, []);
-  const fetchReviews = () => api.get<LocalReviews>('/api/geo/reviews', { city: citySlug, area: areaSlug, exclude: readSeen().join(',') || null });
+  const fetchReviews = () => api.get<LocalReviews>('/api/geo/reviews',
+    { city: citySlug, area: areaSlug, country, exclude: readSeen().join(',') || null });
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['local-reviews', citySlug, areaSlug, round], queryFn: fetchReviews,
-    staleTime: Infinity, gcTime: 0, placeholderData: keepPreviousData,
+    queryKey: ['local-reviews', citySlug, areaSlug, country, round], queryFn: fetchReviews,
+    enabled: ready && (!areaId || !!areaSlug),
+    staleTime: Infinity, gcTime: 0,
+    // The previous set stays on screen while the next one loads for the same place, never another place's reviews.
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey.slice(1, 4).join('|') === [citySlug, areaSlug, country].join('|') ? prev : undefined),
   });
   useEffect(() => { if (data?.reviews.length) rememberSeen(data.reviews.map((r) => r.id)); }, [data]);
   // While the AI summary is being written, check back for it without reshuffling the cards on screen.
   const { data: later } = useQuery({
-    queryKey: ['local-reviews-summary', citySlug, areaSlug], queryFn: fetchReviews,
-    enabled: !!data?.aiPending, refetchInterval: (q) => (q.state.data?.aiPending === false ? false : 15_000),
+    queryKey: ['local-reviews-summary', citySlug, areaSlug, country], queryFn: fetchReviews,
+    enabled: ready && !!data?.aiPending, refetchInterval: (q) => (q.state.data?.aiPending === false ? false : 15_000),
   });
   const aiSummary = data?.aiSummary ?? later?.aiSummary ?? null;
 
@@ -69,14 +73,16 @@ export function ReviewsSection() {
   const current = Math.min(page, pages - 1);
 
   if (isError && !data) return null;
-  // The selected (or IP-detected) area/city, and where the reviews actually come from: the API widens to the city, or to everywhere,
-  // when the selection has too few reviews; the subtitle then says so.
+  // The selected (or IP-detected) place, and where the reviews actually come from: the API widens to the city, state, country or
+  // everywhere when the selection has too few reviews; the subtitle then says so.
   const area = data?.placeName && data.cityName && data.placeName !== data.cityName ? data.placeName : null;
   const selected = area ? `${area}, ${data!.cityName}` : data?.cityName ?? data?.placeName ?? null;
-  const place = data?.scope === 'area' ? selected : data?.scope === 'city' ? data.cityName : null;
-  const subtitle = data?.scope === 'city' && area ? `Not many reviews in ${area} yet, so these are from across ${data.cityName}. Refreshed every few minutes.`
+  const place = data?.scope === 'area' ? selected : data?.scope === 'all' ? null : data?.scopeName ?? null;
+  const narrower = data?.scope === 'city' ? area : data?.scope === 'state' || data?.scope === 'country' ? selected : null;
+  const subtitle = narrower ? `Not many reviews in ${narrower} yet, so these are from across ${data!.scopeName}. Refreshed every few minutes.`
     : data?.scope === 'all' && selected ? `No reviews in ${selected} yet. These are recent reviews from across Calling Bell.`
-      : 'Real reviews from customers of local businesses, refreshed every few minutes';
+      : data?.scope === 'all' && country ? `No reviews in ${countryName(country)} yet. These are recent reviews from across Calling Bell.`
+        : 'Real reviews from customers of local businesses, refreshed every few minutes';
 
   return (
     <section aria-labelledby="reviews-h" aria-roledescription="carousel"
@@ -90,7 +96,7 @@ export function ReviewsSection() {
           </div>
         ) : undefined} />
 
-      {/* Summary: AI-written from the real reviews when ready, otherwise computed from them. */}
+      {/* Summary: written from the real reviews when ready, otherwise computed from them. */}
       <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-line bg-surface p-4 sm:flex-row sm:items-center md:p-5">
         <div className="flex shrink-0 items-center gap-3 sm:border-r sm:border-line sm:pr-5">
           <span className="text-3xl font-bold tabular">{data ? data.averageRating.toFixed(1) : '–'}</span>
@@ -100,15 +106,9 @@ export function ReviewsSection() {
           </span>
         </div>
         <p className="min-w-0 flex-1 text-sm leading-6 text-ink-2" aria-live="polite">
-          {aiSummary ? (
-            <>
-              <AutoAwesomeRounded sx={{ fontSize: 15, mr: 0.75, mt: '-2px' }} className="text-accent-ink" />
-              {aiSummary}
-              <span className="ml-1.5 whitespace-nowrap text-[11px] text-faint">AI summary of real reviews</span>
-            </>
-          ) : data ? (
+          {aiSummary ? aiSummary : data ? (
             <>Customers{place ? ` in ${place}` : ''} rate local businesses <strong className="font-semibold text-ink">{data.averageRating.toFixed(1)} out of 5</strong> on
-              average across {number(data.reviewCount)} recent reviews.{data.aiPending && <span className="ml-1.5 text-[11px] text-faint">Summarising with AI…</span>}</>
+              average across {number(data.reviewCount)} recent reviews.</>
           ) : <Skeleton width="80%" />}
         </p>
       </div>
@@ -140,7 +140,7 @@ export function ReviewsSection() {
                           {r.customerName}
                           {r.isVerifiedVisit && <VerifiedRounded sx={{ fontSize: 14 }} className="text-success" titleAccess="Verified visit" />}
                         </div>
-                        <Link to={`/b/${r.businessSlug}`} className="block truncate text-muted hover:underline">
+                        <Link to={`/business/${r.businessSlug}`} className="block truncate text-muted hover:underline">
                           on {r.businessName}{r.area ? `, ${r.area}` : ''}
                         </Link>
                       </div>

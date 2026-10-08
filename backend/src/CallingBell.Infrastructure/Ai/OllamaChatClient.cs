@@ -15,8 +15,13 @@ public sealed class AiOptions
     public bool Enabled { get; set; } = true;
     /// <summary>Ollama server (free, runs locally: https://ollama.com). Nothing is sent to a third-party service.</summary>
     public string BaseUrl { get; set; } = "http://localhost:11434";
-    /// <summary>Any installed Ollama chat model, e.g. qwen3-coder, llama3.1, qwen2.5.</summary>
+    /// <summary>Any installed Ollama chat model, e.g. qwen3-coder, llama3.1, qwen2.5. Used for every task not listed in <see cref="TaskModels"/>.</summary>
     public string Model { get; set; } = "qwen3-coder";
+    /// <summary>
+    /// A different model for particular tasks (keys from <see cref="AiTasks"/>), e.g. a stronger model for picking and a faster one for
+    /// writing replies. A model that isn't installed falls back to <see cref="Model"/>.
+    /// </summary>
+    public Dictionary<string, string> TaskModels { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>Upper bound for one generation, including loading the model into memory on first use.</summary>
     public int TimeoutSeconds { get; set; } = 300;
     /// <summary>Cap on generated tokens per answer (Ollama num_predict).</summary>
@@ -32,6 +37,26 @@ public sealed class AiOptions
     /// AI jobs run; 0 lets Ollama use every core.
     /// </summary>
     public int Threads { get; set; } = 2;
+    /// <summary>
+    /// Context window per request (Ollama num_ctx), in tokens. The prompts here are short, and memory for the context is reserved up front,
+    /// so a small window keeps each loaded model far smaller and quicker to load (models default to very long windows). 0 = model default.
+    /// </summary>
+    public int ContextLength { get; set; } = 4096;
+}
+
+/// <summary>Names of AI tasks that can have their own model (<see cref="AiOptions.TaskModels"/>).</summary>
+internal static class AiTasks
+{
+    /// <summary>AI recommended: which catalogue services a free-text search means (JSON).</summary>
+    public const string SearchIntent = "SearchIntent";
+    /// <summary>AI recommended: which real nearby places fit the search, with a short reason for each (JSON).</summary>
+    public const string PlaceRanking = "PlaceRanking";
+    /// <summary>Ask AI: turns the customer's message into search filters (JSON).</summary>
+    public const string RequestReading = "RequestReading";
+    /// <summary>Ask AI: the short chat reply above the matching businesses (text).</summary>
+    public const string AssistantReply = "AssistantReply";
+    /// <summary>Ask AI answers to questions, and the AI overview on the AI recommended tab (text).</summary>
+    public const string AssistantAnswer = "AssistantAnswer";
 }
 
 /// <summary>Ollama isn't reachable (not running) or the model isn't pulled; callers fall back to database results without a stack trace.</summary>
@@ -53,27 +78,42 @@ internal sealed class OllamaChatClient(IHttpClientFactory httpFactory, IOptions<
 
     public string Model => options.Value.Model;
 
+    /// <summary>Task models found not to be installed; their tasks use <see cref="AiOptions.Model"/> until the API restarts.</summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _missingModels = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The model a task runs on: its own from <see cref="AiOptions.TaskModels"/> when set and installed, else the default.</summary>
+    public string ModelFor(string? task)
+    {
+        var o = options.Value;
+        return task is not null && o.TaskModels.TryGetValue(task, out var m) && !string.IsNullOrWhiteSpace(m) && !_missingModels.ContainsKey(m)
+            ? m.Trim() : o.Model;
+    }
+
     /// <summary>Sends one system + user message and returns the model's JSON reply text (null when empty).</summary>
     /// <param name="maxOutputTokens">Overrides <see cref="AiOptions.MaxOutputTokens"/> for tasks with longer answers.</param>
-    public Task<string?> ChatJsonAsync(string system, string user, CancellationToken ct, int? maxOutputTokens = null) =>
-        ChatAsync(system, user, json: true, temperature: 0.2, maxOutputTokens, ct);
+    /// <param name="task">One of <see cref="AiTasks"/>, to run on that task's model.</param>
+    public Task<string?> ChatJsonAsync(string system, string user, CancellationToken ct, int? maxOutputTokens = null, string? task = null) =>
+        ChatAsync(system, user, json: true, temperature: 0.2, maxOutputTokens, task, ct);
 
     /// <summary>Sends one system + user message and returns the model's plain-text reply (null when empty).</summary>
-    public Task<string?> ChatTextAsync(string system, string user, CancellationToken ct, int? maxOutputTokens = null) =>
-        ChatAsync(system, user, json: false, temperature: 0.3, maxOutputTokens, ct);
+    public Task<string?> ChatTextAsync(string system, string user, CancellationToken ct, int? maxOutputTokens = null, string? task = null) =>
+        ChatAsync(system, user, json: false, temperature: 0.3, maxOutputTokens, task, ct);
 
-    private async Task<string?> ChatAsync(string system, string user, bool json, double temperature, int? maxOutputTokens, CancellationToken ct)
+    private async Task<string?> ChatAsync(string system, string user, bool json, double temperature, int? maxOutputTokens, string? task,
+        CancellationToken ct)
     {
         var o = options.Value;
         if (DateTime.UtcNow.Ticks < Interlocked.Read(ref _unavailableUntilTicks) && !await CameBackAsync(o, ct))
             throw new AiUnavailableException($"Ollama at {o.BaseUrl} is unavailable");
+        var model = ModelFor(task);
+        // Caps the answer length so a runaway reply can't tie up the shared model.
+        var modelOptions = LoadOptions(o);
+        modelOptions["temperature"] = temperature;
+        modelOptions["num_predict"] = maxOutputTokens ?? o.MaxOutputTokens;
         var body = new
         {
-            model = o.Model, stream = false, format = json ? "json" : null, keep_alive = o.KeepAlive,
-            // Caps the answer length so a runaway reply can't tie up the shared model.
-            options = o.Threads > 0
-                ? (object)new { temperature, num_predict = maxOutputTokens ?? o.MaxOutputTokens, num_thread = o.Threads }
-                : new { temperature, num_predict = maxOutputTokens ?? o.MaxOutputTokens },
+            model, stream = false, format = json ? "json" : null, keep_alive = o.KeepAlive,
+            options = modelOptions,
             messages = new object[] { new { role = "system", content = system }, new { role = "user", content = user } },
         };
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -89,13 +129,37 @@ internal sealed class OllamaChatClient(IHttpClientFactory httpFactory, IOptions<
             throw Unavailable(o, $"no Ollama server at {o.BaseUrl} ({ex.Message}). Start it with `ollama serve`", ex);
         }
         using var response = sent;
-        // Ollama answers 404 when the model hasn't been pulled.
+        // Ollama answers 404 when the model hasn't been pulled. A task's own model falls back to the default model.
+        if (response.StatusCode == HttpStatusCode.NotFound && model != o.Model)
+        {
+            if (_missingModels.TryAdd(model, true))
+                logger.LogWarning("Ollama model '{Model}' for {Task} is not installed, so that task uses '{Default}' instead. Pull the model and restart the API to use it.",
+                    model, task, o.Model);
+            return await ChatAsync(system, user, json, temperature, maxOutputTokens, task, ct);
+        }
         if (response.StatusCode == HttpStatusCode.NotFound)
             throw Unavailable(o, $"Ollama model '{o.Model}' is not installed. Run `ollama pull {o.Model}`", null);
         response.EnsureSuccessStatusCode();
         var chat = await response.Content.ReadFromJsonAsync<ChatResponse>(Json, cts.Token);
         return string.IsNullOrWhiteSpace(chat?.Message?.Content) ? null : chat.Message.Content;
     }
+
+    /// <summary>
+    /// Options that decide how Ollama loads a model (threads, context window). Every request and the start-up warm-up must send the same
+    /// values, or Ollama reloads the model to apply them.
+    /// </summary>
+    internal static Dictionary<string, object> LoadOptions(AiOptions o)
+    {
+        var options = new Dictionary<string, object>();
+        if (o.Threads > 0) options["num_thread"] = o.Threads;
+        if (o.ContextLength > 0) options["num_ctx"] = o.ContextLength;
+        return options;
+    }
+
+    /// <summary>Every chat model in use: the default one and each task's own.</summary>
+    internal IEnumerable<string> ModelsInUse() =>
+        new[] { options.Value.Model }.Concat(options.Value.TaskModels.Values).Where(m => !string.IsNullOrWhiteSpace(m))
+            .Select(m => m.Trim()).Distinct(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>When the last check during a back-off ran; checks are at most <see cref="ProbeEvery"/> apart.</summary>
     private long _lastProbeTicks;

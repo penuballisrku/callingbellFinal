@@ -49,7 +49,7 @@ internal sealed class OllamaSearchAssistant(
             "Reply as JSON: {\"service\":null,\"place\":null,\"verified\":false,\"homeVisit\":false,\"urgent\":false,\"openNow\":false," +
             "\"video\":false,\"booking\":false,\"minRating\":null,\"sort\":null}");
         var content = await chat.ChatJsonAsync("You turn customer messages into search filters. Reply with JSON only.", prompt.ToString(), ct,
-            maxOutputTokens: 120);
+            maxOutputTokens: 120, task: AiTasks.RequestReading);
         if (content is null) return null;
         var reply = JsonSerializer.Deserialize<ReadingReply>(content, OllamaChatClient.Json);
         if (reply is null) return null;
@@ -61,7 +61,7 @@ internal sealed class OllamaSearchAssistant(
         var sort = reply.Sort?.Trim().ToLowerInvariant();
         decimal? minRating = reply.MinRating is >= 1 and <= 5 ? reply.MinRating : null;
         return new AiRequestReading(slug, place, reply.Verified, reply.HomeVisit, reply.Urgent, reply.OpenNow, reply.Video, reply.Booking,
-            minRating, sort is not null && Sorts.Contains(sort) ? sort : null, chat.Model, DateTimeOffset.UtcNow);
+            minRating, sort is not null && Sorts.Contains(sort) ? sort : null, chat.ModelFor(AiTasks.RequestReading), DateTimeOffset.UtcNow);
     }
 
     public void RequestReply(string key, string message, string facts)
@@ -79,12 +79,12 @@ internal sealed class OllamaSearchAssistant(
             "phone numbers or places, and never promise a day, time or availability the facts don't state. In 2 to 3 short sentences: show you understood what they need, say what you found, and point out the one " +
             "or two best options by name and why (rating, reviews, price, verified, home visits, availability). The business cards are shown " +
             "below your reply, so don't list them all. If nothing was found, say so kindly and use the facts to suggest what to try. Plain text, " +
-            "no markdown, no greeting. Prices are in Indian rupees (₹).";
+            "no markdown, no greeting. Write prices exactly as the facts give them, with their currency (₹ in India).";
         var prompt = $"Facts from the Calling Bell database:\n{facts}\n\nCustomer's message: \"{Plain(message, 300)}\"";
-        var text = await chat.ChatTextAsync(system, prompt, ct, maxOutputTokens: 160);
+        var text = await chat.ChatTextAsync(system, prompt, ct, maxOutputTokens: 160, task: AiTasks.AssistantReply);
         if (text is null) return null;
         text = text.Replace("**", "").Replace("__", "").Trim().Trim('"').Trim();
-        return new AiAnswer(text, chat.Model, DateTimeOffset.UtcNow);
+        return new AiAnswer(text, chat.ModelFor(AiTasks.AssistantReply), DateTimeOffset.UtcNow);
     }
 
     public AiAnswer? GetAnswer(string key) => answers.Get(key);
@@ -105,13 +105,13 @@ internal sealed class OllamaSearchAssistant(
             "facts provided, which come live from the Calling Bell database. Never invent businesses, services, prices, ratings, phone numbers " +
             "or places. If the facts don't answer the question, say so in one sentence and suggest what they could search for instead. " +
             "Be warm and concise: at most 100 words, plain text (no markdown, no bold), a short numbered list when listing several items. " +
-            "Prices are in Indian rupees (₹).";
+            "Write prices exactly as the facts give them, with their currency (₹ in India).";
         var prompt = $"Facts from the Calling Bell database:\n{facts}\n\nCustomer's question: \"{Plain(question, 300)}\"";
-        var text = await chat.ChatTextAsync(system, prompt, ct, maxOutputTokens: 220);
+        var text = await chat.ChatTextAsync(system, prompt, ct, maxOutputTokens: 220, task: AiTasks.AssistantAnswer);
         if (text is null) return null;
         // Light clean-up: models sometimes add markdown emphasis despite the instruction.
         text = text.Replace("**", "").Replace("__", "").Trim();
-        return new AiAnswer(text, chat.Model, DateTimeOffset.UtcNow);
+        return new AiAnswer(text, chat.ModelFor(AiTasks.AssistantAnswer), DateTimeOffset.UtcNow);
     }
 
     public bool IsEnabled => options.Value.Enabled;
@@ -145,12 +145,12 @@ internal sealed class OllamaSearchAssistant(
             $"(They may name a service, or describe a problem such as \"water dripping from the ceiling\".)\n\nService types:\n{list}\n\n" +
             "Which service types (at most 3, best first) is the customer looking for? Use only slugs from the list; return an empty list if none fit. " +
             "Reply as JSON: {\"slugs\":[\"...\"]}";
-        var content = await chat.ChatJsonAsync("You map search queries to service types. Reply with JSON only.", prompt, ct, maxOutputTokens: 80);
+        var content = await chat.ChatJsonAsync("You map search queries to service types. Reply with JSON only.", prompt, ct, maxOutputTokens: 80, task: AiTasks.SearchIntent);
         if (content is null) return null;
         var allowed = subs.Select(s => s.Slug).ToHashSet(StringComparer.Ordinal);
         var slugs = (JsonSerializer.Deserialize<IntentReply>(content, OllamaChatClient.Json)?.Slugs ?? [])
             .Select(s => s?.Trim().ToLowerInvariant() ?? "").Where(allowed.Contains).Distinct().Take(3).ToList();
-        return new AiSearchIntent(slugs, chat.Model, DateTimeOffset.UtcNow);
+        return new AiSearchIntent(slugs, chat.ModelFor(AiTasks.SearchIntent), DateTimeOffset.UtcNow);
     }
 
     private async Task<AiPlaceRanking?> RankAsync(string query, string place, IReadOnlyList<AiPlaceCandidate> candidates, CancellationToken ct)
@@ -165,7 +165,7 @@ internal sealed class OllamaSearchAssistant(
             "Mention only details listed on that place's own line (its type, distance, phone, hours, website, address); never say it has a " +
             "phone, hours or website unless its line lists them. Reply as JSON: {\"picks\":[{\"n\":<number>,\"why\":\"<reason>\"}]}";
         var content = await chat.ChatJsonAsync("You judge whether local businesses match a search and explain your picks. Reply with JSON only.",
-            prompt, ct, maxOutputTokens: 60 + Math.Min(candidates.Count, MaxPicks) * 32);
+            prompt, ct, maxOutputTokens: 60 + Math.Min(candidates.Count, MaxPicks) * 32, task: AiTasks.PlaceRanking);
         if (content is null) return null;
         var reply = JsonSerializer.Deserialize<RankReply>(content, OllamaChatClient.Json);
         // Older prompt shape ({"relevant":[1,2]}) is still accepted, without reasons.
@@ -175,7 +175,7 @@ internal sealed class OllamaSearchAssistant(
         var ids = picks.Select(p => candidates[p.Item1 - 1].Id).ToList();
         var reasons = picks.Where(p => !string.IsNullOrWhiteSpace(p.Item2) && Supported(p.Item2!, candidates[p.Item1 - 1]))
             .ToDictionary(p => candidates[p.Item1 - 1].Id, p => AiText.Clean(WithoutName(p.Item2!, candidates[p.Item1 - 1].Name)));
-        return new AiPlaceRanking(ids, chat.Model, DateTimeOffset.UtcNow, reasons);
+        return new AiPlaceRanking(ids, chat.ModelFor(AiTasks.PlaceRanking), DateTimeOffset.UtcNow, reasons);
     }
 
     /// <summary>The card already shows the name: "Habibs Salon, a salon on Prenderghast Road" becomes "A salon on Prenderghast Road".</summary>

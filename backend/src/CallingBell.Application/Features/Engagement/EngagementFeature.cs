@@ -84,7 +84,7 @@ public sealed class CreateEnquiryHandler(IUnitOfWork uow, ICurrentUser user, IRe
         var title = r.EnquiryType switch { "Quotation" => "New quotation request", "Callback" => "Callback requested", _ => "New enquiry" };
         await NotificationPublisher.PublishAsync(uow, notifier, business.OwnerUserId, title,
             $"{enquiry.CustomerName}{(serviceName is null ? "" : $" · {serviceName}")}: {Truncate(enquiry.Message, 110)}",
-            "Lead", "/business/leads", ct);
+            "Lead", "/owner/leads", ct);
 
         return new CreatedReferenceDto(enquiry.Id, enquiry.EnquiryNumber);
     }
@@ -135,7 +135,7 @@ public sealed class CreateReviewHandler(IUnitOfWork uow, ICurrentUser user, IRea
         await ReviewAggregates.RecalculateAsync(uow, business, ct);
 
         await NotificationPublisher.PublishAsync(uow, notifier, business.OwnerUserId, $"New {r.Rating}★ review",
-            Truncate(review.Comment, 120), "Review", "/business/reviews", ct);
+            Truncate(review.Comment, 120), "Review", "/owner/reviews", ct);
 
         var name = await uow.Repository<ApplicationUser>().QueryNoTracking().Where(u => u.Id == userId).Select(u => u.DisplayName).FirstAsync(ct);
         return new ReviewDto(review.Id, review.Rating, review.Title, review.Comment, name, review.CreatedOn, null, null, verifiedVisit, 0);
@@ -227,7 +227,7 @@ public sealed class CreateBookingHandler(IUnitOfWork uow, ICurrentUser user, IRe
         await uow.SaveChangesAsync(ct);
 
         await NotificationPublisher.PublishAsync(uow, notifier, business.OwnerUserId, "New booking",
-            $"{booking.CustomerName} booked {service.Name} for {start:dd MMM, h:mm tt}", "Booking", "/business/bookings", ct);
+            $"{booking.CustomerName} booked {service.Name} for {start:dd MMM, h:mm tt}", "Booking", "/owner/bookings", ct);
 
         return new CreatedReferenceDto(booking.Id, booking.BookingNumber);
     }
@@ -293,7 +293,7 @@ public sealed class CancelMyBookingHandler(IUnitOfWork uow, ICurrentUser user, I
 
         await NotificationPublisher.PublishAsync(uow, notifier, booking.Business.OwnerUserId, "Booking cancelled",
             $"{booking.CustomerName} cancelled {booking.Service.Name} on {booking.ScheduledStart.ToOffset(IndianTime.Offset):dd MMM, h:mm tt}",
-            "Booking", "/business/bookings", ct);
+            "Booking", "/owner/bookings", ct);
     }
 }
 

@@ -105,7 +105,7 @@ internal sealed class CityCatalogWorker(CityCatalogQueue queue, IServiceScopeFac
 /// </summary>
 internal sealed partial class CityCatalogRun(
     ApplicationDbContext db, IHttpClientFactory httpFactory, IOptions<CityCatalogOptions> options, IHostEnvironment env, IMemoryCache cache,
-    ILogger<CityCatalogRun> logger)
+    IPublicCache publicCache, ILogger<CityCatalogRun> logger)
 {
     public const string HttpClientName = "city-catalog";
     private const string Agent = "agent:city-catalog";
@@ -274,6 +274,8 @@ internal sealed partial class CityCatalogRun(
         });
         await db.SaveChangesAsync(ct);
         ReferenceDataCache.Invalidate(cache); // the cached city lists now include the imported cities
+        // Also the cached responses: a visitor who asked during the import was served the country's empty city list.
+        await publicCache.InvalidateAsync(ct);
         logger.LogInformation("City catalogue import for {Country}: {Note} ({Seconds:0}s)", cc, catalog.Note, (DateTimeOffset.UtcNow - started).TotalSeconds);
     }
 

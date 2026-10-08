@@ -330,7 +330,7 @@ export function OwnerSubscription() {
                 <div>
                   <div className="text-sm text-muted">Current plan</div>
                   <div className="text-2xl font-bold">{data!.current.planName} <span className="text-base font-normal text-muted">· {data!.current.billingCycle}</span></div>
-                  <div className="text-sm text-muted">{data!.currentPlanCode === 'FREE' ? 'Free forever' : `${data!.current.status === 'Trial' ? 'Trial ends' : 'Renews'} on ${date(data!.current.endDate)} · ${moneyExact(data!.current.amount)} + GST`}</div>
+                  <div className="text-sm text-muted">{data!.currentPlanCode === 'FREE' ? 'Free forever' : `${data!.current.status === 'Trial' ? 'Trial ends' : 'Renews'} on ${date(data!.current.endDate)} · ${moneyExact(data!.current.amount, data!.current.currency)}${data!.current.currency === 'INR' ? ' + GST' : ''}`}</div>
                 </div>
                 <StatusBadge type="SubscriptionStatus" code={data!.current.status} size="md" />
               </div>
@@ -352,15 +352,15 @@ export function OwnerSubscription() {
             {!data!.invoices.length ? <EmptyState title="No invoices yet" /> : (
               <TableContainer>
                 <Table size="small" className="table-stack">
-                  <TableHead><TableRow><TableCell>Invoice</TableCell><TableCell>Type</TableCell><TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>Date</TableCell><TableCell align="right">Amount</TableCell><TableCell align="right">Total (incl. GST)</TableCell></TableRow></TableHead>
+                  <TableHead><TableRow><TableCell>Invoice</TableCell><TableCell>Type</TableCell><TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>Date</TableCell><TableCell align="right">Amount</TableCell><TableCell align="right">Total (incl. tax)</TableCell></TableRow></TableHead>
                   <TableBody>
                     {data!.invoices.map((i) => (
                       <TableRow key={i.invoiceNumber} hover>
                         <TableCell data-primary sx={{ fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>{i.invoiceNumber}</TableCell>
                         <TableCell data-label="Type"><StatusBadge type="PaymentType" code={i.paymentType} /></TableCell>
                         <TableCell data-label="Date" sx={{ display: { xs: 'none', sm: 'table-cell' } }}>{date(i.paidOn)}</TableCell>
-                        <TableCell data-label="Amount" align="right">{moneyPrecise(i.amount)}</TableCell>
-                        <TableCell data-label="Total (incl. GST)" align="right" sx={{ fontWeight: 600 }}>{moneyPrecise(i.totalAmount)}</TableCell>
+                        <TableCell data-label="Amount" align="right">{moneyPrecise(i.amount, i.currency)}</TableCell>
+                        <TableCell data-label="Total (incl. tax)" align="right" sx={{ fontWeight: 600 }}>{moneyPrecise(i.totalAmount, i.currency)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

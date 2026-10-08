@@ -26,6 +26,8 @@ public sealed class ExternalSearchOptions
     /// <summary>Photon geocoder (fast OpenStreetMap name search). Empty = not used.</summary>
     public string? PhotonUrl { get; set; } = "https://photon.komoot.io/api/";
     public string UserAgent { get; set; } = "CallingBell-search/1.0 (+https://callingbell.in)";
+    /// <summary>OpenStreetMap API for one element with all its tags (the result detail window); {0} is e.g. "node/123".</summary>
+    public string OsmApiElementUrl { get; set; } = "https://api.openstreetmap.org/api/0.6/{0}.json";
     /// <summary>How long Overpass results are kept in memory per search and place (the data changes slowly).</summary>
     public int OsmCacheHours { get; set; } = 12;
     /// <summary>How long Photon-only results are kept (shorter, so fuller Overpass results replace them).</summary>
@@ -89,8 +91,8 @@ internal sealed partial class OsmPlaceSearch(IHttpClientFactory httpFactory, IMe
         var photonKey = "photon|" + key;
         if (cache.TryGetValue(photonKey, out IReadOnlyList<ExternalPlace>? quick))
         {
-            // Photon results from a moment ago; give Overpass a second in case it is just finishing.
-            await Task.WhenAny(overpass, Task.Delay(TimeSpan.FromSeconds(1), ct));
+            // Photon results from a moment ago: answer at once. The page keeps polling while Overpass runs (IsSearching), and its
+            // fuller results are served from the cache as soon as they arrive, so waiting here would only slow every poll down.
             return overpass.IsCompletedSuccessfully && overpass.Result is { } done ? done : quick;
         }
 
@@ -203,6 +205,36 @@ internal sealed partial class OsmPlaceSearch(IHttpClientFactory httpFactory, IMe
         {
             logger.LogWarning("OpenStreetMap (Photon) search failed: {Error}", ex.Message);
             cache.Set("down|photon", true, TimeSpan.FromMinutes(o.OsmRetryAfterMinutes));
+            return null;
+        }
+    }
+
+    // ---------------- One element (detail window) ----------------
+
+    [GeneratedRegex("^(node|way|relation)/[0-9]{1,15}$")] private static partial Regex ElementId();
+
+    public async Task<OsmElement?> GetElementAsync(string id, CancellationToken ct)
+    {
+        if (!ElementId().IsMatch(id)) return null;
+        var key = "osm-element|" + id;
+        if (cache.TryGetValue(key, out OsmElement? cached)) return cached;
+        try
+        {
+            using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            budget.CancelAfter(TimeSpan.FromSeconds(10));
+            using var response = await Client().GetAsync(string.Format(CultureInfo.InvariantCulture, options.Value.OsmApiElementUrl, id), budget.Token);
+            if (response.StatusCode is System.Net.HttpStatusCode.NotFound or System.Net.HttpStatusCode.Gone) return null;
+            response.EnsureSuccessStatusCode();
+            var e = (await response.Content.ReadFromJsonAsync<OverpassResult>(Json, budget.Token))?.Elements?.FirstOrDefault();
+            if (e is null) return null;
+            var element = new OsmElement(id, e.Lat ?? e.Center?.Lat, e.Lon ?? e.Center?.Lon,
+                e.Tags ?? new Dictionary<string, string>());
+            cache.Set(key, element, TimeSpan.FromHours(options.Value.OsmCacheHours));
+            return element;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or OperationCanceledException && !ct.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "OpenStreetMap element {Id} could not be loaded", id);
             return null;
         }
     }

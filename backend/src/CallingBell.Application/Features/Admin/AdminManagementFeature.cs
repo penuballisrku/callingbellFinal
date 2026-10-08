@@ -139,7 +139,7 @@ public sealed class GetAdminBusinessDetailHandler(IUnitOfWork uow) : IRequestHan
         var ads = await uow.Repository<Advertisement>().QueryNoTracking().Where(a => a.BusinessId == b.Id).OrderByDescending(a => a.StartDate)
             .Select(AdProjections.ToOwnerDto).ToListAsync(ct);
         var subs = await uow.Repository<BusinessSubscription>().QueryNoTracking().Where(s => s.BusinessId == b.Id).OrderByDescending(s => s.StartDate).Take(12)
-            .Select(s => new SubscriptionHistoryDto(s.SubscriptionNumber, s.Plan.Name, s.BillingCycle, s.StartDate, s.EndDate, s.Amount, s.Status)).ToListAsync(ct);
+            .Select(s => new SubscriptionHistoryDto(s.SubscriptionNumber, s.Plan.Name, s.BillingCycle, s.StartDate, s.EndDate, s.Amount, s.Status, s.Currency)).ToListAsync(ct);
 
         var day30 = IndianTime.Today.AddDays(-30);
         var totals = new BusinessTotalsDto(
@@ -203,7 +203,7 @@ public sealed class UpdateBusinessAdminHandler(IUnitOfWork uow, IRealtimeNotifie
 
         foreach (var message in messages)
         {
-            await NotificationPublisher.PublishAsync(uow, notifier, b.OwnerUserId, "Listing update", message, "Listing", "/business", ct);
+            await NotificationPublisher.PublishAsync(uow, notifier, b.OwnerUserId, "Listing update", message, "Listing", "/owner", ct);
         }
     }
 }
@@ -506,7 +506,7 @@ public sealed class ModerateAdHandler(IUnitOfWork uow, IRealtimeNotifier notifie
         await uow.SaveChangesAsync(ct);
 
         await NotificationPublisher.PublishAsync(uow, notifier, ad.Business.OwnerUserId, "Campaign update",
-            $"Your campaign \"{ad.Title}\" is now {ad.Status}.", "Advertisement", "/business/advertising", ct);
+            $"Your campaign \"{ad.Title}\" is now {ad.Status}.", "Advertisement", "/owner/advertising", ct);
     }
 }
 

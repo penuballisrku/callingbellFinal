@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Chip, Dialog, IconButton, LinearProgress, MenuItem, Pagination, Skeleton, TextField, Tooltip } from '@mui/material';
 import CallRounded from '@mui/icons-material/CallRounded';
@@ -26,6 +26,7 @@ import type { BusinessDetail, BusinessImage, Review } from '@/lib/types';
 import { BusinessCard } from '@/components/BusinessCard';
 import { AvailabilityBadge, EmptyState, ErrorState, Img, Panel, Rating, Stars, VerifiedMark } from '@/components/ui';
 import { BookingDialog, EnquiryDialog, ReviewDialog, useRequireLogin } from './Dialogs';
+import { Breadcrumbs, FaqSection, LinkGroups, useSeoPage } from '@/features/seo/seo';
 
 export default function BusinessPage() {
   const platforms = useLookup('SocialPlatform');
@@ -36,6 +37,11 @@ export default function BusinessPage() {
   const serviceTypes = useLookup('ServiceType');
   const { data: b, isLoading, isError, error, refetch } = useQuery({ queryKey: ['business', slug], queryFn: () => api.get<BusinessDetail>(`/api/businesses/${slug}`) });
   useDocumentTitle(b ? `${b.card.name} - ${b.card.area}, ${b.card.city}` : undefined);
+  // Breadcrumbs, the factual summary, questions and related links (the same ones the server renders for crawlers).
+  const { data: seo } = useSeoPage();
+  const navigate = useNavigate();
+  // A renamed business: its old address moves to the new one.
+  useEffect(() => { if (seo?.redirectTo) navigate(seo.redirectTo, { replace: true }); }, [seo?.redirectTo, navigate]);
 
   const [enquiry, setEnquiry] = useState<{ type: 'Enquiry' | 'Quotation' | 'Callback'; serviceId?: string } | null>(null);
   const [booking, setBooking] = useState<{ serviceId?: string } | null>(null);
@@ -56,6 +62,14 @@ export default function BusinessPage() {
     onError: (e) => enqueueSnackbar(errorMessage(e), { variant: 'error' }),
   });
 
+  if (seo?.kind === 'Gone' || seo?.kind === 'NotFound') {
+    return (
+      <div className="container-page py-20">
+        <EmptyState title={seo.content.heading ?? 'Business not found'} message={seo.content.summary ?? undefined}
+          action={<Button component={Link} to="/categories" variant="contained">Browse categories</Button>} />
+      </div>
+    );
+  }
   if (isError) {
     return <div className="container-page py-16"><ErrorState message={errorMessage(error)} onRetry={() => refetch()} /></div>;
   }
@@ -67,28 +81,40 @@ export default function BusinessPage() {
   const mapUrl = b.latitude && b.longitude ? `https://www.google.com/maps/search/?api=1&query=${b.latitude},${b.longitude}` : undefined;
   const today = b.hours.find((h) => h.isToday);
 
+  const kind = c.subCategoryName ?? c.categoryName;
+  // Without repeating a part the street line already holds ("Gokhale Road, Dadar West" + "Dadar West").
+  const address = [b.addressLine, c.area, c.city, b.state, b.pincode].reduce<string[]>((parts, p) => {
+    const part = p?.trim();
+    return part && !parts.some((x) => x.toLowerCase().includes(part.toLowerCase())) ? [...parts, part] : parts;
+  }, []).join(', ');
+  const near = b.landmark && (/^near\s/i.test(b.landmark) ? b.landmark : `Near ${b.landmark}`);
+
   return (
     <div className="pb-24 md:pb-8">
+      <article>
       <div className="relative bg-navy">
-        <Img src={b.images.find((i) => i.isPrimary)?.desktopImageUrl ?? c.coverImageUrl} alt={`${c.name} cover`} rounded="rounded-none"
-          className="mx-auto h-[180px] w-full max-w-[1240px] md:h-[300px]" fallbackText={c.name} eager />
+        <Img src={b.images.find((i) => i.isPrimary)?.desktopImageUrl ?? c.coverImageUrl} alt={`${c.name}, ${kind} in ${c.city}`} rounded="rounded-none"
+          className="mx-auto h-[180px] w-full max-w-[1240px] md:h-[300px]" fallbackText={c.name} eager width={1240} height={300} />
       </div>
 
       <div className="container-page">
-        <div className="relative flex flex-col gap-4 md:flex-row md:items-start md:gap-5">
+        <header className="relative flex flex-col gap-4 md:flex-row md:items-start md:gap-5">
           <div className="-mt-12 w-fit shrink-0 rounded-2xl border-4 border-surface bg-surface md:-mt-16">
-            <Img src={c.logoUrl} alt={`${c.name} logo`} className="h-24 w-24 md:h-32 md:w-32" rounded="rounded-xl" fallbackText={c.name} />
+            <Img src={c.logoUrl} alt={`${c.name} logo`} className="h-24 w-24 md:h-32 md:w-32" rounded="rounded-xl" fallbackText={c.name} width={128} height={128} />
           </div>
           <div className="min-w-0 flex-1 md:pt-4">
-            <nav className="mb-1 text-xs text-muted" aria-label="Breadcrumb">
-              <Link to="/" className="hover:underline">Home</Link> / <Link to={`/search?sub=${c.subCategorySlug}`} className="hover:underline">{c.subCategoryName}</Link> / <Link to={`/search?sub=${c.subCategorySlug}&city=${b.citySlug}`} className="hover:underline">{c.city}</Link>
-            </nav>
+            {seo?.document.breadcrumbs.length ? <Breadcrumbs items={seo.document.breadcrumbs} className="mb-1" /> : (
+              <nav className="mb-1 text-xs text-muted" aria-label="Breadcrumb">
+                <Link to="/" className="hover:underline">Home</Link> / <Link to={`/category/${c.subCategorySlug ?? c.categorySlug}`} className="hover:underline">{kind}</Link>
+              </nav>
+            )}
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{c.name}</h1>
               {c.isVerified && <VerifiedMark />}
               {c.isFeatured && <Chip size="small" label="Featured" sx={{ bgcolor: 'var(--cb-accent-soft)', color: 'var(--cb-accent-ink)' }} />}
             </div>
             {c.tagline && <p className="mt-0.5 text-muted">{c.tagline}</p>}
+            <p className="mt-0.5 text-sm text-muted">{kind}{c.area ? ` · ${c.area}` : ''}, {c.city}</p>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
               <Rating value={c.averageRating} count={c.reviewCount} size="md" />
               <AvailabilityBadge status={c.availabilityStatus} lastSeenOn={c.lastSeenOn} />
@@ -107,11 +133,12 @@ export default function BusinessPage() {
               ? <Button variant="contained" startIcon={<EventAvailableRounded />} onClick={() => requireLogin(() => setBooking({}))}>Book now</Button>
               : <Button variant="contained" startIcon={<RequestQuoteOutlined />} onClick={() => setEnquiry({ type: 'Quotation' })}>Get a quote</Button>}
           </div>
-        </div>
+        </header>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_340px]">
           <div className="min-w-0 space-y-6">
-            <Panel title="About">
+            <Panel title={seo?.content.heading ?? `About ${c.name}`} headingLevel="h2">
+              {seo?.content.summary && <p className="mb-3 leading-7 text-ink">{seo.content.summary}</p>}
               <p className="leading-7 text-ink-2">{b.description}</p>
               <dl className="mt-5 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
                 {b.yearEstablished && <Fact label="In business since" value={String(b.yearEstablished)} />}
@@ -127,7 +154,7 @@ export default function BusinessPage() {
               </div>
             </Panel>
 
-            <Panel title="Services & pricing" subtitle={`${b.services.length} services`} noPad>
+            <Panel title="Services & pricing" subtitle={`${b.services.length} services`} noPad headingLevel="h2">
               <ul className="divide-y divide-line">
                 {b.services.map((s) => (
                   <li key={s.id} className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center">
@@ -151,11 +178,12 @@ export default function BusinessPage() {
             </Panel>
 
             {b.images.length > 0 && (
-              <Panel title="Photos">
+              <Panel title="Photos" headingLevel="h2">
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                  {b.images.map((img) => (
-                    <button key={img.id} type="button" onClick={() => setLightbox(img)} className="group overflow-hidden rounded-lg text-left" aria-label={`Open photo: ${img.caption ?? img.altText}`}>
-                      <Img src={img.thumbnailUrl ?? img.imageUrl} alt={img.altText ?? c.name} aspect="4/3" className="w-full transition-transform group-hover:scale-[1.02]" />
+                  {b.images.map((img, i) => (
+                    <button key={img.id} type="button" onClick={() => setLightbox(img)} className="group overflow-hidden rounded-lg text-left" aria-label={`Open photo: ${img.caption ?? img.altText ?? `${c.name} photo ${i + 1}`}`}>
+                      <Img src={img.thumbnailUrl ?? img.imageUrl} alt={img.altText || img.caption || `${c.name}, ${kind} in ${c.city} - photo ${i + 1}`} aspect="4/3"
+                        className="w-full transition-transform group-hover:scale-[1.02]" width={320} height={240} />
                       {img.caption && <span className="mt-1 block truncate text-xs text-muted">{img.caption}</span>}
                     </button>
                   ))}
@@ -164,7 +192,7 @@ export default function BusinessPage() {
             )}
 
             {b.videos?.length > 0 && (
-              <Panel title="Videos" subtitle={`${b.videos.length} video${b.videos.length === 1 ? '' : 's'} from ${c.name}`}>
+              <Panel headingLevel="h2" title="Videos" subtitle={`${b.videos.length} video${b.videos.length === 1 ? '' : 's'} from ${c.name}`}>
                 <div className="grid gap-4 sm:grid-cols-2">{b.videos.map((v) => <ProfileVideo key={v.id} title={v.title} src={v.videoUrl} poster={v.posterUrl} />)}</div>
               </Panel>
             )}
@@ -173,7 +201,7 @@ export default function BusinessPage() {
           </div>
 
           <aside className="space-y-6">
-            <Panel title="Contact">
+            <Panel title="Contact" headingLevel="h2">
               <div className="space-y-3 text-sm">
                 <div className="grid grid-cols-2 gap-2">
                   {b.phoneNumber && <Button variant="outlined" startIcon={<CallRounded />} href={`tel:${b.phoneNumber.replace(/\s/g, '')}`}>Call</Button>}
@@ -196,13 +224,13 @@ export default function BusinessPage() {
                       ))}
                     </div>
                   )}
-                  <Row icon={<PlaceOutlined fontSize="small" />}>{b.addressLine}, {c.area}, {c.city} {b.pincode}{b.landmark && <span className="block text-muted">{b.landmark}</span>}</Row>
+                  <Row icon={<PlaceOutlined fontSize="small" />}><address className="not-italic">{address}{near && <span className="block text-muted">{near}</span>}</address></Row>
                 </div>
                 {mapUrl && <Button fullWidth startIcon={<DirectionsOutlined />} href={mapUrl} target="_blank" rel="noopener">Get directions</Button>}
               </div>
             </Panel>
 
-            <Panel title="Working hours" action={<ScheduleOutlined fontSize="small" sx={{ color: 'var(--cb-faint)' }} />}>
+            <Panel title="Working hours" headingLevel="h2" action={<ScheduleOutlined fontSize="small" sx={{ color: 'var(--cb-faint)' }} />}>
               <ul className="space-y-2 text-sm">
                 {b.hours.map((h) => (
                   <li key={h.dayOfWeek} className={`flex justify-between ${h.isToday ? 'font-semibold text-ink' : 'text-ink-2'}`}>
@@ -215,13 +243,21 @@ export default function BusinessPage() {
           </aside>
         </div>
 
+        {seo && <FaqSection items={seo.content.faq} className="mt-10" />}
+
         {b.similar.length > 0 && (
-          <section className="mt-12">
-            <h2 className="mb-4 text-xl font-bold">Similar {c.subCategoryName?.toLowerCase()} you may like</h2>
+          <section className="mt-12" aria-labelledby="similar-h">
+            <h2 id="similar-h" className="mb-4 text-xl font-bold">Similar {c.subCategoryName?.toLowerCase()} you may like</h2>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{b.similar.map((s) => <BusinessCard key={s.id} b={s} />)}</div>
           </section>
         )}
+
+        {seo && <LinkGroups groups={seo.content.links.filter((g) => !g.title.startsWith('Other '))} />}
+        {seo?.content.updatedOn && (
+          <p className="mt-8 text-xs text-muted">Business information last updated: <time dateTime={seo.content.updatedOn}>{date(seo.content.updatedOn)}</time></p>
+        )}
       </div>
+      </article>
 
       {/* Mobile action bar */}
       <div className="fixed inset-x-0 bottom-0 z-30 flex gap-2 border-t border-line bg-surface p-3 md:hidden">
@@ -258,7 +294,7 @@ function ReviewsSection({ b, totalReviews, onWrite }: { b: BusinessDetail; total
   });
 
   return (
-    <Panel title="Ratings & reviews" action={<Button size="small" variant="outlined" onClick={onWrite}>Write a review</Button>}>
+    <Panel title="Ratings & reviews" headingLevel="h2" action={<Button size="small" variant="outlined" onClick={onWrite}>Write a review</Button>}>
       {totalReviews === 0 ? <EmptyState title="No reviews yet" message="Be the first to share your experience." /> : (
         <>
           <div className="grid gap-6 sm:grid-cols-[180px_1fr] sm:items-center">

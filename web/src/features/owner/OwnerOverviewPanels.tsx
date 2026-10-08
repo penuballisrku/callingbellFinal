@@ -81,8 +81,8 @@ export function BusinessOverviewCard({ data }: { data: OwnerOverview }) {
         <div className="flex shrink-0 items-center gap-4 md:pt-3">
           <Tooltip title={`${data.completion.completed} of ${data.completion.total} profile steps done`}><span><Ring value={data.completion.percent} /></span></Tooltip>
           <div className="flex flex-col gap-2">
-            <Button size="small" variant="outlined" startIcon={<EditOutlined fontSize="small" />} component={Link} to="/business/profile">Edit profile</Button>
-            {b.status === 'Active' && <Button size="small" endIcon={<OpenInNewRounded fontSize="small" />} component={Link} to={`/b/${b.slug}`} target="_blank">Public page</Button>}
+            <Button size="small" variant="outlined" startIcon={<EditOutlined fontSize="small" />} component={Link} to="/owner/profile">Edit profile</Button>
+            {b.status === 'Active' && <Button size="small" endIcon={<OpenInNewRounded fontSize="small" />} component={Link} to={`/business/${b.slug}`} target="_blank">Public page</Button>}
           </div>
         </div>
       </div>
@@ -118,17 +118,17 @@ export function CompletionPanel({ data }: { data: OwnerOverview['completion'] })
 
 export function PlanPanel({ plan }: { plan?: ActivePlan | null }) {
   if (!plan) return (
-    <Panel title="Your plan"><EmptyState icon={<WorkspacePremiumOutlined />} title="No active plan" action={<Button variant="contained" component={Link} to="/business/plan">Choose a plan</Button>} /></Panel>
+    <Panel title="Your plan"><EmptyState icon={<WorkspacePremiumOutlined />} title="No active plan" action={<Button variant="contained" component={Link} to="/owner/plan">Choose a plan</Button>} /></Panel>
   );
   const trial = plan.status === 'Trial';
   const used = Math.min(100, (plan.leadsThisMonth / Math.max(1, plan.leadCredits)) * 100);
   const unlimited = (n: number) => (n >= 999 ? 'Unlimited' : number(n));
   return (
-    <Panel title="Active plan" action={<Button size="small" component={Link} to="/business/plan">Manage</Button>}>
+    <Panel title="Active plan" action={<Button size="small" component={Link} to="/owner/plan">Manage</Button>}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-2xl font-bold tracking-tight">{plan.name}</div>
-          <div className="text-sm text-muted">{plan.billingCycle} · {plan.code === 'FREE' ? 'Free forever' : trial ? `Free trial until ${date(plan.endDate)}` : `Renews ${date(plan.endDate)} · ${moneyExact(plan.amount)} + GST`}</div>
+          <div className="text-sm text-muted">{plan.billingCycle} · {plan.code === 'FREE' ? 'Free forever' : trial ? `Free trial until ${date(plan.endDate)}` : `Renews ${date(plan.endDate)} · ${moneyExact(plan.amount, plan.currency)}${plan.currency === 'INR' ? ' + GST' : ''}`}</div>
         </div>
         <StatusBadge type="SubscriptionStatus" code={plan.status} />
       </div>
@@ -158,17 +158,17 @@ export function MediaPanel({ data }: { data: OwnerOverview }) {
   const empty = data.photoCount === 0 && data.videos.length === 0;
   return (
     <Panel title="Photos & videos" subtitle={`${pluralize(data.photoCount, 'photo')} · ${pluralize(data.videos.length, 'video')}`}
-      action={<Button size="small" component={Link} to="/business/media">{empty ? 'Upload' : 'Manage'}</Button>}>
+      action={<Button size="small" component={Link} to="/owner/media">{empty ? 'Upload' : 'Manage'}</Button>}>
       {empty ? (
         <EmptyState icon={<PhotoOutlined />} title="No photos or videos yet" message="Profiles with photos get far more enquiries."
-          action={<Button variant="contained" component={Link} to="/business/media">Add photos & videos</Button>} />
+          action={<Button variant="contained" component={Link} to="/owner/media">Add photos & videos</Button>} />
       ) : (
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
           {data.videos.slice(0, 2).map((v) => (
-            <Link key={v.id} to="/business/media" aria-label={`Video: ${v.title}`}><MediaTile src={v.thumbnailUrl} kind="video" durationSeconds={v.durationSeconds} title={v.title} /></Link>
+            <Link key={v.id} to="/owner/media" aria-label={`Video: ${v.title}`}><MediaTile src={v.thumbnailUrl} kind="video" durationSeconds={v.durationSeconds} title={v.title} /></Link>
           ))}
           {data.recentPhotos.slice(0, data.videos.length ? 10 : 12).map((p) => (
-            <Link key={p.id} to="/business/media" aria-label={p.title ?? 'Photo'}><MediaTile src={p.thumbnailUrl ?? p.url} kind="photo" primary={p.isPrimary} title={p.title} /></Link>
+            <Link key={p.id} to="/owner/media" aria-label={p.title ?? 'Photo'}><MediaTile src={p.thumbnailUrl ?? p.url} kind="photo" primary={p.isPrimary} title={p.title} /></Link>
           ))}
         </div>
       )}

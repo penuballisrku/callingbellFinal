@@ -158,6 +158,13 @@ public interface IIpLocationService
     Task<IpLocation?> LocateAsync(System.Net.IPAddress address, CancellationToken cancellationToken = default);
 }
 
+/// <summary>The server's cache of public, non-personalised responses (implemented with ASP.NET Core output caching in the API).</summary>
+public interface IPublicCache
+{
+    /// <summary>Drops every cached public response, so the next request reads fresh data.</summary>
+    Task InvalidateAsync(CancellationToken ct);
+}
+
 /// <summary>A service shown to the AI ranker. <see cref="Key"/> identifies it across requests (sub-category slug + service name).</summary>
 public sealed record AiServiceCandidate(string Key, string Name, string SubCategory, string Category, int RecentBookingsNearby,
     decimal Rating, double? NearestKm, decimal StartingPrice);
@@ -169,8 +176,11 @@ public sealed record AiCategoryCandidate(string Key, string Name, string Categor
 /// Context for ranking services near a place: where, when, the database-ranked service shortlist to choose from, and the
 /// sub-categories available nearby from which to suggest <paramref name="RelatedCount"/> related categories.
 /// </summary>
+/// <param name="CatalogOnly">True when nothing is listed in the city yet: candidates come from the platform-wide catalogue and their
+/// figures are national, so the model picks from what the place is likely to need rather than from local demand.</param>
 public sealed record AiServiceRankingRequest(string Place, string City, string State, DateTimeOffset LocalTime, int PickCount,
-    IReadOnlyList<AiServiceCandidate> Candidates, int RelatedCount, IReadOnlyList<AiCategoryCandidate> RelatedCandidates);
+    IReadOnlyList<AiServiceCandidate> Candidates, int RelatedCount, IReadOnlyList<AiCategoryCandidate> RelatedCandidates,
+    bool CatalogOnly = false);
 
 public sealed record AiServicePick(string Key, string Reason);
 
@@ -259,13 +269,17 @@ public interface IReviewSummarizer
 /// <param name="Photo">Google Maps only: the place's first photo.</param>
 public sealed record ExternalPlace(string Source, string Id, string Name, string? Kind, string? Address, double Latitude, double Longitude,
     string? Phone, string? Website, string? OpeningHours, decimal? Rating, int? RatingCount, string? SourceUrl, string MatchedBy,
-    GooglePlacePhoto? Photo = null);
+    GooglePlacePhoto? Photo = null, bool? OpenNow = null);
 
 /// <summary>Finds named places near a point in OpenStreetMap by "key=value" tag and "name~words" selectors.</summary>
 public interface IOsmPlaceSearch
 {
     /// <returns>Places found, or null when OpenStreetMap could not be reached.</returns>
     Task<IReadOnlyList<ExternalPlace>?> SearchAsync(IReadOnlyCollection<string> selectors, double lat, double lng, int radiusM, CancellationToken ct);
+
+    /// <summary>One element with all its tags (OpenStreetMap API), cached in memory. Null when it doesn't exist or OSM can't be reached.</summary>
+    /// <param name="id">"node/123", "way/456" or "relation/789".</param>
+    Task<OsmElement?> GetElementAsync(string id, CancellationToken ct);
 
     /// <summary>
     /// True while the full OpenStreetMap search for these arguments is still running in the background (after <see cref="SearchAsync"/>
@@ -295,13 +309,27 @@ public interface IPlaceGeocoder
     Task<GeocodedPlace?> GeocodeAsync(string place, CancellationToken ct);
 }
 
+/// <param name="NextPageToken">Google's token for the next page of the same search; null on the last page.</param>
+public sealed record GoogleSearchPage(IReadOnlyList<ExternalPlace> Places, string? NextPageToken);
+
 /// <summary>Google Maps business results (Google Places API Text Search). Disabled until an API key is configured.</summary>
+/// <summary>Counts searches made on Explore nearby against the "Popular searches" entries (dbo.PopularSearches) they match.</summary>
+public interface IPopularSearchCounter
+{
+    /// <summary>Adds one search to every active entry whose SearchText is <paramref name="searchText"/> (case-insensitive); a single atomic update.</summary>
+    Task RecordAsync(string searchText, CancellationToken ct);
+}
+
 public interface IGooglePlacesSearch
 {
     bool IsEnabled { get; }
 
-    /// <returns>Places found, or null when Google could not be reached or rejected the request.</returns>
-    Task<IReadOnlyList<ExternalPlace>?> SearchAsync(string text, double lat, double lng, int radiusM, CancellationToken ct);
+    /// <summary>
+    /// One page (up to 20) of places for a search, so the first results show at once. Pass the returned <see cref="GoogleSearchPage.NextPageToken"/>
+    /// with the same text and location for the next page (Google answers at most 60 per search).
+    /// </summary>
+    /// <returns>The page, or null when Google could not be reached or rejected the request.</returns>
+    Task<GoogleSearchPage?> SearchAsync(string text, double lat, double lng, int radiusM, string? pageToken, CancellationToken ct);
 
     /// <summary>
     /// One page of Google Places Text Search results near a point, using the configured result count and radius.
@@ -311,12 +339,44 @@ public interface IGooglePlacesSearch
 
     /// <summary>Short-lived image URL for a place photo resource name ("places/{id}/photos/{ref}").</summary>
     Task<string> GetPhotoUriAsync(string photoName, int maxWidthPx, CancellationToken ct);
+
+    /// <summary>
+    /// Contact details Google Maps lists for a named place at a point (e.g. an OpenStreetMap place, which rarely has a phone): the closest
+    /// Google place within a short distance whose name matches. Null when none matches. Throws like <see cref="TextSearchAsync"/>.
+    /// </summary>
+    Task<GooglePlaceContact?> FindContactAsync(string name, double lat, double lng, CancellationToken ct);
+
+    /// <summary>
+    /// Everything Google Maps lists for one place (Place Details), for the result detail window. Null when Google has no such place.
+    /// Throws like <see cref="TextSearchAsync"/>. Fetched per request and not stored (Google's terms).
+    /// </summary>
+    Task<GooglePlaceDetails?> GetDetailsAsync(string placeId, CancellationToken ct);
 }
+
+/// <param name="Types">Google's place types, e.g. "electrician", "point_of_interest".</param>
+/// <param name="Summary">Google's editorial summary, when it has one.</param>
+/// <param name="OpeningHours">One line per day, e.g. "Monday: 9:00 AM – 7:00 PM".</param>
+/// <param name="PriceLevel">E.g. "PRICE_LEVEL_MODERATE".</param>
+public sealed record GooglePlaceDetails(string Id, string Name, string? PrimaryType, IReadOnlyList<string> Types, string? Summary, string? FormattedAddress,
+    string? City, string? State, string? Country, string? PostalCode, double? Latitude, double? Longitude, string? Phone, string? InternationalPhone,
+    string? Website, IReadOnlyList<string> OpeningHours, bool? OpenNow, decimal? Rating, int? RatingCount, string? MapsUrl, string? BusinessStatus,
+    string? PriceLevel, IReadOnlyList<GooglePlacePhoto> Photos);
+
+/// <summary>One OpenStreetMap element with all its tags (name, addr:*, phone, opening_hours, ...).</summary>
+/// <param name="Id">"node/123", "way/456" or "relation/789".</param>
+public sealed record OsmElement(string Id, double? Latitude, double? Longitude, IReadOnlyDictionary<string, string> Tags);
+
+/// <param name="Phone">National format, e.g. "098480 12345".</param>
+/// <param name="MapsUrl">The place on Google Maps.</param>
+/// <param name="OpenNow">From Google's current opening hours; null when Google doesn't know them.</param>
+/// <param name="Id">Google place id, for <see cref="IGooglePlacesSearch.GetDetailsAsync"/>.</param>
+public sealed record GooglePlaceContact(string Name, string? Phone, string? InternationalPhone, string? Website, string? MapsUrl, double DistanceM,
+    decimal? Rating = null, int? RatingCount = null, bool? OpenNow = null, GooglePlacePhoto? Photo = null, string? Id = null);
 
 public sealed record GooglePlacesPage(IReadOnlyList<GooglePlace> Places, string? NextPageToken);
 
 public sealed record GooglePlace(string Name, string? FormattedAddress, double? Rating, int? UserRatingCount, double? Latitude, double? Longitude,
-    IReadOnlyList<GooglePlacePhoto> Photos);
+    IReadOnlyList<GooglePlacePhoto> Photos, string? Phone = null, string? InternationalPhone = null, string? MapsUrl = null, bool? OpenNow = null, string? Id = null);
 
 /// <param name="Name">Photo resource name, passed to <see cref="IGooglePlacesSearch.GetPhotoUriAsync"/>.</param>
 /// <param name="Attributions">Photo authors, which Google requires to be shown with the photo.</param>

@@ -22,7 +22,8 @@ public sealed record BusinessGrowthStatsDto(int ActiveBusinesses, int VerifiedBu
 
 public sealed record MarketingPageDto(string PageKey, IReadOnlyList<ContentBlockDto> Blocks, BusinessGrowthStatsDto Stats);
 
-public sealed record GetMarketingPageQuery(string PageKey) : IRequest<MarketingPageDto>;
+/// <param name="Country">ISO country code of the place being browsed: blocks with a photo for that country show it instead of their own.</param>
+public sealed record GetMarketingPageQuery(string PageKey, string? Country = null) : IRequest<MarketingPageDto>;
 
 public sealed class GetMarketingPageHandler(IUnitOfWork uow) : IRequestHandler<GetMarketingPageQuery, MarketingPageDto>
 {
@@ -46,6 +47,22 @@ public sealed class GetMarketingPageHandler(IUnitOfWork uow) : IRequestHandler<G
             .ToListAsync(ct);
 
         if (blocks.Count == 0) throw new NotFoundException("Page", request.PageKey);
+
+        if (request.Country is { Length: 2 } code)
+        {
+            var country = code.ToUpperInvariant();
+            var photos = await uow.Repository<MarketingContentImage>().QueryNoTracking()
+                .Where(i => i.IsActive && i.CountryCode == country && i.MarketingContent.PageKey == request.PageKey)
+                .Select(i => new { i.MarketingContent.Code, i.ImageUrl, i.ThumbnailUrl, i.MobileImageUrl, i.DesktopImageUrl, i.AltText, i.MediaCredit, i.MediaCreditUrl })
+                .ToDictionaryAsync(i => i.Code, ct);
+            blocks = blocks.Select(b => photos.TryGetValue(b.Code, out var p)
+                ? b with
+                {
+                    ImageUrl = p.ImageUrl, ThumbnailUrl = p.ThumbnailUrl, MobileImageUrl = p.MobileImageUrl, DesktopImageUrl = p.DesktopImageUrl,
+                    AltText = p.AltText, MediaCredit = p.MediaCredit, MediaCreditUrl = p.MediaCreditUrl,
+                }
+                : b).ToList();
+        }
 
         var listed = uow.Repository<Business>().QueryNoTracking().Listed();
         var since = DateTimeOffset.UtcNow.AddDays(-30);

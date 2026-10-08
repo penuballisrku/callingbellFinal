@@ -40,7 +40,7 @@ async function refreshSession(): Promise<boolean> {
   return refreshing;
 }
 
-async function request<T>(method: string, url: string, body?: unknown, retry = true): Promise<ApiEnvelope<T>> {
+async function request<T>(method: string, url: string, body?: unknown, retry = true, signal?: AbortSignal): Promise<ApiEnvelope<T>> {
   const token = useAuth.getState().accessToken;
   const res = await fetch(url, {
     method,
@@ -50,10 +50,11 @@ async function request<T>(method: string, url: string, body?: unknown, retry = t
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal,
   });
 
   if (res.status === 401 && retry && token && (await refreshSession())) {
-    return request<T>(method, url, body, false);
+    return request<T>(method, url, body, false, signal);
   }
 
   let payload: ApiEnvelope<T> | null = null;
@@ -107,7 +108,8 @@ async function upload<T>(url: string, form: FormData, onProgress?: (fraction: nu
 }
 
 export const api = {
-  get: async <T>(url: string, params?: Query) => (await request<T>('GET', url + qs(params))).data,
+  /** `signal`: cancels the request (React Query passes one, so a superseded request never answers into the current view). */
+  get: async <T>(url: string, params?: Query, signal?: AbortSignal) => (await request<T>('GET', url + qs(params), undefined, true, signal)).data,
   paged: async <T>(url: string, params?: Query): Promise<Paged<T>> => {
     const env = await request<T[]>('GET', url + qs(params));
     return { items: env.data, pagination: env.pagination! };

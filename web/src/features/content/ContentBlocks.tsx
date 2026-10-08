@@ -1,10 +1,13 @@
-import type { ComponentType, ReactNode } from 'react';
+import { useMemo, type ComponentType, type ReactNode } from 'react';
 import { Link } from 'react-router';
+import { useQuery } from '@tanstack/react-query';
 import { Button, Skeleton, type SvgIconProps } from '@mui/material';
 import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 import ExpandMoreRounded from '@mui/icons-material/ExpandMoreRounded';
-import type { ContentBlock } from '@/lib/types';
+import { api } from '@/lib/api';
+import type { ContentBlock, MarketingPage } from '@/lib/types';
 import { SectionHeader } from '@/components/ui';
+import { useBrowsingCountryCode, useVisitorCountry, useVisitorCountryName, withCountry } from '@/components/VisitorCountry';
 import SearchRounded from '@mui/icons-material/SearchRounded';
 import EventAvailableOutlined from '@mui/icons-material/EventAvailableOutlined';
 import VerifiedOutlined from '@mui/icons-material/VerifiedOutlined';
@@ -42,6 +45,31 @@ const icons: Record<string, ComponentType<SvgIconProps>> = {
 export function BlockIcon({ name, size = 22 }: { name?: string | null; size?: number }) {
   const Icon = (name && icons[name]) || CircleOutlined;
   return <Icon sx={{ fontSize: size }} aria-hidden />;
+}
+
+/**
+ * A content page (GET /api/content/pages/{pageKey}) for the country being browsed: its photos where the page has them (a Montreal
+ * storefront for Canada), and its name filled into the copy ("{country's} real-time network" reads "Canada's real-time network").
+ */
+export function useMarketingPage(pageKey: string, staleTime = 300_000) {
+  const code = useBrowsingCountryCode();
+  // Waits for the country (a quick request) so the default photo isn't shown first and then swapped; loads without it if detection fails.
+  const detecting = useVisitorCountry().isPending;
+  const query = useQuery({
+    queryKey: ['content', pageKey, code],
+    queryFn: () => api.get<MarketingPage>(`/api/content/pages/${pageKey}`, { country: code }),
+    enabled: !!code || !detecting,
+    staleTime,
+  });
+  const country = useVisitorCountryName();
+  const data = useMemo((): MarketingPage | undefined => query.data && {
+    ...query.data,
+    blocks: query.data.blocks.map((b) => ({
+      ...b, title: withCountry(b.title, country), subtitle: b.subtitle && withCountry(b.subtitle, country),
+      body: b.body && withCountry(b.body, country), eyebrow: b.eyebrow && withCountry(b.eyebrow, country),
+    })),
+  }, [query.data, country]);
+  return { ...query, data };
 }
 
 /** MarketingContent.Body paragraphs (stored with line breaks). */

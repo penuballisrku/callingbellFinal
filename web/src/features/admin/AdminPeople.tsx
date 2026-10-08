@@ -123,7 +123,7 @@ export function AdminReviews() {
                 <span className="ml-auto text-xs text-muted">{ago(r.createdOn)}</span>
               </div>
               <p className="mt-2 text-sm leading-6 text-ink-2">{r.comment}</p>
-              <p className="mt-1 text-xs text-muted">{r.customerName} ({r.customerEmail}) on <Link to={`/b/${r.businessSlug}`} target="_blank" className="font-medium text-ink hover:underline">{r.businessName}</Link>, {r.city}</p>
+              <p className="mt-1 text-xs text-muted">{r.customerName} ({r.customerEmail}) on <Link to={`/business/${r.businessSlug}`} target="_blank" className="font-medium text-ink hover:underline">{r.businessName}</Link>, {r.city}</p>
               {r.reportReason && <div className="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{r.reportReason}</div>}
               <div className="mt-3 flex gap-2">
                 {r.status !== 'Published' && <Button size="small" variant="contained" color="success" disabled={moderate.isPending} onClick={() => moderate.mutate({ id: r.id, action: 'publish' })}>Publish</Button>}
@@ -164,7 +164,7 @@ export function AdminAds() {
   const counts = data?.statusCounts ?? {};
 
   const columns: ColDef<AdminAd>[] = [
-    { headerName: 'Campaign', flex: 1.6, minWidth: 260, valueGetter: (p) => p.data?.ad.title, cellRenderer: ({ data: a }: { data: AdminAd }) => <div className="leading-tight"><div className="truncate font-semibold">{a.ad.title}</div><div className="text-xs text-muted">{a.ad.campaignCode} · <Link to={`/b/${a.businessSlug}`} target="_blank" className="hover:underline">{a.businessName}</Link>, {a.city}</div></div> },
+    { headerName: 'Campaign', flex: 1.6, minWidth: 260, valueGetter: (p) => p.data?.ad.title, cellRenderer: ({ data: a }: { data: AdminAd }) => <div className="leading-tight"><div className="truncate font-semibold">{a.ad.title}</div><div className="text-xs text-muted">{a.ad.campaignCode} · <Link to={`/business/${a.businessSlug}`} target="_blank" className="hover:underline">{a.businessName}</Link>, {a.city}</div></div> },
     { headerName: 'Type', width: 180, valueGetter: (p) => p.data?.ad.adType, cellRenderer: ({ value }: { value: string }) => <StatusBadge type="AdType" code={value} /> },
     { headerName: 'Dates', width: 200, valueGetter: (p) => p.data && `${date(p.data.ad.startDate)} - ${date(p.data.ad.endDate)}` },
     { headerName: 'Budget', width: 120, type: 'rightAligned', valueGetter: (p) => p.data?.ad.budget, valueFormatter: (p) => moneyExact(p.value) },

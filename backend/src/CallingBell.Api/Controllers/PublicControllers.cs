@@ -1,4 +1,5 @@
 using CallingBell.Application.Common.Models;
+using CallingBell.Application.Common.Interfaces;
 using CallingBell.Application.Features.Auth;
 using CallingBell.Application.Features.Businesses;
 using CallingBell.Application.Features.Catalog;
@@ -97,31 +98,53 @@ public sealed class CatalogController : ApiControllerBase
     /// Cities of a country (curated first, then largest first), filled by the city catalogue agent. Pass the visitor's country from
     /// <c>GET /api/geo/country-catalog</c>; without it the default country is used (so responses can be cached per country).
     /// </summary>
+    /// <param name="state">A state / province / region slug (GET /api/locations/states): only its cities.</param>
     [HttpGet("locations/cities"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<CityDto>>>> Cities([FromQuery] string? country, CancellationToken ct) =>
-        Success(await Sender.Send(new GetCitiesQuery(country), ct));
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<CityDto>>>> Cities([FromQuery] string? country, [FromQuery] string? state, CancellationToken ct) =>
+        Success(await Sender.Send(new GetCitiesQuery(country, state), ct));
+
+    /// <summary>Countries a visitor can browse (every country plans are priced for), with how many cities each has listed so far.</summary>
+    [HttpGet("locations/countries"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<CountryDto>>>> Countries(CancellationToken ct) =>
+        Success(await Sender.Send(new GetCountriesQuery(), ct));
+
+    /// <summary>A country's states / provinces / regions that have listed cities.</summary>
+    /// <param name="country">ISO 3166-1 alpha-2 code, e.g. "CA".</param>
+    [HttpGet("locations/states"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<StateDto>>>> States([FromQuery] string country, CancellationToken ct) =>
+        Success(await Sender.Send(new GetStatesQuery(country), ct));
 
     /// <summary>All areas of a city with alternate names and sub-localities; queues the area-discovery agent when the data is missing or stale.</summary>
-    [HttpGet("locations/cities/{slug}/areas")]
-    public async Task<ActionResult<ApiResponse<CityAreasDto>>> CityAreas(string slug, CancellationToken ct) =>
-        Success(await Sender.Send(new GetCityAreasQuery(slug), ct));
+    [HttpGet("locations/cities/{slug}/areas"), OutputCache(PolicyName = CachePolicies.PublicListings)]
+    public async Task<ActionResult<ApiResponse<CityAreasDto>>> CityAreas(string slug, CancellationToken ct)
+    {
+        var areas = await Sender.Send(new GetCityAreasQuery(slug), ct);
+        // While the agent is still finding the city's areas the list changes every few seconds: callers poll, so don't cache it.
+        if ((areas.Discovering || areas.Areas.Count == 0) && HttpContext.Features.Get<IOutputCacheFeature>() is { } cacheFeature)
+            cacheFeature.Context.AllowCacheStorage = false;
+        return Success(areas);
+    }
 
     [HttpGet("lookups"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
     public async Task<ActionResult<ApiResponse<IReadOnlyDictionary<string, IReadOnlyList<LookupDto>>>>> Lookups(CancellationToken ct) =>
         Success(await Sender.Send(new GetLookupsQuery(), ct));
 
+    /// <summary>Subscription plans, priced in a country's currency at fair local prices (CountryPricing).</summary>
+    /// <param name="country">ISO country code, e.g. "US"; omit for rupees as set.</param>
+    /// <param name="business">A business id: prices for the country it is in (the owner portal). Takes precedence over <paramref name="country"/>.</param>
     [HttpGet("plans"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<PlanDto>>>> Plans(CancellationToken ct) =>
-        Success(await Sender.Send(new GetPlansQuery(), ct));
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<PlanDto>>>> Plans([FromQuery] string? country, [FromQuery] Guid? business, CancellationToken ct) =>
+        Success(await Sender.Send(new GetPlansQuery(country, business), ct));
 
     [HttpGet("banners"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<BannerDto>>>> Banners([FromQuery] string placement = "HomeHero", CancellationToken ct = default) =>
         Success(await Sender.Send(new GetBannersQuery(placement), ct));
 
     /// <summary>Database-driven marketing page content, e.g. <c>/api/content/pages/ListYourBusiness</c>.</summary>
+    /// <param name="country">ISO code of the country being browsed: its own photos replace the defaults where the page has them.</param>
     [HttpGet("content/pages/{pageKey}"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
-    public async Task<ActionResult<ApiResponse<MarketingPageDto>>> MarketingPage(string pageKey, CancellationToken ct) =>
-        Success(await Sender.Send(new GetMarketingPageQuery(pageKey), ct));
+    public async Task<ActionResult<ApiResponse<MarketingPageDto>>> MarketingPage(string pageKey, [FromQuery] string? country, CancellationToken ct) =>
+        Success(await Sender.Send(new GetMarketingPageQuery(pageKey, country), ct));
 
     /// <summary>Search-box autocomplete: categories, services and businesses matching <paramref name="q"/> (empty below 3 characters).</summary>
     [HttpGet("search/suggest"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
@@ -164,18 +187,18 @@ public sealed class CatalogController : ApiControllerBase
 [Route("api/businesses")]
 public sealed class BusinessesController : ApiControllerBase
 {
-    [HttpGet]
+    [HttpGet, OutputCache(PolicyName = CachePolicies.PublicListings)]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<BusinessCardDto>>>> Search([FromQuery] SearchBusinessesQuery query, CancellationToken ct)
     {
         var result = await Sender.Send(query, ct);
         return Ok(new SearchResponse { Success = true, Data = result.Items, Pagination = result.Pagination, Applied = result.Applied });
     }
 
-    [HttpGet("{slug}")]
+    [HttpGet("{slug}"), OutputCache(PolicyName = CachePolicies.PublicListings)]
     public async Task<ActionResult<ApiResponse<BusinessDetailDto>>> Get(string slug, CancellationToken ct) =>
         Success(await Sender.Send(new GetBusinessBySlugQuery(slug), ct));
 
-    [HttpGet("{slug}/reviews")]
+    [HttpGet("{slug}/reviews"), OutputCache(PolicyName = CachePolicies.PublicListings)]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<ReviewDto>>>> Reviews(string slug, [FromQuery] int page = 1, [FromQuery] int pageSize = 10,
         [FromQuery] int? rating = null, [FromQuery] string? sort = null, CancellationToken ct = default) =>
         Paged(await Sender.Send(new GetBusinessReviewsQuery { Slug = slug, Page = page, PageSize = pageSize, Rating = rating, Sort = sort }, ct));
@@ -210,14 +233,15 @@ public sealed class BusinessesController : ApiControllerBase
 }
 
 [Route("api/geo")]
-public sealed class GeoController(IOptions<GeoIpOptions> options, IHostEnvironment env, DevelopmentPublicIp developmentIp) : ApiControllerBase
+public sealed class GeoController(IOptions<GeoIpOptions> options, IHostEnvironment env, DevelopmentPublicIp developmentIp, IGeoLocationService geo)
+    : ApiControllerBase
 {
     /// <summary>The visitor's country (ISO code) from a CDN edge header or the local GeoIP database.</summary>
     [HttpGet("country")]
     public async Task<ActionResult<ApiResponse<VisitorCountryDto>>> Country(CancellationToken ct)
     {
         var cdn = Request.Headers["CF-IPCountry"].FirstOrDefault() ?? Request.Headers["CloudFront-Viewer-Country"].FirstOrDefault();
-        Response.Headers.CacheControl = "private, max-age=3600";
+        Response.Headers.CacheControl = GeoCacheControl;
         Response.Headers.Vary = "CF-IPCountry, CloudFront-Viewer-Country, X-Forwarded-For";
         return Success(await Sender.Send(new GetVisitorCountryQuery(cdn, await ClientIpAsync()), ct));
     }
@@ -237,17 +261,21 @@ public sealed class GeoController(IOptions<GeoIpOptions> options, IHostEnvironme
     }
 
     /// <summary>
-    /// The listed city (district) the visitor is browsing from, located with ip-api.com (local GeoIP city database as fallback), so the city and area dropdowns can
-    /// pre-select it and list its areas. District is null when the IP can't be located or isn't near a listed city.
+    /// The visitor's location from their IP address in one request - country (and whether its cities are still being imported; poll while
+    /// <c>importing</c>), state / province / region, city and area - located with ip-api.com (local GeoIP databases as fallback), so the
+    /// location picker can fill itself in. District is null when the IP can't be located or isn't near a listed city. The IP itself is
+    /// never returned.
     /// </summary>
     /// <param name="ip">Development only: geolocate this IP instead of the caller's.</param>
     [HttpGet("district")]
     public async Task<ActionResult<ApiResponse<VisitorLocationDto>>> District([FromQuery] string? ip, CancellationToken ct)
     {
         var clientIp = env.IsDevelopment() && !string.IsNullOrWhiteSpace(ip) ? ip : await ClientIpAsync();
-        Response.Headers.CacheControl = "private, max-age=3600";
-        Response.Headers.Vary = "X-Forwarded-For";
-        return Success(await Sender.Send(new GetVisitorDistrictQuery(clientIp, options.Value.DistrictRadiusKm), ct));
+        var cdn = Request.Headers["CF-IPCountry"].FirstOrDefault() ?? Request.Headers["CloudFront-Viewer-Country"].FirstOrDefault();
+        // Never kept by the browser or a proxy: a new IP address (another network, a VPN) must give a new location. The server keeps the
+        // IP service's answer per address, so asking again is cheap.
+        Response.Headers.CacheControl = "private, no-store";
+        return Success(await Sender.Send(new GetVisitorDistrictQuery(clientIp, options.Value.DistrictRadiusKm, cdn), ct));
     }
 
     /// <summary>
@@ -257,11 +285,12 @@ public sealed class GeoController(IOptions<GeoIpOptions> options, IHostEnvironme
     /// <param name="city">City being browsed; when it differs from the IP's city its centre is used.</param>
     /// <param name="area">Area slug within <paramref name="city"/>; overrides the IP location.</param>
     /// <param name="ip">Development only: locate this IP instead of the caller's.</param>
+    /// <param name="country">The country being browsed (ISO code): with no city, the IP's location is used only when it is in this country.</param>
     [HttpGet("nearby-services")]
     public async Task<ActionResult<ApiResponse<NearbyServicesDto>>> NearbyServices([FromQuery] string? city, [FromQuery] string? area, [FromQuery] string? ip,
-        CancellationToken ct)
+        [FromQuery] string? country, CancellationToken ct)
     {
-        var clientIp = env.IsDevelopment() && !string.IsNullOrWhiteSpace(ip) ? ip : await ClientIpAsync();
+        var clientIp = BrowsingIp(env.IsDevelopment() && !string.IsNullOrWhiteSpace(ip) ? ip : await ClientIpAsync(), city, country);
         Response.Headers.CacheControl = "private, no-store";
         return Success(await Sender.Send(new GetNearbyServicesQuery(clientIp, city, area, options.Value.DistrictRadiusKm), ct));
     }
@@ -273,10 +302,12 @@ public sealed class GeoController(IOptions<GeoIpOptions> options, IHostEnvironme
     /// <param name="fallbackCity">City slug to use when the visitor's IP can't be placed near a listed city.</param>
     /// <param name="city">The city chosen in the selector; takes precedence over the IP.</param>
     /// <param name="ip">Development only: locate this IP instead of the caller's.</param>
+    /// <param name="country">The country being browsed (ISO code): with no city, the IP's location is used only when it is in this country.</param>
     [HttpGet("top-picks")]
-    public async Task<ActionResult<ApiResponse<TopPicksDto>>> TopPicks([FromQuery] string? fallbackCity, [FromQuery] string? city, [FromQuery] string? ip, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<TopPicksDto>>> TopPicks([FromQuery] string? fallbackCity, [FromQuery] string? city, [FromQuery] string? ip,
+        [FromQuery] string? country, CancellationToken ct)
     {
-        var clientIp = env.IsDevelopment() && !string.IsNullOrWhiteSpace(ip) ? ip : await ClientIpAsync();
+        var clientIp = BrowsingIp(env.IsDevelopment() && !string.IsNullOrWhiteSpace(ip) ? ip : await ClientIpAsync(), city, country);
         Response.Headers.CacheControl = "private, no-store";
         return Success(await Sender.Send(new GetTopPicksQuery(clientIp, fallbackCity, options.Value.DistrictRadiusKm, city), ct));
     }
@@ -284,16 +315,18 @@ public sealed class GeoController(IOptions<GeoIpOptions> options, IHostEnvironme
     /// <summary>
     /// Real customer reviews of businesses near the visitor (IP area, or the chosen <paramref name="city"/>/<paramref name="area"/>), a
     /// different random set on each call, plus a short AI summary of them once ready. Pass recently shown ids in <paramref name="exclude"/>.
+    /// Widens to the state, then the country, then everywhere when the place has too few reviews.
     /// </summary>
+    /// <param name="country">The country being browsed (ISO code), used when no <paramref name="city"/> is chosen.</param>
     [HttpGet("reviews")]
     public async Task<ActionResult<ApiResponse<LocalReviewsDto>>> Reviews([FromQuery] string? city, [FromQuery] string? area,
-        [FromQuery] string? exclude, [FromQuery] string? ip, CancellationToken ct)
+        [FromQuery] string? exclude, [FromQuery] string? ip, [FromQuery] string? country, CancellationToken ct)
     {
         var clientIp = env.IsDevelopment() && !string.IsNullOrWhiteSpace(ip) ? ip : await ClientIpAsync();
         var seen = (exclude ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries).Take(60)
             .Select(x => Guid.TryParse(x, out var g) ? g : Guid.Empty).Where(g => g != Guid.Empty).ToList();
         Response.Headers.CacheControl = "private, no-store";
-        return Success(await Sender.Send(new GetLocalReviewsQuery(clientIp, city, area, options.Value.DistrictRadiusKm, seen), ct));
+        return Success(await Sender.Send(new GetLocalReviewsQuery(clientIp, city, area, options.Value.DistrictRadiusKm, seen, country), ct));
     }
 
     /// <summary>
@@ -304,14 +337,49 @@ public sealed class GeoController(IOptions<GeoIpOptions> options, IHostEnvironme
     /// </summary>
     /// <param name="area">Area id (as in the business search); the results are near it and distances are measured from it.</param>
     /// <param name="place">A place named in the search that is not a listed city or area ("lawyers in Nellore"): results are near it instead.</param>
+    /// <param name="tiers">"google" for the Google Maps results only (ask once per search); "ai" for the AI tier only (see the POST); omit for both.</param>
+    /// <param name="googlePage">The Google tier's nextPageToken: the next 20 Google Maps results of the same search (with tiers=google).</param>
     [HttpGet("external-search"), EnableRateLimiting("public-search")]
     public async Task<ActionResult<ApiResponse<ExternalSearchDto>>> ExternalSearch([FromQuery] string? q, [FromQuery] string? category, [FromQuery] string? sub,
-        [FromQuery] string? city, [FromQuery] Guid? area, [FromQuery] string? place, [FromQuery] string? ip, CancellationToken ct)
+        [FromQuery] string? city, [FromQuery] Guid? area, [FromQuery] string? place, [FromQuery] string? ip, [FromQuery] string? tiers,
+        [FromQuery] string? googlePage, CancellationToken ct)
     {
         var clientIp = env.IsDevelopment() && !string.IsNullOrWhiteSpace(ip) ? ip : await ClientIpAsync();
         Response.Headers.CacheControl = "private, no-store";
-        return Success(await Sender.Send(new ExternalSearchQuery(clientIp, q, category, sub, city, area, options.Value.DistrictRadiusKm, place), ct));
+        return Success(await Sender.Send(new ExternalSearchQuery(clientIp, q, category, sub, city, area, options.Value.DistrictRadiusKm, place, tiers,
+            GooglePageToken: googlePage), ct));
     }
+
+    /// <summary>
+    /// The AI recommended tier on its own, for polling while the AI works: same search as the GET, plus the Google Maps results the page
+    /// already shows (from <c>tiers=google</c>), so Google isn't called again on every poll. Those are used for this request only (to leave
+    /// out duplicates and for the AI overview) and are not stored.
+    /// </summary>
+    [HttpPost("external-search/ai"), EnableRateLimiting("public-search")]
+    public async Task<ActionResult<ApiResponse<ExternalSearchDto>>> ExternalSearchAi(ExternalSearchAiRequest body, [FromQuery] string? ip, CancellationToken ct)
+    {
+        var clientIp = env.IsDevelopment() && !string.IsNullOrWhiteSpace(ip) ? ip : await ClientIpAsync();
+        Response.Headers.CacheControl = "private, no-store";
+        return Success(await Sender.Send(new ExternalSearchQuery(clientIp, body.Q, body.Category, body.Sub, body.City, body.Area,
+            options.Value.DistrictRadiusKm, body.Place, ExternalTiers.Ai, body.GooglePlaces), ct));
+    }
+
+    public sealed record ExternalSearchAiRequest(string? Q, string? Category, string? Sub, string? City, Guid? Area, string? Place,
+        IReadOnlyList<ShownGooglePlace>? GooglePlaces);
+
+    /// <summary>
+    /// The IP to locate the visitor by, or null when they browse another country than the IP's with no city chosen: the IP's city
+    /// says nothing about the place being browsed then.
+    /// </summary>
+    private string? BrowsingIp(string? clientIp, string? city, string? country)
+    {
+        if (!string.IsNullOrWhiteSpace(city) || country is not { Length: 2 } || VisitorIp.Parse(clientIp) is not { } ip) return clientIp;
+        var ipCountry = geo.CountryCodeFor(ip);
+        return ipCountry is null || string.Equals(ipCountry, country, StringComparison.OrdinalIgnoreCase) ? clientIp : null;
+    }
+
+    // An hour in the browser; not cached in development, so a changed GeoIp:DevelopmentClientIp shows on the next reload.
+    private string GeoCacheControl => env.IsDevelopment() ? "private, no-store" : "private, max-age=3600";
 
     private async Task<string?> ClientIpAsync()
     {
@@ -343,6 +411,47 @@ public sealed class PlacesController : ApiControllerBase
     {
         Response.Headers.CacheControl = "private, no-store";
         return Success(await Sender.Send(new GooglePlacesSearchQuery(textQuery, lat, lon, city, area, pageToken, place), ct));
+    }
+
+    /// <summary>
+    /// "Popular searches" for Explore nearby, from dbo.PopularSearches: the entries for every country plus those for <paramref name="country"/>,
+    /// most searched first. Each names what to search for and, when it is a sub-category, which one.
+    /// </summary>
+    /// <param name="country">ISO country code of the country being browsed.</param>
+    /// <param name="limit">How many to return (1-60).</param>
+    [HttpGet("popular-searches")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<PopularSearchDto>>>> PopularSearches([FromQuery] string? country, [FromQuery] int limit = 32,
+        CancellationToken ct = default)
+    {
+        Response.Headers.CacheControl = "public, max-age=300";
+        return Success(await Sender.Send(new GetPopularSearchesQuery(country, limit), ct));
+    }
+
+    /// <summary>
+    /// Phone number and website for a place from the AI-recommended results (OpenStreetMap rarely has them), looked up on Google Maps by
+    /// name near <c>lat</c>/<c>lon</c>. <c>found</c> is false when Google has no matching place there.
+    /// </summary>
+    [HttpGet("contact"), EnableRateLimiting("public-search")]
+    public async Task<ActionResult<ApiResponse<PlaceContactDto>>> Contact([FromQuery] string? name, [FromQuery] double? lat, [FromQuery] double? lon,
+        CancellationToken ct)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        return Success(await Sender.Send(new PlaceContactQuery(name, lat, lon), ct));
+    }
+
+    /// <summary>
+    /// Everything known about one Google Maps or AI recommended search result, for the result detail window: Google's Place Details, or an
+    /// OpenStreetMap place's tags combined with the same place on Google Maps. Not cached or stored (Google's terms).
+    /// </summary>
+    /// <param name="source">"google" or "osm" (AI recommended places).</param>
+    /// <param name="id">Google place id, or an OpenStreetMap element such as "node/123".</param>
+    /// <param name="name">OpenStreetMap only: the place's name, to find it on Google Maps.</param>
+    [HttpGet("details"), EnableRateLimiting("public-search")]
+    public async Task<ActionResult<ApiResponse<PlaceDetailsDto>>> Details([FromQuery] string? source, [FromQuery] string? id, [FromQuery] string? name,
+        [FromQuery] double? lat, [FromQuery] double? lon, CancellationToken ct)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        return Success(await Sender.Send(new GetPlaceDetailsQuery(source, id, name, lat, lon), ct));
     }
 
     /// <summary>Redirects to a place photo from <c>GET /api/places/search</c> (photo URLs there point here, so the API key stays on the server).</summary>

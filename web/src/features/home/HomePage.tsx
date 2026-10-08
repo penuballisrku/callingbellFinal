@@ -27,7 +27,8 @@ import { useCategories, useDocumentTitle, usePageCity, useSelectedAreaSlug } fro
 import { useCity } from '@/stores/city';
 import type { Banner, BusinessCard, HomeData, MarketingPage, NearbyService, SearchSuggestion, NearbyServices, PopularService, RelatedCategory, SubCategory, TopPicks } from '@/lib/types';
 import { ErrorState, Img, SectionHeader } from '@/components/ui';
-import { CitySelect } from '@/layouts/CustomerLayout';
+import { CitySelect } from '@/components/LocationPicker';
+import { useBrowsingCountryCode } from '@/components/VisitorCountry';
 import { resolveSearchHref, SearchSuggest } from '@/components/SearchSuggest';
 import { useAssistant } from '@/features/assistant/store';
 import { PlaceholderTicker } from '@/components/PlaceholderTicker';
@@ -137,7 +138,7 @@ function Hero({ data }: { data?: HomeData }) {
     void resolveSearchHref(q, picked, citySlug, areaId).then((href) => navigate(href));
   };
   const pick = (s: SearchSuggestion) => {
-    if (s.kind === 'Business') { navigate(`/b/${s.slug}`); return; }
+    if (s.kind === 'Business') { navigate(`/business/${s.slug}`); return; }
     setQ(s.label);
     setPicked(s);
   };
@@ -265,10 +266,12 @@ function ServicesSection({ items, loading }: { items?: PopularService[]; loading
 function NearbyServicesSection() {
   const { citySlug, areaId, ready } = usePageCity();
   const areaSlug = useSelectedAreaSlug(citySlug, areaId);
+  const country = useBrowsingCountryCode();
   const { data, isPending: isLoading } = useQuery({
-    enabled: ready,
-    queryKey: ['nearby-services', citySlug, areaSlug],
-    queryFn: () => api.get<NearbyServices>('/api/geo/nearby-services', { city: citySlug, area: areaSlug }),
+    // Once the place is known in full (an area's slug may arrive with its city's area list), so it is asked for once.
+    enabled: ready && (!areaId || !!areaSlug),
+    queryKey: ['nearby-services', citySlug, areaSlug, country],
+    queryFn: () => api.get<NearbyServices>('/api/geo/nearby-services', { city: citySlug, area: areaSlug, country }),
     refetchInterval: (q) => (q.state.data?.aiPending ? 5000 : false),
     staleTime: 5 * 60_000,
   });
@@ -278,16 +281,13 @@ function NearbyServicesSection() {
   return (
     <section aria-labelledby="near-h">
       <SectionHeader id="near-h" title={place ? `Popular near ${place}` : 'Popular near you'}
-        subtitle={data?.aiRanked
-          ? 'Picked for your area and the season by our AI assistant, from recent local bookings'
-          : 'What people around you are booking right now'}
-        action={data?.aiPending ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 text-xs font-semibold text-accent-ink" role="status">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent motion-reduce:animate-none" />Personalising with AI
-          </span>
-        ) : data?.aiRanked ? (
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-muted"><AutoAwesomeRounded sx={{ fontSize: 14 }} className="text-accent-ink" />AI picks</span>
-        ) : undefined} />
+        subtitle={data?.catalog
+          ? (data.aiRanked
+            ? `No listings here yet - picked for ${place} and the season from services booked on Calling Bell`
+            : 'No listings here yet - services people book most on Calling Bell')
+          : data?.aiRanked
+            ? 'Picked for your area and the season, from recent local bookings'
+            : 'What people around you are booking right now'} />
       <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 lg:gap-5">
         {isLoading
           ? Array.from({ length: 4 }, (_, i) => <Skeleton key={i} variant="rounded" height={300} sx={{ borderRadius: '18px' }} />)
@@ -298,11 +298,13 @@ function NearbyServicesSection() {
         data.source === 'area' ? (
           <RelatedCategories id="related" items={data.relatedCategories} title={`Related categories near ${place}`}
             expandLabel={`Show all ${number(data.relatedCategories.length)} categories near ${place}`} citySlug={data.citySlug}
-            note={data.aiRanked ? 'AI picks first, from what people nearby book together' : `Within 7 km of ${place}`} />
+            note={data.catalog ? `Suggested for ${place}` : data.aiRanked ? 'Best matches first, from what people nearby book together' : `Within 7 km of ${place}`} />
         ) : (
           <RelatedCategories id="related" items={data.relatedCategories} title={`Categories in ${data.cityName ?? place ?? 'your city'}`}
             expandLabel={`Show all ${number(data.relatedCategories.length)} categories in ${data.cityName ?? place ?? 'your city'}`} citySlug={data.citySlug}
-            note={data.aiRanked ? 'AI picks first, then everything available in the city' : 'Everything available in the city'} />
+            note={data.catalog
+              ? (data.aiRanked ? 'Best matches for this city first, then the full catalogue' : 'Full catalogue - most booked on Calling Bell first')
+              : data.aiRanked ? 'Best matches first, then everything available in the city' : 'Everything available in the city'} />
         )
       )}
       {/* A selected area: the rest of the city's categories, so nothing available in the city is hidden. */}
@@ -310,7 +312,7 @@ function NearbyServicesSection() {
         <RelatedCategories id="city-categories" items={data.cityCategories}
           title={data.relatedCategories.length ? `More categories in ${data.cityName}` : `Categories in ${data.cityName}`}
           expandLabel={`Show all ${number(data.cityCategories.length)} categories in ${data.cityName}`} citySlug={data.citySlug}
-          note={`Elsewhere in ${data.cityName}, distance from ${place}`} />
+          note={data.catalog ? 'Full catalogue - most booked on Calling Bell first' : `Elsewhere in ${data.cityName}, distance from ${place}`} />
       )}
     </section>
   );
@@ -351,15 +353,10 @@ function RelatedCategories({ id, items, title, expandLabel, note, citySlug }: {
                   <ArrowForwardRounded sx={{ fontSize: 16 }} className="shrink-0 text-faint transition-colors group-hover:text-accent-ink" />
                 </span>
                 <span className="mt-0.5 block truncate text-xs text-muted">
-                  {c.categoryName} · {pluralize(c.businessCount, 'business', 'businesses')}
+                  {c.categoryName}{c.businessCount > 0 && ` · ${pluralize(c.businessCount, 'business', 'businesses')}`}
                   {c.nearestKm != null && ` · ${c.nearestKm < 1 ? 'under 1 km' : `${c.nearestKm.toFixed(1)} km`}`}
                 </span>
-                {c.reason && (
-                  <span className="mt-1.5 flex gap-1 text-xs leading-5 text-ink-2">
-                    <AutoAwesomeRounded sx={{ fontSize: 13, mt: '3px', flexShrink: 0 }} className="text-accent-ink" />
-                    <span className="line-clamp-2">{c.reason}</span>
-                  </span>
-                )}
+                {c.reason && <span className="mt-1.5 line-clamp-2 text-xs leading-5 text-ink-2">{c.reason}</span>}
               </span>
             </Link>
           </li>
@@ -421,12 +418,7 @@ function ServiceCard({ service: s }: { service: PopularService | NearbyService }
             </span>
           )}
         </div>
-        {near?.reason && (
-          <p className="mt-2 flex gap-1.5 text-xs leading-5 text-muted">
-            <AutoAwesomeRounded sx={{ fontSize: 14, mt: '3px', flexShrink: 0 }} className="text-accent-ink" />
-            <span className="line-clamp-2">{near.reason}</span>
-          </p>
-        )}
+        {near?.reason && <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted">{near.reason}</p>}
       </div>
     </Link>
   );
@@ -434,16 +426,17 @@ function ServiceCard({ service: s }: { service: PopularService | NearbyService }
 
 /**
  * "Top picks in {city}": categories and sub-categories for the city detected from the visitor's IP address. Database-ranked picks show
- * immediately; AI additions for that city (marked with a sparkle, with a reason) are appended once ready. The selected city is only a
- * fallback for when the IP can't be located.
+ * immediately; further picks for that city (with a reason) are appended once ready. The selected city is only a fallback for when
+ * the IP can't be located.
  */
 function TopPicksSection() {
   const { citySlug, ready } = usePageCity();
+  const country = useBrowsingCountryCode();
   const { data: picks, isPending: isLoading } = useQuery({
     enabled: ready,
-    queryKey: ['top-picks', citySlug],
-    // The chosen (or detected) city decides; with none, the visitor's IP location does.
-    queryFn: () => api.get<TopPicks>('/api/geo/top-picks', { city: citySlug, fallbackCity: citySlug }),
+    queryKey: ['top-picks', citySlug, country],
+    // The chosen (or detected) city decides; with none, the visitor's IP location does (when it is in the country being browsed).
+    queryFn: () => api.get<TopPicks>('/api/geo/top-picks', { city: citySlug, fallbackCity: citySlug, country }),
     refetchInterval: (q) => (q.state.data?.aiPending ? 5000 : false),
     staleTime: 10 * 60_000,
   });
@@ -469,13 +462,8 @@ function TopPicksSection() {
           <li key={c.slug}>
             <Link to={`/search?sub=${c.slug}${picks!.citySlug ? `&city=${picks!.citySlug}` : ''}`}
               className="group flex h-full items-start gap-3 rounded-2xl border border-line bg-surface p-3 shadow-[var(--cb-shadow-xs)] outline-offset-2 transition-[box-shadow,border-color] duration-200 hover:border-line-strong hover:shadow-[var(--cb-shadow-md)] focus-visible:outline-2 focus-visible:outline-accent md:p-4">
-              <span className="relative grid h-11 w-11 shrink-0 place-items-center rounded-xl" style={{ background: `${c.colorHex ?? '#667085'}14` }}>
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl" style={{ background: `${c.colorHex ?? '#667085'}14` }}>
                 <Img src={c.iconUrl} alt="" className="h-6 w-6" rounded="rounded" fit="contain" fallbackText={c.name} />
-                {c.source === 'ai' && (
-                  <span title="Suggested by AI for this city" className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-surface shadow-[var(--cb-shadow-sm)] ring-1 ring-line">
-                    <AutoAwesomeRounded sx={{ fontSize: 12 }} className="text-accent-ink" />
-                  </span>
-                )}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold text-ink group-hover:underline">{c.name}</span>

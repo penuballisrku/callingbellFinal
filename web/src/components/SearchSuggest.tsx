@@ -19,7 +19,7 @@ export function suggestionHref(s: SearchSuggestion, citySlug?: string | null) {
     case 'Category': return `/categories/${s.slug}`;
     case 'SubCategory': return `/search?sub=${s.slug}${city}`;
     case 'Service': return `/search?sub=${s.subCategorySlug}&q=${encodeURIComponent(s.label)}${city}`;
-    case 'Business': return `/b/${s.slug}`;
+    case 'Business': return `/business/${s.slug}`;
   }
 }
 
@@ -57,7 +57,7 @@ export async function resolveSearchHref(text: string, picked: SearchSuggestion |
 
 const groupTitles:[keyof Omit<SearchSuggestions, 'query'>, string][] = [['categories', 'Categories'], ['services', 'Services'], ['businesses', 'Businesses']];
 
-/** "Suggested by AI" (GET /api/search/suggest/ai) is asked for phrases only, once typing pauses a little longer. */
+/** Related services by meaning (GET /api/search/suggest/ai) are asked for phrases only, once typing pauses a little longer. */
 const AI_MIN_CHARS = 8;
 const AI_DEBOUNCE_MS = 600;
 const kindLabel: Record<SearchSuggestion['kind'], string> = { Category: 'Category', SubCategory: 'Category', Service: 'Service', Business: 'Business' };
@@ -118,7 +118,7 @@ export function SearchSuggest({ value, onChange, citySlug, onSelect, inputClassN
     const byName = data ? groupTitles.map(([key, title]) => ({ title, items: data[key] })).filter((g) => g.items.length) : [];
     const listed = new Set(byName.flatMap((g) => g.items).map((s) => s.slug));
     const ai = aiTerm === trimmed ? (aiData ?? []).filter((s) => !listed.has(s.slug)) : [];
-    return ai.length ? [{ title: 'Suggested by AI', items: ai }, ...byName] : byName;
+    return ai.length ? [{ title: 'Related services', items: ai }, ...byName] : byName;
   }, [data, aiData, aiTerm, trimmed]);
   const flat = useMemo(() => groups.flatMap((g) => g.items), [groups]);
   const showPanel = open && trimmed.length >= SUGGEST_MIN_CHARS;

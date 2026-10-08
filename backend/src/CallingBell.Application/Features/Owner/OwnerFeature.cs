@@ -573,10 +573,10 @@ public sealed class UpdateOwnerProfileHandler(IUnitOfWork uow, ICurrentUser user
 // ===================== Subscription =====================
 
 public sealed record SubscriptionHistoryDto(string SubscriptionNumber, string PlanName, string BillingCycle, DateTime StartDate, DateTime EndDate,
-    decimal Amount, string Status);
+    decimal Amount, string Status, string Currency = "INR");
 
 public sealed record InvoiceDto(string InvoiceNumber, string PaymentType, decimal Amount, decimal TaxAmount, decimal TotalAmount, string PaymentMode,
-    string Status, DateTimeOffset PaidOn);
+    string Status, DateTimeOffset PaidOn, string Currency = "INR");
 
 public sealed record OwnerSubscriptionDto(SubscriptionHistoryDto? Current, string? CurrentPlanCode, IReadOnlyList<PlanDto> Plans,
     IReadOnlyList<SubscriptionHistoryDto> History, IReadOnlyList<InvoiceDto> Invoices);
@@ -591,16 +591,17 @@ public sealed class GetOwnerSubscriptionHandler(IUnitOfWork uow, ICurrentUser us
         var today = IndianTime.Today;
         var history = await uow.Repository<BusinessSubscription>().QueryNoTracking()
             .Where(s => s.BusinessId == r.BusinessId).OrderByDescending(s => s.StartDate)
-            .Select(s => new { Dto = new SubscriptionHistoryDto(s.SubscriptionNumber, s.Plan.Name, s.BillingCycle, s.StartDate, s.EndDate, s.Amount, s.Status), s.Plan.Code, s.StartDate, s.EndDate, s.Status })
+            .Select(s => new { Dto = new SubscriptionHistoryDto(s.SubscriptionNumber, s.Plan.Name, s.BillingCycle, s.StartDate, s.EndDate, s.Amount, s.Status, s.Currency), s.Plan.Code, s.StartDate, s.EndDate, s.Status })
             .ToListAsync(ct);
         var current = history.FirstOrDefault(h => (h.Status == SubscriptionStatuses.Active || h.Status == SubscriptionStatuses.Trial) && h.StartDate <= today && h.EndDate >= today);
 
         var invoices = await uow.Repository<Payment>().QueryNoTracking()
             .Where(p => p.BusinessId == r.BusinessId).OrderByDescending(p => p.PaidOn).Take(24)
-            .Select(p => new InvoiceDto(p.InvoiceNumber, p.PaymentType, p.Amount, p.TaxAmount, p.TotalAmount, p.PaymentMode, p.Status, p.PaidOn))
+            .Select(p => new InvoiceDto(p.InvoiceNumber, p.PaymentType, p.Amount, p.TaxAmount, p.TotalAmount, p.PaymentMode, p.Status, p.PaidOn, p.Currency))
             .ToListAsync(ct);
 
-        var plans = await mediator.Send(new GetPlansQuery(), ct);
+        // Priced for the business's country, as its checkout will charge.
+        var plans = await mediator.Send(new GetPlansQuery(BusinessId: r.BusinessId), ct);
         return new OwnerSubscriptionDto(current?.Dto, current?.Code, plans, history.Select(h => h.Dto).Take(24).ToList(), invoices);
     }
 }

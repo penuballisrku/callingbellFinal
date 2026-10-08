@@ -40,6 +40,23 @@ internal sealed class OtpCodeConfiguration : IEntityTypeConfiguration<OtpCode>
     }
 }
 
+internal sealed class CountryPricingConfiguration : IEntityTypeConfiguration<CountryPricing>
+{
+    public void Configure(EntityTypeBuilder<CountryPricing> b)
+    {
+        b.ToTable("CountryPricing");
+        b.Property(x => x.CountryCode).HasMaxLength(2).IsFixedLength();
+        b.Property(x => x.CountryName).HasMaxLength(80);
+        b.Property(x => x.CurrencyCode).HasMaxLength(3).IsFixedLength();
+        b.Property(x => x.Locale).HasMaxLength(20);
+        b.Property(x => x.PriceMultiplier).HasPrecision(18, 6);
+        b.Property(x => x.RoundingStep).HasPrecision(12, 2);
+        b.Property(x => x.TaxName).HasMaxLength(20);
+        b.Property(x => x.TaxRate).HasPrecision(5, 4);
+        b.HasIndex(x => x.CountryCode).IsUnique();
+    }
+}
+
 internal sealed class GeoConfiguration :
     IEntityTypeConfiguration<City>, IEntityTypeConfiguration<Area>
 {
@@ -60,8 +77,17 @@ internal sealed class GeoConfiguration :
 }
 
 internal sealed class CatalogConfiguration :
-    IEntityTypeConfiguration<SubCategory>, IEntityTypeConfiguration<PopularService>, IEntityTypeConfiguration<Media>, IEntityTypeConfiguration<CountryCatalog>
+    IEntityTypeConfiguration<SubCategory>, IEntityTypeConfiguration<PopularService>, IEntityTypeConfiguration<Media>, IEntityTypeConfiguration<CountryCatalog>,
+    IEntityTypeConfiguration<PopularSearch>
 {
+    public void Configure(EntityTypeBuilder<PopularSearch> b)
+    {
+        b.ToTable("PopularSearches");
+        b.Property(p => p.CountryCode).HasMaxLength(2).IsFixedLength();
+        b.HasOne(p => p.Category).WithMany().HasForeignKey(p => p.CategoryId);
+        b.HasOne(p => p.SubCategory).WithMany().HasForeignKey(p => p.SubCategoryId);
+    }
+
     public void Configure(EntityTypeBuilder<SubCategory> b) =>
         b.HasOne(s => s.Category).WithMany(c => c.SubCategories).HasForeignKey(s => s.CategoryId);
 
@@ -81,6 +107,17 @@ internal sealed class CatalogConfiguration :
     {
         b.ToTable("CountryCatalogs");
         b.HasKey(c => c.CountryCode);
+    }
+}
+
+internal sealed class BusinessSlugHistoryConfiguration : IEntityTypeConfiguration<BusinessSlugHistory>
+{
+    public void Configure(EntityTypeBuilder<BusinessSlugHistory> b)
+    {
+        b.ToTable("BusinessSlugHistory");
+        b.Property(h => h.Slug).HasMaxLength(180);
+        b.HasIndex(h => h.Slug).IsUnique();
+        b.HasOne(h => h.Business).WithMany().HasForeignKey(h => h.BusinessId);
     }
 }
 
@@ -132,8 +169,16 @@ internal sealed class EngagementConfiguration :
 
 internal sealed class MonetizationConfiguration :
     IEntityTypeConfiguration<BusinessSubscription>, IEntityTypeConfiguration<Advertisement>, IEntityTypeConfiguration<Payment>,
-    IEntityTypeConfiguration<MarketingContent>, IEntityTypeConfiguration<PaymentOrder>
+    IEntityTypeConfiguration<MarketingContent>, IEntityTypeConfiguration<MarketingContentImage>, IEntityTypeConfiguration<PaymentOrder>
 {
+    public void Configure(EntityTypeBuilder<MarketingContentImage> b)
+    {
+        b.ToTable("MarketingContentImages");
+        b.Property(i => i.CountryCode).HasMaxLength(2).IsFixedLength();
+        b.HasOne(i => i.MarketingContent).WithMany(c => c.CountryImages).HasForeignKey(i => i.MarketingContentId);
+        b.HasIndex(i => new { i.MarketingContentId, i.CountryCode }).IsUnique().HasFilter("[IsDeleted] = 0");
+    }
+
     public void Configure(EntityTypeBuilder<PaymentOrder> b)
     {
         b.Property(o => o.RowVersion).IsRowVersion();
@@ -147,8 +192,11 @@ internal sealed class MonetizationConfiguration :
         b.HasOne(c => c.Business).WithMany().HasForeignKey(c => c.BusinessId);
     }
 
-    public void Configure(EntityTypeBuilder<BusinessSubscription> b) =>
+    public void Configure(EntityTypeBuilder<BusinessSubscription> b)
+    {
         b.HasOne(s => s.Plan).WithMany().HasForeignKey(s => s.PlanId);
+        b.Property(s => s.Currency).HasMaxLength(3).IsFixedLength();
+    }
 
     public void Configure(EntityTypeBuilder<Advertisement> b)
     {
@@ -156,8 +204,11 @@ internal sealed class MonetizationConfiguration :
         b.HasOne(a => a.TargetCategory).WithMany().HasForeignKey(a => a.TargetCategoryId);
     }
 
-    public void Configure(EntityTypeBuilder<Payment> b) =>
+    public void Configure(EntityTypeBuilder<Payment> b)
+    {
         b.HasOne(p => p.Business).WithMany().HasForeignKey(p => p.BusinessId);
+        b.Property(p => p.Currency).HasMaxLength(3).IsFixedLength();
+    }
 }
 
 internal sealed class AnalyticsConfiguration :

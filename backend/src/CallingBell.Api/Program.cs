@@ -2,6 +2,7 @@ using System.Text;
 using System.Threading.RateLimiting;
 using CallingBell.Api.Hubs;
 using CallingBell.Api.Infrastructure;
+using CallingBell.Api.Seo;
 using CallingBell.Application;
 using CallingBell.Application.Common.Interfaces;
 using CallingBell.Application.Common.Models;
@@ -147,9 +148,16 @@ builder.Services.Configure<GzipCompressionProviderOptions>(o => o.Level = Compre
 builder.Services.AddOutputCache(options =>
 {
     // Anonymous, non-personalised GET responses only (the default policy already skips requests with an Authorization header).
-    options.AddPolicy(CachePolicies.PublicCatalog, b => b.Expire(TimeSpan.FromSeconds(60)).SetVaryByQuery("*"));
+    // Edits clear both at once (PublicCacheInvalidationBehaviour), so the expiry only bounds staleness from changes made outside the API.
+    options.AddPolicy(CachePolicies.PublicCatalog, b => b.Expire(TimeSpan.FromMinutes(10)).SetVaryByQuery("*").Tag(CachePolicies.PublicTag));
+    options.AddPolicy(CachePolicies.PublicListings, b => b.Expire(TimeSpan.FromSeconds(60)).SetVaryByQuery("*").Tag(CachePolicies.PublicTag));
 });
+builder.Services.AddSingleton<CallingBell.Application.Common.Interfaces.IPublicCache, OutputCachePublicCache>();
 builder.Services.AddHostedService<StartupWarmup>();
+
+// ---------- SEO ----------
+builder.Services.Configure<CallingBell.Application.Features.Seo.SeoOptions>(builder.Configuration.GetSection(CallingBell.Application.Features.Seo.SeoOptions.Section));
+builder.Services.AddSingleton<CallingBell.Api.Seo.SeoHtmlRenderer>();
 
 var app = builder.Build();
 
@@ -171,6 +179,10 @@ app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();
 app.UseOutputCache();
+
+// The built React app with each public page's SEO rendered in, when Seo:SpaRoot points at it (production). In development Vite serves
+// the app and proxies robots.txt and the sitemaps here.
+if (CallingBell.Api.Seo.SpaHosting.Root(app.Configuration, app.Environment) is { } spaRoot) app.UseSpaWithSeo(spaRoot);
 
 app.MapControllers();
 app.MapHub<PresenceHub>("/hubs/presence");

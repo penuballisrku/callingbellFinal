@@ -20,7 +20,7 @@ import { DropZone, MediaTile } from '@/components/media';
 import { CityAutocomplete } from '@/components/CityAutocomplete';
 import { useCityAreas } from '@/lib/hooks';
 import { emptyService, type StepKey, type WizardForm } from './schema';
-import { priceBreakdown } from '@/lib/payments';
+import { asksForGstin, priceBreakdown, taxLabel } from '@/lib/payments';
 import { PhoneVerification, phoneDigits } from '@/features/auth/otp';
 
 export interface WizardData { categories: Category[]; cities: City[]; plans: Plan[]; serviceTypes: Lookup[]; socialPlatforms: Lookup[] }
@@ -249,8 +249,8 @@ export function OfferStep({ data }: { data: WizardData }) {
                       {selected && <span className="h-2 w-2 rounded-full bg-on-accent" />}
                     </span>
                   </span>
-                  <span className="mt-2 text-xl font-bold tracking-tight">{price === 0 ? 'Free' : moneyExact(price)}
-                    {price > 0 && <span className="text-xs font-normal text-muted"> /{cycle === 'Annual' ? 'year' : 'month'} + GST</span>}</span>
+                  <span className="mt-2 text-xl font-bold tracking-tight">{price === 0 ? 'Free' : moneyExact(price, p)}
+                    {price > 0 && <span className="text-xs font-normal text-muted"> /{cycle === 'Annual' ? 'year' : 'month'}{p.taxRate > 0 ? ` + ${p.taxName ?? 'tax'}` : ''}</span>}</span>
                   <span className="mt-2 text-xs text-muted">{number(p.leadCredits)} leads/month · {p.maxServices >= 999 ? 'Unlimited' : p.maxServices} services · {p.maxImages >= 999 ? 'Unlimited' : p.maxImages} photos</span>
                   {p.tagline && <span className="mt-1 text-xs text-ink-2">{p.tagline}</span>}
                 </button>
@@ -297,11 +297,12 @@ function ServiceRow({ index, data, onRemove }: { index: number; data: WizardData
 }
 
 /* ======================= 5. Billing & payment (paid plans only) ======================= */
-const orderAmount = (plan: Plan, cycle: string) => priceBreakdown(cycle === 'Annual' ? plan.annualPrice : plan.monthlyPrice);
+const orderAmount = (plan: Plan, cycle: string) => priceBreakdown(cycle === 'Annual' ? plan.annualPrice : plan.monthlyPrice, plan);
 
 function OrderTotal({ plan, cycle }: { plan: Plan; cycle: string }) {
   const { total } = orderAmount(plan, cycle);
-  return <span className="font-semibold">{moneyPrecise(total)} <span className="font-normal text-muted">incl. 18% GST</span></span>;
+  const tax = taxLabel(plan);
+  return <span className="font-semibold">{moneyPrecise(total, plan)}{tax && <span className="font-normal text-muted"> incl. {tax}</span>}</span>;
 }
 
 export function PaymentStep({ data, paymentsEnabled, onChangePlan }: { data: WizardData; paymentsEnabled: boolean; onChangePlan: () => void }) {
@@ -336,15 +337,15 @@ export function PaymentStep({ data, paymentsEnabled, onChangePlan }: { data: Wiz
             ))}
           </ul>
           <dl className="space-y-2 p-4 text-sm">
-            <div className="flex justify-between"><dt className="text-muted">{plan.name} · {cycle}</dt><dd className="tabular">{moneyPrecise(subtotal)}</dd></div>
-            <div className="flex justify-between"><dt className="text-muted">GST (18%)</dt><dd className="tabular">{moneyPrecise(tax)}</dd></div>
-            <div className="flex justify-between border-t border-line pt-2 text-base font-bold"><dt>Total payable</dt><dd className="tabular">{moneyPrecise(total)}</dd></div>
+            <div className="flex justify-between"><dt className="text-muted">{plan.name} · {cycle}</dt><dd className="tabular">{moneyPrecise(subtotal, plan)}</dd></div>
+            {taxLabel(plan) && <div className="flex justify-between"><dt className="text-muted">{taxLabel(plan)}</dt><dd className="tabular">{moneyPrecise(tax, plan)}</dd></div>}
+            <div className="flex justify-between border-t border-line pt-2 text-base font-bold"><dt>Total payable</dt><dd className="tabular">{moneyPrecise(total, plan)}</dd></div>
           </dl>
         </div>
       </Section>
-      <Section title="Invoice details" hint="Add your GSTIN to claim input tax credit. The invoice is issued in your business name.">
+      {asksForGstin(plan) && <Section title="Invoice details" hint="Add your GSTIN to claim input tax credit. The invoice is issued in your business name.">
         <div className="sm:max-w-sm"><TextField label="GSTIN (optional)" placeholder="29ABCDE1234F1Z5" {...gstin} slotProps={{ htmlInput: { maxLength: 15, style: { textTransform: 'uppercase' } } }} /></div>
-      </Section>
+      </Section>}
       <div className="flex items-start gap-3 rounded-xl bg-subtle p-4 text-sm">
         <LockOutlined className="mt-0.5 text-muted" fontSize="small" />
         <div>

@@ -140,7 +140,7 @@ export function UserMenu({ dark }: { dark?: boolean }) {
         </div>
         <Divider />
         {isAdmin(user) && <MenuItem onClick={() => { setAnchor(null); navigate('/admin'); }}><ListItemIcon><AdminPanelSettingsOutlined fontSize="small" /></ListItemIcon>Admin console</MenuItem>}
-        {isOwner(user) && <MenuItem onClick={() => { setAnchor(null); navigate('/business'); }}><ListItemIcon><DashboardOutlined fontSize="small" /></ListItemIcon>Business dashboard</MenuItem>}
+        {isOwner(user) && <MenuItem onClick={() => { setAnchor(null); navigate('/owner'); }}><ListItemIcon><DashboardOutlined fontSize="small" /></ListItemIcon>Business dashboard</MenuItem>}
         {!isAdmin(user) && !isOwner(user) && <MenuItem onClick={() => { setAnchor(null); navigate('/account'); }}><ListItemIcon><EventNoteOutlined fontSize="small" /></ListItemIcon>My bookings & saved</MenuItem>}
         <MenuItem onClick={signOut}><ListItemIcon><LogoutRounded fontSize="small" /></ListItemIcon>Sign out</MenuItem>
       </Menu>

@@ -5,4 +5,7 @@
     <Project Path="src/CallingBell.Domain/CallingBell.Domain.csproj" />
     <Project Path="src/CallingBell.Infrastructure/CallingBell.Infrastructure.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CallingBell.Seo.Tests/CallingBell.Seo.Tests.csproj" />
+  </Folder>
 </Solution>

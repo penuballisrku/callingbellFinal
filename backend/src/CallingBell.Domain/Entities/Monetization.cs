@@ -2,6 +2,32 @@ using CallingBell.Domain.Common;
 
 namespace CallingBell.Domain.Entities;
 
+/// <summary>
+/// How platform prices (subscription plans, Calling Bell's typical service prices) are shown and charged in a country. Platform prices are
+/// set in Indian rupees; a country's price is <c>INR price × PriceMultiplier</c>, rounded to <see cref="RoundingStep"/>. The multiplier is
+/// purchasing-power based (local currency per rupee at PPP), so prices are realistic locally rather than a plain exchange-rate conversion.
+/// A business's own service prices are never converted: they are in its own currency. Country "ZZ" is the default for unlisted countries.
+/// </summary>
+public class CountryPricing : AuditableEntity
+{
+    /// <summary>ISO 3166-1 alpha-2, e.g. "IN", "US"; "ZZ" = default for countries without a row.</summary>
+    public string CountryCode { get; set; } = string.Empty;
+    public string CountryName { get; set; } = string.Empty;
+    /// <summary>ISO 4217, e.g. "INR", "USD".</summary>
+    public string CurrencyCode { get; set; } = "INR";
+    /// <summary>BCP 47 locale for number formatting, e.g. "en-IN", "en-US", "de-DE".</summary>
+    public string Locale { get; set; } = "en-IN";
+    /// <summary>Local currency per Indian rupee of platform price (purchasing-power based; 1 for India).</summary>
+    public decimal PriceMultiplier { get; set; } = 1;
+    /// <summary>Converted prices are rounded to a multiple of this (e.g. 1 for USD, 5 for AED, 100 for JPY).</summary>
+    public decimal RoundingStep { get; set; } = 1;
+    /// <summary>Tax added to platform charges, e.g. "GST" in India; null with <see cref="TaxRate"/> 0 when none is charged.</summary>
+    public string? TaxName { get; set; }
+    /// <summary>Fraction, e.g. 0.18 for 18%.</summary>
+    public decimal TaxRate { get; set; }
+    public bool IsActive { get; set; } = true;
+}
+
 public class SubscriptionPlan : AuditableEntity
 {
     public string Code { get; set; } = string.Empty;
@@ -32,6 +58,8 @@ public class BusinessSubscription : AuditableEntity
     public DateTime StartDate { get; set; }
     public DateTime EndDate { get; set; }
     public decimal Amount { get; set; }
+    /// <summary>ISO 4217 currency of <see cref="Amount"/> (the business's country currency when it was paid).</summary>
+    public string Currency { get; set; } = "INR";
     public string Status { get; set; } = "Active";
     public bool AutoRenew { get; set; }
 
@@ -113,6 +141,27 @@ public class MarketingContent : AuditableEntity
     public bool IsActive { get; set; } = true;
 
     public Business? Business { get; set; }
+    /// <summary>Photos for particular countries; the block's own image is shown everywhere else.</summary>
+    public ICollection<MarketingContentImage> CountryImages { get; set; } = new List<MarketingContentImage>();
+}
+
+/// <summary>A content block's photo for visitors browsing one country, e.g. a Montreal storefront for Canada.</summary>
+public class MarketingContentImage : AuditableEntity
+{
+    public Guid MarketingContentId { get; set; }
+    /// <summary>ISO 3166-1 alpha-2 country code.</summary>
+    public string CountryCode { get; set; } = string.Empty;
+    public string ImageUrl { get; set; } = string.Empty;
+    public string? ThumbnailUrl { get; set; }
+    public string? MobileImageUrl { get; set; }
+    public string? DesktopImageUrl { get; set; }
+    public string? AltText { get; set; }
+    /// <summary>Author and licence, e.g. "Photo: 4net, CC BY 3.0, via Wikimedia Commons".</summary>
+    public string? MediaCredit { get; set; }
+    public string? MediaCreditUrl { get; set; }
+    public bool IsActive { get; set; } = true;
+
+    public MarketingContent MarketingContent { get; set; } = null!;
 }
 
 /// <summary>
@@ -156,6 +205,8 @@ public class Payment : AuditableEntity
     public decimal Amount { get; set; }
     public decimal TaxAmount { get; set; }
     public decimal TotalAmount { get; set; }
+    /// <summary>ISO 4217 currency of the amounts. Revenue reports must convert non-INR rows before adding them up.</summary>
+    public string Currency { get; set; } = "INR";
     public string PaymentMode { get; set; } = "UPI";
     public string Status { get; set; } = "Success";
     public DateTimeOffset PaidOn { get; set; }

@@ -147,7 +147,7 @@ export function AdminBusinessDetail() {
       <PageHeader title={s.name} crumbs={[{ label: 'Businesses', to: '/admin/businesses' }, { label: s.name }]}
         subtitle={<span className="inline-flex flex-wrap items-center gap-2">{s.subCategoryName} · {s.area}, {s.city} <StatusBadge type="BusinessStatus" code={s.status} /><StatusBadge type="VerificationStatus" code={s.verificationStatus} /><AvailabilityBadge status={s.availabilityStatus} /></span>}
         actions={<>
-          <Button variant="outlined" component={Link} to={`/b/${s.slug}`} target="_blank" endIcon={<OpenInNewRounded fontSize="small" />}>Public profile</Button>
+          <Button variant="outlined" component={Link} to={`/business/${s.slug}`} target="_blank" endIcon={<OpenInNewRounded fontSize="small" />}>Public profile</Button>
           {s.status !== 'Active' && <Button variant="contained" color="success" onClick={() => setConfirm({ title: 'Approve and publish this listing?', body: { status: 'Active' } })}>Approve</Button>}
           {s.status === 'Active' && <Button variant="outlined" color="error" onClick={() => setConfirm({ title: 'Suspend this listing?', body: { status: 'Suspended' }, destructive: true })}>Suspend</Button>}
           {s.verificationStatus !== 'Verified' && <Button variant="contained" onClick={() => setConfirm({ title: 'Mark documents as verified?', body: { verificationStatus: 'Verified' } })}>Verify</Button>}

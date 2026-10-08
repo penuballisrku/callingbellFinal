@@ -17,9 +17,12 @@ public sealed record CategoryDto(Guid Id, string Name, string Slug, string? Desc
 public sealed record AreaDto(Guid Id, string Name, string Slug, string Pincode);
 public sealed record CityDto(Guid Id, string Name, string Slug, string State, string? ImageUrl, bool IsPopular, int BusinessCount, IReadOnlyList<AreaDto> Areas);
 public sealed record LookupDto(string Code, string Name, string? Description, string? ColorHex, int SortOrder);
+/// <param name="MonthlyPrice">In <paramref name="CurrencyCode"/>: the rupee price converted for the requested country (see <see cref="CountryPrice"/>).</param>
+/// <param name="TaxName">Tax added at checkout (e.g. "GST"); null with <paramref name="TaxRate"/> 0 when none is charged.</param>
+/// <param name="TaxRate">Fraction, e.g. 0.18.</param>
 public sealed record PlanDto(Guid Id, string Code, string Name, string? Tagline, decimal MonthlyPrice, decimal AnnualPrice, int LeadCredits,
     bool IncludesFeaturedListing, bool IncludesPrioritySupport, IReadOnlyList<string> Features, string? ImageUrl, string? BadgeColor, bool IsPopular,
-    int MaxServices, int MaxImages);
+    int MaxServices, int MaxImages, string CurrencyCode = "INR", string Locale = "en-IN", string? TaxName = "GST", decimal TaxRate = 0.18m);
 public sealed record BannerDto(Guid Id, string Title, string? Subtitle, string? CtaText, string? LinkUrl, string ImageUrl,
     string? MobileImageUrl, string? DesktopImageUrl, string? AltText, string Placement);
 
@@ -73,7 +76,8 @@ internal static class CatalogQueries
 
 // ---------- Locations ----------
 /// <param name="Country">ISO 3166-1 alpha-2 code; the default country when omitted. The city catalogue agent fills each country's cities.</param>
-public sealed record GetCitiesQuery(string? Country = null) : IRequest<IReadOnlyList<CityDto>>;
+/// <param name="State">A state / province / region slug: only its cities (a few dozen instead of the whole country's thousands).</param>
+public sealed record GetCitiesQuery(string? Country = null, string? State = null) : IRequest<IReadOnlyList<CityDto>>;
 
 /// <summary>
 /// The country's cities: curated cities first (in their curated order), then the rest largest first. Curated cities include their
@@ -85,20 +89,24 @@ public sealed class GetCitiesHandler(IUnitOfWork uow, IGeoLocationService geo, R
     public async Task<IReadOnlyList<CityDto>> Handle(GetCitiesQuery request, CancellationToken ct)
     {
         var country = request.Country is { Length: 2 } c2 && c2.All(char.IsAsciiLetter) ? c2.ToUpperInvariant() : geo.DefaultCountryCode;
-        // Thousands of cities per country: built once and kept in memory (the city import and admin edits clear it).
-        return await reference.GetDerivedAsync($"cities|{country}", () => LoadAsync(country, ct), ct);
+        // Thousands of cities per country: built once and kept in memory (the city import and admin edits clear it). A state's cities are
+        // their own cached list, so the location picker downloads only what it shows.
+        var state = string.IsNullOrWhiteSpace(request.State) ? null : request.State.Trim().ToLowerInvariant();
+        return await reference.GetDerivedAsync($"cities|{country}|{state}", () => LoadAsync(country, state, ct), ct);
     }
 
     /// <summary>Three set-based queries (cities, business counts, curated cities' areas) instead of a sub-query per city.</summary>
-    private async Task<IReadOnlyList<CityDto>> LoadAsync(string country, CancellationToken ct)
+    private async Task<IReadOnlyList<CityDto>> LoadAsync(string country, string? state, CancellationToken ct)
     {
-        var cities = await uow.Repository<City>().QueryNoTracking()
-            .Where(c => c.IsActive && c.State.CountryCode == country)
+        var query = uow.Repository<City>().QueryNoTracking().Where(c => c.IsActive && c.State.CountryCode == country);
+        if (state is not null) query = query.Where(c => c.State.Slug == state);
+        var cities = await query
             .OrderBy(c => c.Source != null).ThenBy(c => c.SortOrder).ThenBy(c => c.Name)
             .Select(c => new { c.Id, c.Name, c.Slug, State = c.State.Name, c.ImageUrl, c.IsPopular, Curated = c.Source == null })
             .ToListAsync(ct);
+        var cityIds = cities.Select(c => c.Id).ToList();
         var counts = await uow.Repository<Business>().QueryNoTracking()
-            .Where(b => b.Status == BusinessStatuses.Active && b.CityId != null)
+            .Where(b => b.Status == BusinessStatuses.Active && b.CityId != null && (state == null || cityIds.Contains(b.CityId!.Value)))
             .GroupBy(b => b.CityId!.Value).Select(g => new { CityId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.CityId, x => x.Count, ct);
         // Top-level areas of curated cities only; every other city's areas come with GET /api/locations/cities/{slug}/areas.
@@ -112,6 +120,53 @@ public sealed class GetCitiesHandler(IUnitOfWork uow, IGeoLocationService geo, R
 
         return cities.Select(c => new CityDto(c.Id, c.Name, c.Slug, c.State, c.ImageUrl, c.IsPopular, counts.GetValueOrDefault(c.Id),
             c.Curated ? areas[c.Id].ToList() : [])).ToList();
+    }
+}
+
+/// <param name="CityCount">Cities listed so far; 0 until the city catalogue agent has imported the country (choosing it queues that).</param>
+public sealed record CountryDto(string Code, string Name, int CityCount);
+
+/// <summary>Countries a visitor can browse: every country Calling Bell prices its plans for (CountryPricing), by name.</summary>
+public sealed record GetCountriesQuery : IRequest<IReadOnlyList<CountryDto>>;
+
+public sealed class GetCountriesHandler(IUnitOfWork uow) : IRequestHandler<GetCountriesQuery, IReadOnlyList<CountryDto>>
+{
+    /// <summary>CountryPricing's default row for countries without one of their own; not a country.</summary>
+    private const string DefaultPricing = "ZZ";
+
+    public async Task<IReadOnlyList<CountryDto>> Handle(GetCountriesQuery request, CancellationToken ct)
+    {
+        var countries = await uow.Repository<CountryPricing>().QueryNoTracking()
+            .Where(p => p.IsActive && p.CountryCode != DefaultPricing)
+            .Select(p => new { p.CountryCode, p.CountryName })
+            .ToListAsync(ct);
+        var cityCounts = await uow.Repository<City>().QueryNoTracking()
+            .Where(c => c.IsActive)
+            .GroupBy(c => c.State.CountryCode).Select(g => new { Code = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Code, x => x.Count, ct);
+        return countries
+            .Select(c => new CountryDto(c.CountryCode, c.CountryName, cityCounts.GetValueOrDefault(c.CountryCode)))
+            .OrderBy(c => c.Name)
+            .ToList();
+    }
+}
+
+/// <param name="Name">State, province or region ("Quebec", "England", "Andhra Pradesh").</param>
+public sealed record StateDto(Guid Id, string Name, string Slug, int CityCount);
+
+/// <summary>A country's states / provinces / regions that have listed cities, by name.</summary>
+public sealed record GetStatesQuery(string Country) : IRequest<IReadOnlyList<StateDto>>;
+
+public sealed class GetStatesHandler(IUnitOfWork uow) : IRequestHandler<GetStatesQuery, IReadOnlyList<StateDto>>
+{
+    public async Task<IReadOnlyList<StateDto>> Handle(GetStatesQuery request, CancellationToken ct)
+    {
+        var country = request.Country.Trim().ToUpperInvariant();
+        return await uow.Repository<State>().QueryNoTracking()
+            .Where(s => s.IsActive && s.CountryCode == country && s.Cities.Any(c => c.IsActive))
+            .OrderBy(s => s.Name)
+            .Select(s => new StateDto(s.Id, s.Name, s.Slug, s.Cities.Count(c => c.IsActive)))
+            .ToListAsync(ct);
     }
 }
 
@@ -134,21 +189,29 @@ public sealed class GetLookupsHandler(IUnitOfWork uow) : IRequestHandler<GetLook
 }
 
 // ---------- Plans ----------
-public sealed record GetPlansQuery : IRequest<IReadOnlyList<PlanDto>>;
+/// <param name="Country">ISO country code: prices in that country's currency at fair local prices. Null: rupees as set (admin screens).</param>
+/// <param name="BusinessId">Prices for the country this business is in (the owner portal); takes precedence over <paramref name="Country"/>.</param>
+public sealed record GetPlansQuery(string? Country = null, Guid? BusinessId = null) : IRequest<IReadOnlyList<PlanDto>>;
 
-public sealed class GetPlansHandler(IUnitOfWork uow) : IRequestHandler<GetPlansQuery, IReadOnlyList<PlanDto>>
+public sealed class GetPlansHandler(IUnitOfWork uow, CountryPricingService pricing) : IRequestHandler<GetPlansQuery, IReadOnlyList<PlanDto>>
 {
     public async Task<IReadOnlyList<PlanDto>> Handle(GetPlansQuery request, CancellationToken ct)
     {
         var plans = await uow.Repository<SubscriptionPlan>().QueryNoTracking()
             .Where(p => p.IsActive).OrderBy(p => p.SortOrder).ToListAsync(ct);
-        return plans.Select(ToDto).ToList();
+        var country = request.BusinessId is { } id ? await pricing.ForBusinessAsync(id, ct) : await pricing.ForCountryAsync(request.Country, ct);
+        return plans.Select(p => ToDto(p, country)).ToList();
     }
 
-    public static PlanDto ToDto(SubscriptionPlan p) => new(p.Id, p.Code, p.Name, p.Tagline, p.MonthlyPrice, p.AnnualPrice, p.LeadCredits,
-        p.IncludesFeaturedListing, p.IncludesPrioritySupport,
-        p.Features.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), p.ImageUrl, p.BadgeColor, p.IsPopular,
-        p.MaxServices, p.MaxImages);
+    /// <summary>A plan priced for <paramref name="country"/> (India, as set, when null).</summary>
+    public static PlanDto ToDto(SubscriptionPlan p, CountryPrice? country = null)
+    {
+        var c = country ?? CountryPrice.India;
+        return new(p.Id, p.Code, p.Name, p.Tagline, c.Convert(p.MonthlyPrice), c.Convert(p.AnnualPrice), p.LeadCredits,
+            p.IncludesFeaturedListing, p.IncludesPrioritySupport,
+            p.Features.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), p.ImageUrl, p.BadgeColor, p.IsPopular,
+            p.MaxServices, p.MaxImages, c.CurrencyCode, c.Locale, c.TaxName, c.TaxRate);
+    }
 }
 
 // ---------- Banners ----------

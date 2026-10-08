@@ -14,8 +14,10 @@ import { ago, initials, moneyShort, number } from '@/lib/format';
 import type { Kpi } from '@/lib/types';
 
 /* ---------- Image with graceful fallback (never shows a broken image icon) ---------- */
-export function Img({ src, alt, className, fallbackText, rounded = 'rounded-lg', aspect, fit = 'cover', eager }: {
+export function Img({ src, alt, className, fallbackText, rounded = 'rounded-lg', aspect, fit = 'cover', eager, width, height }: {
   src?: string | null; alt: string; className?: string; fallbackText?: string; rounded?: string; aspect?: string; fit?: 'cover' | 'contain'; eager?: boolean;
+  /** Intrinsic size, so the browser reserves the space before the image loads (no layout shift). */
+  width?: number; height?: number;
 }) {
   const [failed, setFailed] = useState(false);
   const style = aspect ? { aspectRatio: aspect } : undefined;
@@ -28,7 +30,8 @@ export function Img({ src, alt, className, fallbackText, rounded = 'rounded-lg',
     );
   }
   return (
-    <img src={src} alt={alt} loading={eager ? 'eager' : 'lazy'} decoding="async" style={style} onError={() => setFailed(true)}
+    <img src={src} alt={alt} loading={eager ? 'eager' : 'lazy'} decoding="async" style={style} onError={() => setFailed(true)} width={width} height={height}
+      fetchPriority={eager ? 'high' : undefined}
       className={`${className ?? ''} ${rounded} ${fit === 'cover' ? 'object-cover' : 'object-contain'} bg-subtle`} />
   );
 }
@@ -93,9 +96,28 @@ export const VerifiedMark = () => (
   <Tooltip title="Documents verified by Calling Bell"><VerifiedRounded sx={{ fontSize: 18, color: '#2E90FA' }} aria-label="Verified" /></Tooltip>
 );
 
+/**
+ * Marks a registered Calling Bell business in lists that also show outside listings (Google Maps, AI picks): "Verified on Calling Bell"
+ * once its documents are verified, otherwise "On Calling Bell".
+ */
+export function CallingBellBadge({ verified, compact }: { verified: boolean; compact?: boolean }) {
+  return (
+    <Tooltip describeChild title={verified ? 'Registered on Calling Bell and documents verified' : 'Registered on Calling Bell; verification pending'}>
+      {/* Not focusable: it sits inside the card's link. */}
+      <span className={`inline-flex shrink-0 items-center gap-1 rounded-full font-semibold ${compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-[11px]'} ${
+        verified ? 'bg-success-soft text-success' : 'bg-subtle text-ink-2'}`}>
+        <VerifiedRounded sx={{ fontSize: compact ? 12 : 14 }} aria-hidden />
+        {verified ? 'Verified on Calling Bell' : 'On Calling Bell'}
+      </span>
+    </Tooltip>
+  );
+}
+
 /* ---------- Page scaffolding ---------- */
-export function PageHeader({ title, subtitle, actions, crumbs }: {
+export function PageHeader({ title, subtitle, actions, crumbs, headingLevel = 'h1' }: {
   title: string; subtitle?: ReactNode; actions?: ReactNode; crumbs?: { label: string; to?: string }[];
+  /** h2 when the page already has its h1 (e.g. in a hero above). */
+  headingLevel?: 'h1' | 'h2';
 }) {
   return (
     <Box className="mb-6">
@@ -108,7 +130,7 @@ export function PageHeader({ title, subtitle, actions, crumbs }: {
       )}
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }}>
         <div>
-          <Typography variant="h4" component="h1">{title}</Typography>
+          <Typography variant="h4" component={headingLevel}>{title}</Typography>
           {subtitle && <Typography color="text.secondary" mt={0.75} maxWidth={720}>{subtitle}</Typography>}
         </div>
         {actions && <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>{actions}</Stack>}
@@ -208,15 +230,18 @@ export function KpiSkeletons({ count = 4 }: { count?: number }) {
   return <>{Array.from({ length: count }, (_, i) => <Skeleton key={i} variant="rounded" height={124} />)}</>;
 }
 
-export function Panel({ title, subtitle, action, children, className, noPad }: {
+export function Panel({ title, subtitle, action, children, className, noPad, headingLevel = 'h3' }: {
   title?: string; subtitle?: string; action?: ReactNode; children: ReactNode; className?: string; noPad?: boolean;
+  /** h2 for a page's main sections (directly under its h1); h3 inside a section. */
+  headingLevel?: 'h2' | 'h3';
 }) {
+  const Heading = headingLevel;
   return (
     <section className={`card min-w-0 ${className ?? ''}`}>
       {title && (
         <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
           <div className="min-w-0">
-            <h3 className="text-[15px] font-semibold tracking-[-0.005em]">{title}</h3>
+            <Heading className="text-[15px] font-semibold tracking-[-0.005em]">{title}</Heading>
             {subtitle && <p className="mt-0.5 text-xs text-muted">{subtitle}</p>}
           </div>
           {action}

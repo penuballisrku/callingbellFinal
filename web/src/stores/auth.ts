@@ -25,4 +25,4 @@ export const useAuth = create<AuthState>()(
 
 export const isAdmin = (u: CurrentUser | null) => !!u?.roles.includes('Administrator');
 export const isOwner = (u: CurrentUser | null) => !!u?.roles.includes('BusinessOwner');
-export const homeFor = (u: CurrentUser | null) => (isAdmin(u) ? '/admin' : isOwner(u) ? '/business' : '/');
+export const homeFor = (u: CurrentUser | null) => (isAdmin(u) ? '/admin' : isOwner(u) ? '/owner' : '/');

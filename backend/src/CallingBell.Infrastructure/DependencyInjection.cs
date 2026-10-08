@@ -63,7 +63,16 @@ public static class DependencyInjection
 
         // Area discovery agent: OpenStreetMap places + India Post / OSM PIN codes, cleaned up by the local AI model, in the background.
         services.Configure<AreaDiscoveryOptions>(configuration.GetSection(AreaDiscoveryOptions.Section));
-        services.AddHttpClient(AreaDiscoveryRun.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(120));
+        services.AddHttpClient(AreaDiscoveryRun.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(120))
+            // The free OpenStreetMap / Wikidata servers drop connections when busy (even mid TLS handshake): connect within 15 s, and don't
+            // keep reusing a connection for long, so a retry opens a fresh one instead of a dead one.
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                ConnectTimeout = TimeSpan.FromSeconds(15),
+                PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+                PooledConnectionIdleTimeout = TimeSpan.FromSeconds(30),
+                AutomaticDecompression = System.Net.DecompressionMethods.All,
+            });
         services.AddSingleton<AreaDiscoveryQueue>();
         services.AddSingleton<IAreaDiscoveryService>(sp => sp.GetRequiredService<AreaDiscoveryQueue>());
         services.AddScoped<AreaDiscoveryRun>();
@@ -80,6 +89,7 @@ public static class DependencyInjection
         // AI enrichment with a free local Ollama model. All jobs share one background worker and never run inside a request.
         services.Configure<AiOptions>(configuration.GetSection(AiOptions.Section));
         services.AddHttpClient(OllamaChatClient.HttpClientName, c => c.Timeout = Timeout.InfiniteTimeSpan); // per-call timeout from AiOptions
+        services.AddHostedService<AiModelWarmup>();
         services.AddSingleton<OllamaChatClient>();
         services.AddSingleton<AiWorkQueue>();
         services.AddSingleton(typeof(AiResultCache<>));
@@ -98,10 +108,25 @@ public static class DependencyInjection
         services.Configure<ExternalSearchOptions>(configuration.GetSection(ExternalSearchOptions.Section));
         services.Configure<GooglePlacesOptions>(configuration.GetSection(GooglePlacesOptions.Section));
         services.AddHttpClient(OsmPlaceSearch.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(60)); // per-search budget from ExternalSearchOptions
-        services.AddHttpClient(GooglePlacesSearch.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(10));
+        // Keeps the TLS connection to Google open between searches (the default drops it after a minute idle, and a new one costs
+        // ~1-2 s), and multiplexes concurrent requests (results plus per-card contact lookups) over HTTP/2.
+        services.AddHttpClient(GooglePlacesSearch.HttpClientName, c =>
+            {
+                c.Timeout = TimeSpan.FromSeconds(10);
+                c.DefaultRequestVersion = System.Net.HttpVersion.Version20;
+                c.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
+            })
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                PooledConnectionIdleTimeout = TimeSpan.FromMinutes(15),
+                PooledConnectionLifetime = TimeSpan.FromMinutes(30),
+                EnableMultipleHttp2Connections = true,
+                AutomaticDecompression = System.Net.DecompressionMethods.All,
+            });
         services.AddMemoryCache();
         services.AddSingleton<IOsmPlaceSearch, OsmPlaceSearch>();
         services.AddSingleton<IGooglePlacesSearch, GooglePlacesSearch>();
+        services.AddScoped<IPopularSearchCounter, PopularSearchCounter>();
         services.AddHttpClient(PhotonPlaceGeocoder.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(8));
         services.AddSingleton<IPlaceGeocoder, PhotonPlaceGeocoder>();
 

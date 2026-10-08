@@ -1,19 +1,12 @@
-import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api';
 import { compactNumber, number } from '@/lib/format';
 import { useDocumentTitle } from '@/lib/hooks';
-import type { MarketingPage } from '@/lib/types';
 import { ErrorState } from '@/components/ui';
-import { ClosingCta, ContentPageSkeleton, DividedList, FeaturePanel, IconCardGrid, IntroSection, PageHero, StatsStrip } from '@/features/content/ContentBlocks';
+import { ClosingCta, ContentPageSkeleton, DividedList, FeaturePanel, IconCardGrid, IntroSection, PageHero, StatsStrip, useMarketingPage } from '@/features/content/ContentBlocks';
 
 /** "About Calling Bell": every word comes from MarketingContent (PageKey "About"); the numbers are live platform stats. */
 export default function AboutPage() {
   useDocumentTitle('About Calling Bell');
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['content', 'About'],
-    queryFn: () => api.get<MarketingPage>('/api/content/pages/About'),
-    staleTime: 300_000,
-  });
+  const { data, isLoading, isError, refetch } = useMarketingPage('About');
 
   if (isError) return <div className="container-page py-16"><ErrorState onRetry={() => refetch()} /></div>;
   if (isLoading || !data) return <ContentPageSkeleton />;

@@ -5,8 +5,10 @@
    onboarding steps, owner testimonials, roadmap and FAQs.
    Copy is drawn from the Calling Bell business plan; plan-tier labels match SubscriptionPlans.
    Photos and video posters are attached by 15_MarketingMedia.sql.
+   The hero photo is chosen per country by 26_CountryImages.sql (this row holds the neutral default).
    Testimonials reference real businesses (FK) so their live leads, bookings, rating and plan are shown.
    Idempotent: MERGE on MarketingContent.Code. Body text uses "\n" for paragraph / line breaks.
+   "{country}" / "{country's}" are filled in by the page with the visitor's country (from their IP), e.g. "Canada's".
    ===================================================================================== */
 SET NOCOUNT ON;
 SET QUOTED_IDENTIFIER ON;
@@ -25,17 +27,17 @@ CREATE TABLE #Mc (
 INSERT INTO #Mc (Code, SectionKey, SortOrder, Eyebrow, Title, Subtitle, Body, IconKey, AltText, VideoUrl, MediaCredit, MediaCreditUrl, CtaText, LinkUrl, BusinessSlug) VALUES
 /* ---------- Hero ---------- */
 (N'LYB-HERO', N'Hero', 1, N'For businesses & service providers',
- N'Put your business on India''s real-time local network',
+ N'Put your business on {country''s} real-time local network',
  N'Customers nearby can see when you''re available, message or call you instantly, request a quote and book in minutes. You get the leads, bookings and insights to grow.',
- NULL, NULL, N'Shopkeeper smiling outside his store on a busy Indian street', NULL,
- N'Photo: Samyuktha Nair on Unsplash', N'https://unsplash.com/photos/r4YUKKh96rM', N'List your business free', N'/register?type=business', NULL),
+ NULL, NULL, N'Lit OPEN sign in a shop window', NULL,
+ N'Photo: Aaron Pruzaniec, CC BY 2.0, via Wikimedia Commons', N'https://commons.wikimedia.org/wiki/File:Neon_Open_Sign.jpg', N'List your business free', N'/register?type=business', NULL),
 
 /* ---------- Company overview ---------- */
 (N'LYB-OVERVIEW', N'Overview', 1, N'About Calling Bell',
  N'More than a directory: a growth platform for local businesses',
  N'Discover. Connect. Book. Grow.',
- N'Calling Bell is a real-time local business discovery, lead generation and booking platform built for India''s cities. Customers don''t just find you; they see whether you''re available right now, chat or call instantly, request a quotation, book a slot or start a video consultation.\nFor business owners, Calling Bell brings everything needed to win and serve local customers into one place: a verified profile, live availability, a lead inbox, a booking calendar, reviews, advertising and analytics. Whether you run a one-person repair service or a multi-branch clinic, you get the professional tools that large brands use, at a price that fits a local business.',
- NULL, N'Business team discussing growth plans in a Bengaluru office', NULL,
+ N'Calling Bell is a real-time local business discovery, lead generation and booking platform built for {country''s} cities. Customers don''t just find you; they see whether you''re available right now, chat or call instantly, request a quotation, book a slot or start a video consultation.\nFor business owners, Calling Bell brings everything needed to win and serve local customers into one place: a verified profile, live availability, a lead inbox, a booking calendar, reviews, advertising and analytics. Whether you run a one-person repair service or a multi-branch clinic, you get the professional tools that large brands use, at a price that fits a local business.',
+ NULL, N'Business team discussing growth plans in an office', NULL,
  N'Photo: Smartworks Coworking on Unsplash', N'https://unsplash.com/photos/cW4lLTavU80', NULL, NULL, NULL),
 
 /* ---------- Business objectives (what we help you achieve) ---------- */
@@ -81,7 +83,7 @@ INSERT INTO #Mc (Code, SectionKey, SortOrder, Eyebrow, Title, Subtitle, Body, Ic
  N'Document verification and moderated reviews keep Calling Bell credible for customers and fair for businesses.', NULL, N'shield', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 (N'LYB-USP-ONE', N'Highlight', 5, NULL, N'One dashboard for everything',
  N'Leads, bookings, staff, availability, reviews, advertising and analytics together. No more juggling notebooks and chat threads.', NULL, N'dashboard', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-(N'LYB-USP-LOCAL', N'Highlight', 6, NULL, N'Built for India''s cities',
+(N'LYB-USP-LOCAL', N'Highlight', 6, NULL, N'Built for {country''s} cities',
  N'Search by city, area and pincode, with mobile-first profiles, call and WhatsApp buttons, and UPI payments.', NULL, N'place', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 
 /* ---------- Photo gallery: businesses that grow on Calling Bell ---------- */

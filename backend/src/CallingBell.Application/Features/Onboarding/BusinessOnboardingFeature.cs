@@ -274,7 +274,7 @@ internal sealed class BusinessFactory(IUnitOfWork uow)
             Title = "Welcome to Calling Bell",
             Message = $"{business.Name} has been submitted for review. Add photos and videos while our team approves your listing.",
             NotificationType = "BusinessCreated",
-            LinkUrl = "/business",
+            LinkUrl = "/owner",
             CreatedOn = DateTimeOffset.UtcNow
         });
 

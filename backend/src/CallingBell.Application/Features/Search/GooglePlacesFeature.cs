@@ -6,6 +6,7 @@ using CallingBell.Domain.Entities;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace CallingBell.Application.Features.Search;
 
@@ -15,8 +16,12 @@ public sealed record GooglePlacePhotoDto(string Url, int? Width, int? Height, IR
 
 /// <param name="DistanceKm">From the searched point.</param>
 /// <param name="DirectionsUrl">Google Maps directions to the place.</param>
+/// <param name="Id">Google place id, for <c>GET /api/places/details?source=google&amp;id=</c>.</param>
+/// <param name="MapsUrl">The place's own Google Maps page (or a map search for it).</param>
+/// <param name="Phone">As written locally; <paramref name="InternationalPhone"/> has the country code (for calls and WhatsApp).</param>
 public sealed record GooglePlaceDto(string Name, string? Address, double? Rating, int? UserRatingCount, double? Latitude, double? Longitude,
-    double? DistanceKm, string DirectionsUrl, IReadOnlyList<GooglePlacePhotoDto> Photos);
+    double? DistanceKm, string DirectionsUrl, IReadOnlyList<GooglePlacePhotoDto> Photos,
+    string MapsUrl, string? Phone, string? InternationalPhone, bool? OpenNow, string? Id);
 
 /// <summary>Where the search was centred.</summary>
 /// <param name="Source">"coordinates" (lat/lon given), "area" (selected area), "city" (city centre) or "place" (a place found by name).</param>
@@ -55,7 +60,8 @@ public sealed class GooglePlacesSearchValidator : AbstractValidator<GooglePlaces
 /// Google Places Text Search, one page at a time. With a city or area the search is centred on its coordinates from the database and
 /// the place is named in the query ("Electricians in Madhapur, Hyderabad"), since Google only biases results towards the location.
 /// </summary>
-public sealed class GooglePlacesSearchHandler(IGooglePlacesSearch google, IUnitOfWork uow, IPlaceGeocoder geocoder)
+public sealed class GooglePlacesSearchHandler(IGooglePlacesSearch google, IUnitOfWork uow, IPlaceGeocoder geocoder, IPopularSearchCounter counter,
+    ILogger<GooglePlacesSearchHandler> logger)
     : IRequestHandler<GooglePlacesSearchQuery, GooglePlacesSearchDto>
 {
     private const int PhotoWidthPx = 640;
@@ -75,8 +81,15 @@ public sealed class GooglePlacesSearchHandler(IGooglePlacesSearch google, IUnitO
                 p is { Latitude: { } plat, Longitude: { } plon } ? Math.Round(GeoMath.HaversineKm(lat, lon, plat, plon), 1) : null,
                 DirectionsUrl(p),
                 p.Photos.Take(MaxPhotos).Select(ph => new GooglePlacePhotoDto(
-                    $"/api/places/photo?name={Uri.EscapeDataString(ph.Name)}&maxWidth={PhotoWidthPx}", ph.WidthPx, ph.HeightPx, ph.Attributions)).ToList()))
+                    $"/api/places/photo?name={Uri.EscapeDataString(ph.Name)}&maxWidth={PhotoWidthPx}", ph.WidthPx, ph.HeightPx, ph.Attributions)).ToList(),
+                MapsUrl(p), p.Phone ?? p.InternationalPhone, p.InternationalPhone, p.OpenNow, p.Id))
             .ToList();
+        // A new search (not "show more") counts towards Popular searches. Never fails the search.
+        if (string.IsNullOrEmpty(r.PageToken))
+        {
+            try { await counter.RecordAsync(r.TextQuery!.Trim(), ct); }
+            catch (Exception ex) when (ex is not OperationCanceledException) { logger.LogWarning(ex, "Couldn't count the search for Popular searches"); }
+        }
         return new GooglePlacesSearchDto(text, location, places, page.NextPageToken);
     }
 
@@ -114,6 +127,11 @@ public sealed class GooglePlacesSearchHandler(IGooglePlacesSearch google, IUnitO
             : throw new BadRequestException($"{city.Name} has no map location yet.");
     }
 
+    private static string MapsUrl(GooglePlace p) => !string.IsNullOrWhiteSpace(p.MapsUrl) ? p.MapsUrl
+        : p is { Latitude: { } lat, Longitude: { } lon }
+            ? string.Create(CultureInfo.InvariantCulture, $"https://www.google.com/maps/search/?api=1&query={lat:0.######},{lon:0.######}")
+            : $"https://www.google.com/maps/search/?api=1&query={Uri.EscapeDataString($"{p.Name} {p.FormattedAddress}")}";
+
     private static string DirectionsUrl(GooglePlace p) => p is { Latitude: { } lat, Longitude: { } lon }
         ? string.Create(CultureInfo.InvariantCulture, $"https://www.google.com/maps/dir/?api=1&destination={lat:0.######},{lon:0.######}")
         : $"https://www.google.com/maps/search/?api=1&query={Uri.EscapeDataString($"{p.Name} {p.FormattedAddress}")}";
@@ -135,4 +153,46 @@ public sealed class GooglePlacePhotoValidator : AbstractValidator<GooglePlacePho
 public sealed class GooglePlacePhotoHandler(IGooglePlacesSearch google) : IRequestHandler<GooglePlacePhotoQuery, string>
 {
     public Task<string> Handle(GooglePlacePhotoQuery r, CancellationToken ct) => google.GetPhotoUriAsync(r.Name!, r.MaxWidth, ct);
+}
+
+/// <summary>Contact details for a place found outside Google (e.g. an AI-recommended OpenStreetMap place).</summary>
+/// <param name="Found">False when Google Maps has no place with that name there; the other fields are then null.</param>
+/// <param name="Phone">National format, e.g. "098480 12345".</param>
+/// <param name="MapsUrl">The matched place on Google Maps (Google requires its data to be attributed).</param>
+/// <param name="OpenNow">Whether it is open right now, by Google's opening hours; null when unknown.</param>
+/// <param name="PhotoUrl">Served through <c>GET /api/places/photo</c>; shown with <paramref name="PhotoCredit"/>, as Google requires.</param>
+public sealed record PlaceContactDto(bool Found, string? Phone, string? InternationalPhone, string? Website, string? MapsUrl,
+    decimal? Rating = null, int? RatingCount = null, bool? OpenNow = null, string? PhotoUrl = null, string? PhotoCredit = null, string? PhotoCreditUrl = null);
+
+/// <param name="Name">The place's name as shown in the results.</param>
+public sealed record PlaceContactQuery(string? Name, double? Lat, double? Lon) : IRequest<PlaceContactDto>;
+
+public sealed class PlaceContactValidator : AbstractValidator<PlaceContactQuery>
+{
+    public PlaceContactValidator()
+    {
+        RuleFor(x => x.Name).NotEmpty().WithMessage("The place name is required.").MaximumLength(200);
+        RuleFor(x => x.Lat).NotNull().WithMessage("Latitude is required.").InclusiveBetween(-90, 90);
+        RuleFor(x => x.Lon).NotNull().WithMessage("Longitude is required.").InclusiveBetween(-180, 180);
+    }
+}
+
+/// <summary>
+/// Looks a place's phone number up on Google Maps when the visitor asks for it (OpenStreetMap, the AI tier's source, rarely has phone
+/// numbers). Runs per click rather than for every result, since each lookup is a billed Google request; nothing is stored.
+/// </summary>
+public sealed class PlaceContactHandler(IGooglePlacesSearch google) : IRequestHandler<PlaceContactQuery, PlaceContactDto>
+{
+    public async Task<PlaceContactDto> Handle(PlaceContactQuery r, CancellationToken ct)
+    {
+        if (!google.IsEnabled) throw new ExternalServiceException(503, "Phone lookup is not available right now.");
+        var c = await google.FindContactAsync(r.Name!.Trim(), r.Lat!.Value, r.Lon!.Value, ct);
+        if (c is null) return new PlaceContactDto(false, null, null, null, null);
+        var credit = c.Photo?.Attributions.FirstOrDefault();
+        return new PlaceContactDto(true, c.Phone ?? c.InternationalPhone, c.InternationalPhone, c.Website, c.MapsUrl, c.Rating, c.RatingCount, c.OpenNow,
+            c.Photo is null ? null : $"/api/places/photo?name={Uri.EscapeDataString(c.Photo.Name)}&maxWidth={PhotoWidthPx}",
+            credit?.DisplayName, credit?.Uri);
+    }
+
+    private const int PhotoWidthPx = 320;
 }

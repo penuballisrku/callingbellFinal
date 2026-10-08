@@ -5,6 +5,7 @@
    behind Calling Bell (TekOrtus Pvt. Ltd.) and a closing call to action.
    Live platform numbers on the page come from the same API (BusinessGrowthStats), not from here.
    Idempotent: MERGE on MarketingContent.Code. Body text uses "\n" for paragraph breaks.
+   "{country}" / "{country's}" are filled in by the page with the visitor's country (from their IP), e.g. "Canada's".
    ===================================================================================== */
 SET NOCOUNT ON;
 SET QUOTED_IDENTIFIER ON;
@@ -22,7 +23,7 @@ CREATE TABLE #About (
 INSERT INTO #About (Code, SectionKey, SortOrder, Eyebrow, Title, Subtitle, Body, IconKey, CtaText, LinkUrl) VALUES
 /* ---------- Hero ---------- */
 (N'ABT-HERO', N'Hero', 1, N'About Calling Bell',
- N'India''s real-time network for local businesses',
+ N'{country''s} real-time network for local businesses',
  N'Calling Bell connects people with trusted local businesses and service providers, shows who is available right now, and makes it simple to chat, call, request a quotation or book in minutes.',
  NULL, NULL, N'Find services near you', N'/search'),
 
@@ -30,14 +31,14 @@ INSERT INTO #About (Code, SectionKey, SortOrder, Eyebrow, Title, Subtitle, Body,
 (N'ABT-STORY', N'Story', 1, N'Who we are',
  N'More than a directory',
  N'Discover. Connect. Book. Grow.',
- N'Calling Bell is a real-time local business discovery, lead generation and booking platform built for India''s cities and towns. Traditional directories stop at a name and a phone number. Calling Bell goes further: customers can see whether a business is online, busy, or available for a call, chat, video consultation or booking, and act on it straight away.\nFor customers, that means less time searching and waiting, and more confidence in who they choose. Verified profiles, transparent pricing and genuine reviews make it easy to compare providers and pick the right one.\nFor businesses and service providers, Calling Bell brings everything needed to win and serve local customers into one place: a verified profile, live availability, a lead inbox, quotations, a booking calendar, reviews, advertising and analytics. From electricians, plumbers and AC technicians to doctors, lawyers, tutors, salons and event planners, Calling Bell makes every local service as easy to find and book as shopping online.',
+ N'Calling Bell is a real-time local business discovery, lead generation and booking platform built for {country''s} cities and towns. Traditional directories stop at a name and a phone number. Calling Bell goes further: customers can see whether a business is online, busy, or available for a call, chat, video consultation or booking, and act on it straight away.\nFor customers, that means less time searching and waiting, and more confidence in who they choose. Verified profiles, transparent pricing and genuine reviews make it easy to compare providers and pick the right one.\nFor businesses and service providers, Calling Bell brings everything needed to win and serve local customers into one place: a verified profile, live availability, a lead inbox, quotations, a booking calendar, reviews, advertising and analytics. From electricians, plumbers and AC technicians to doctors, lawyers, tutors, salons and event planners, Calling Bell makes every local service as easy to find and book as shopping online.',
  NULL, NULL, NULL),
 
 /* ---------- Mission and vision ---------- */
 (N'ABT-MISSION', N'Purpose', 1, N'Our mission', N'Make every local business discoverable, reachable and bookable in real time',
  N'We give customers a faster, more trustworthy way to get things done, and we give local businesses the professional tools they need to grow, at a price that fits a local business.',
  NULL, N'bolt', NULL, NULL),
-(N'ABT-VISION', N'Purpose', 2, N'Our vision', N'A connected local economy in every Indian city',
+(N'ABT-VISION', N'Purpose', 2, N'Our vision', N'A connected local economy in every city in {country}',
  N'We want a world where the nearest qualified professional is always one tap away, and where every neighbourhood business, however small, can compete on service, quality and trust.',
  NULL, N'place', NULL, NULL),
 
@@ -65,7 +66,7 @@ INSERT INTO #About (Code, SectionKey, SortOrder, Eyebrow, Title, Subtitle, Body,
 (N'ABT-VALUE-REALTIME', N'Value', 2, NULL, N'Real-time by design',
  N'Live availability, instant messaging and timely notifications, because local needs are usually urgent.', NULL, N'notifications', NULL, NULL),
 (N'ABT-VALUE-LOCAL', N'Value', 3, NULL, N'Local at heart',
- N'Built around Indian cities, areas and PIN codes, and around the way local businesses actually work.', NULL, N'place', NULL, NULL),
+ N'Built around {country''s} cities, areas and PIN codes, and around the way local businesses actually work.', NULL, N'place', NULL, NULL),
 (N'ABT-VALUE-PRIVACY', N'Value', 4, NULL, N'Privacy and security',
  N'Customer details are shared only when a customer chooses to contact a business. Access is role-based and every sensitive action is logged.', NULL, N'shield', NULL, NULL),
 
@@ -79,7 +80,7 @@ INSERT INTO #About (Code, SectionKey, SortOrder, Eyebrow, Title, Subtitle, Body,
 /* ---------- Closing call to action ---------- */
 (N'ABT-CTA', N'Cta', 1, NULL,
  N'Find a trusted professional near you, or grow your business with Calling Bell',
- N'Join the customers and businesses already using Calling Bell across India.',
+ N'Join the customers and businesses already using Calling Bell.',
  NULL, NULL, N'List your business free', N'/list-your-business');
 
 MERGE dbo.MarketingContent AS t

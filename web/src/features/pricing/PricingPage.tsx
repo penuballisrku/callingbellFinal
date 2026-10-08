@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
 import { Button, Skeleton, ToggleButton, ToggleButtonGroup } from '@mui/material';
 import CheckRounded from '@mui/icons-material/CheckRounded';
-import { api } from '@/lib/api';
 import { moneyExact, number } from '@/lib/format';
-import { useDocumentTitle } from '@/lib/hooks';
+import { useDocumentTitle, usePlans } from '@/lib/hooks';
+import { taxNote } from '@/lib/payments';
 import type { Plan } from '@/lib/types';
 import { ErrorState, Img } from '@/components/ui';
 
@@ -24,9 +23,9 @@ export function PlanGrid({ plans, cycle, currentCode, action }: { plans: Plan[];
             </div>
             <p className="mt-2 min-h-[40px] text-sm text-muted">{p.tagline}</p>
             <div className="mt-3">
-              <span className="text-3xl font-bold tracking-tight">{price === 0 ? 'Free' : moneyExact(price)}</span>
+              <span className="text-3xl font-bold tracking-tight">{price === 0 ? 'Free' : moneyExact(price, p)}</span>
               {price > 0 && <span className="text-sm text-muted"> /{cycle === 'annual' ? 'year' : 'month'}</span>}
-              <div className="text-xs text-muted">{price > 0 ? '+ 18% GST' : 'Forever free'}{cycle === 'annual' && p.monthlyPrice > 0 && ` · save ${moneyExact(p.monthlyPrice * 12 - p.annualPrice)}`}</div>
+              <div className="min-h-4 text-xs text-muted">{[price > 0 ? taxNote(p) : 'Forever free', cycle === 'annual' && p.monthlyPrice > 0 && p.monthlyPrice * 12 > p.annualPrice ? `save ${moneyExact(p.monthlyPrice * 12 - p.annualPrice, p)}` : ''].filter(Boolean).join(' · ')}</div>
             </div>
             <ul className="mt-4 flex-1 space-y-2 text-sm">
               {p.features.map((f) => <li key={f} className="flex gap-2"><CheckRounded sx={{ fontSize: 18, color: '#12B76A' }} /><span>{f}</span></li>)}
@@ -42,7 +41,8 @@ export function PlanGrid({ plans, cycle, currentCode, action }: { plans: Plan[];
 export default function PricingPage() {
   useDocumentTitle('Plans for businesses');
   const [cycle, setCycle] = useState<'monthly' | 'annual'>('monthly');
-  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ['plans'], queryFn: () => api.get<Plan[]>('/api/plans'), staleTime: 600_000 });
+  // Priced for the visitor's country: its currency at a fair local price.
+  const { data, isLoading, isError, refetch } = usePlans();
 
   return (
     <div className="container-page py-12">

@@ -34,7 +34,7 @@ export default function OwnerSettings() {
   if (isError) return <ErrorState onRetry={() => refetch()} />;
   return (
     <>
-      <PageHeader title="Settings" subtitle="Manage your account, security and business preferences." crumbs={[{ label: 'Dashboard', to: '/business' }, { label: 'Settings' }]} />
+      <PageHeader title="Settings" subtitle="Manage your account, security and business preferences." crumbs={[{ label: 'Dashboard', to: '/owner' }, { label: 'Settings' }]} />
       {isLoading || !data ? <Skeleton variant="rounded" height={520} /> : (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_360px]">
           <div className="min-w-0 space-y-6">
@@ -46,10 +46,10 @@ export default function OwnerSettings() {
             <Panel title="Business settings" noPad>
               <ul className="divide-y divide-line">
                 {[
-                  ['/business/profile', 'Business profile', 'Description, contact, hours and social links', <StorefrontOutlined key="p" />],
-                  ['/business/media', 'Photos & videos', 'Logo, cover image, gallery and videos', <PermMediaOutlined key="m" />],
-                  ['/business/plan', 'Plan & billing', 'Your plan, invoices and upgrades', <WorkspacePremiumOutlined key="b" />],
-                  ['/business/setup', 'Add another business', 'List a second location or brand', <AddBusinessOutlined key="a" />],
+                  ['/owner/profile', 'Business profile', 'Description, contact, hours and social links', <StorefrontOutlined key="p" />],
+                  ['/owner/media', 'Photos & videos', 'Logo, cover image, gallery and videos', <PermMediaOutlined key="m" />],
+                  ['/owner/plan', 'Plan & billing', 'Your plan, invoices and upgrades', <WorkspacePremiumOutlined key="b" />],
+                  ['/owner/setup', 'Add another business', 'List a second location or brand', <AddBusinessOutlined key="a" />],
                 ].map(([to, label, hint, icon]) => (
                   <li key={to as string}>
                     <Link to={to as string} className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-subtle">

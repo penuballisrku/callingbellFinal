@@ -45,6 +45,20 @@ public sealed class AreaDiscoveryOptions
     /// </summary>
     public bool UseAi { get; set; }
     public string UserAgent { get; set; } = "CallingBell-area-discovery/1.0 (+https://callingbell.in)";
+    /// <summary>
+    /// Ask the Wikidata Query Service (free, no key) first: a city's neighbourhoods in a few seconds, listed while OpenStreetMap - whose
+    /// public servers are often busy for minutes - is searched.
+    /// </summary>
+    public bool UseWikidata { get; set; } = true;
+    public string WikidataSparqlUrl { get; set; } = "https://query.wikidata.org/sparql";
+    /// <summary>Overpass servers are asked one after another, the next one this many seconds later if none has answered yet.</summary>
+    public int OverpassStaggerSeconds { get; set; } = 10;
+    /// <summary>Give up on OpenStreetMap after this long (the Wikidata areas stay; it is tried again later).</summary>
+    public int OverpassTimeoutSeconds { get; set; } = 100;
+    /// <summary>Cities discovered at the same time, so one slow city doesn't hold up the others' Wikidata areas.</summary>
+    public int Concurrency { get; set; } = 8;
+    /// <summary>Of those, how many may query OpenStreetMap at once (its public servers are shared and often busy).</summary>
+    public int OverpassConcurrency { get; set; } = 3;
 }
 
 /// <summary>Queue of cities waiting for discovery; one run per city at a time.</summary>
@@ -69,35 +83,66 @@ internal sealed class AreaDiscoveryQueue(IOptions<AreaDiscoveryOptions> options)
     internal void Done(Guid cityId) => _pending.TryRemove(cityId, out _);
 
     internal void Failed(Guid cityId) => _failedUntil[cityId] = DateTimeOffset.UtcNow.AddMinutes(options.Value.RetryAfterMinutes);
+
+    /// <summary>Limits concurrent OpenStreetMap queries across all runs (the quick Wikidata stage isn't limited by it).</summary>
+    internal SemaphoreSlim OverpassSlots { get; } = new(Math.Max(1, options.Value.OverpassConcurrency));
 }
 
-internal sealed class AreaDiscoveryWorker(AreaDiscoveryQueue queue, IServiceScopeFactory scopes, ILogger<AreaDiscoveryWorker> logger) : BackgroundService
+internal sealed class AreaDiscoveryWorker(AreaDiscoveryQueue queue, IServiceScopeFactory scopes, IOptions<AreaDiscoveryOptions> options,
+    ILogger<AreaDiscoveryWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Up to Concurrency cities at once: each run waits mostly on remote services, and one slow city shouldn't hold up the next.
+        using var slots = new SemaphoreSlim(Math.Max(1, options.Value.Concurrency));
+        var running = new List<Task>();
         try
         {
             await foreach (var cityId in queue.Reader.ReadAllAsync(stoppingToken))
             {
-                try
+                await slots.WaitAsync(stoppingToken);
+                running.RemoveAll(t => t.IsCompleted);
+                running.Add(Task.Run(async () =>
                 {
-                    using var scope = scopes.CreateScope();
-                    await scope.ServiceProvider.GetRequiredService<AreaDiscoveryRun>().ExecuteAsync(cityId, stoppingToken);
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException || !stoppingToken.IsCancellationRequested)
-                {
-                    logger.LogWarning(ex, "Area discovery failed for city {CityId}", cityId);
-                    queue.Failed(cityId);
-                }
-                finally
-                {
-                    queue.Done(cityId);
-                }
+                    try { await RunAsync(cityId, stoppingToken); }
+                    finally { slots.Release(); }
+                }, CancellationToken.None));
             }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
             // Normal shutdown.
+        }
+        await Task.WhenAll(running);
+    }
+
+    private static Exception Innermost(Exception ex)
+    {
+        while (ex.InnerException is { } inner) ex = inner;
+        return ex;
+    }
+
+    private async Task RunAsync(Guid cityId, CancellationToken stoppingToken)
+    {
+        try
+        {
+            using var scope = scopes.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<AreaDiscoveryRun>().ExecuteAsync(cityId, stoppingToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !stoppingToken.IsCancellationRequested)
+        {
+            queue.Failed(cityId);
+            // The free map servers being busy or unreachable is expected now and then: one line, not a stack trace. The areas already
+            // found (Wikidata) stay listed and the city is tried again later.
+            if (ex is HttpRequestException or TaskCanceledException)
+                logger.LogWarning("Area discovery for city {CityId} paused: {Reason}. Areas found so far stay listed; retrying in {Minutes} min",
+                    cityId, Innermost(ex).Message, options.Value.RetryAfterMinutes);
+            else
+                logger.LogWarning(ex, "Area discovery failed for city {CityId}", cityId);
+        }
+        finally
+        {
+            queue.Done(cityId);
         }
     }
 }
@@ -105,17 +150,19 @@ internal sealed class AreaDiscoveryWorker(AreaDiscoveryQueue queue, IServiceScop
 /// <summary>
 /// One discovery run for a city:
 /// <list type="number">
-/// <item>collect named places (suburb, quarter, locality, town, village, neighbourhood) around the city centre from OpenStreetMap;</item>
+/// <item>list the city's neighbourhoods from Wikidata (seconds) straight away, then collect named places (suburb, quarter, locality, town,
+/// village, neighbourhood) around the city centre from OpenStreetMap (often minutes, its public servers are busy) and merge the two;</item>
 /// <item>normalise names and merge obvious duplicates; the local AI model then merges alternate spellings, fixes names and drops
 /// entries that are not localities (it never supplies facts such as PIN codes or coordinates);</item>
-/// <item>give each area a PIN code from OSM, India Post or OSM reverse geocoding, only inside the city's postal zone;</item>
+/// <item>in India, give each area a PIN code from OSM, India Post or OSM reverse geocoding, only inside the city's postal zone; elsewhere
+/// the area keeps the postcode OpenStreetMap tags it with, if any (no postal directory to verify it against);</item>
 /// <item>upsert top-level areas and attach neighbourhoods to their nearest area as sub-localities;</item>
 /// <item>deactivate previously discovered areas the sources no longer list (never curated areas, nor areas businesses use).</item>
 /// </list>
 /// </summary>
 internal sealed class AreaDiscoveryRun(
     ApplicationDbContext db, IHttpClientFactory httpFactory, OllamaChatClient ai, IOptions<AreaDiscoveryOptions> options,
-    IOptions<AiOptions> aiOptions, IMemoryCache cache, ILogger<AreaDiscoveryRun> logger)
+    IOptions<AiOptions> aiOptions, IMemoryCache cache, AreaDiscoveryQueue queue, ILogger<AreaDiscoveryRun> logger)
 {
     public const string HttpClientName = "area-discovery";
     private const string Agent = "agent:area-discovery";
@@ -124,6 +171,10 @@ internal sealed class AreaDiscoveryRun(
     /// <summary>Transit points and junctions that OpenStreetMap sometimes tags as places; they are not localities.</summary>
     private static readonly Regex NotALocality = new(
         @"\b(jn|junction|x[\s-]?roads?|cross[\s-]?roads?|crossroads|bus\s(stop|stand|depot|station)|metro(\sstation)?|railway\sstation|signal|flyover|toll\splaza)\b\.?$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    /// <summary>Road features named first in other languages ("Échangeur Anjou", "Courbe Senna", "Autobahnkreuz Köln-Süd"); not localities.</summary>
+    private static readonly Regex RoadFeature = new(
+        @"^(échangeur|echangeur|courbe|carrefour|rond-point|interchange|intercambiador|enlace|autobahnkreuz|autobahndreieck|kreuz|dreieck)\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
     /// <summary>Names that look like a landmark or building rather than a locality; the AI may drop these whatever their OSM type.</summary>
     private static readonly Regex LooksLikeLandmark = new(
@@ -140,6 +191,8 @@ internal sealed class AreaDiscoveryRun(
         public required double Lat { get; init; }
         public required double Lng { get; init; }
         public string? Postcode { get; init; }
+        /// <summary>"osm" or "wikidata".</summary>
+        public string Source { get; init; } = "osm";
         public HashSet<string> AltNames { get; } = new(StringComparer.OrdinalIgnoreCase);
         public string Slug => Slugify(Name);
     }
@@ -153,20 +206,66 @@ internal sealed class AreaDiscoveryRun(
         var (lat0, lng0) = ((double)city.Latitude, (double)city.Longitude);
         logger.LogInformation("Area discovery started for {City}", city.Name);
 
+        // 1. Wikidata first: a few seconds, so the city's areas are listed while OpenStreetMap is searched. Each answer is listed as
+        //    soon as it arrives (the places recorded in the city first, then - when those are few - the slower search around it).
+        var wiki = !o.UseWikidata ? [] : await WikidataAsync(city, lat0, lng0, o.RadiusKm, async found =>
+        {
+            var quick = await MergeAsync(city, found, started, retire: false, useAi: false, ct);
+            city.AreaDiscoveryNote = Trim($"{found.Count} Wikidata places; {quick}; searching OpenStreetMap.", 400);
+            await db.SaveChangesAsync(ct);
+            ReferenceDataCache.Invalidate(cache);
+            logger.LogInformation("Area discovery for {City}: {Note}", city.Name, city.AreaDiscoveryNote);
+        }, ct);
+
+        // 2. OpenStreetMap, merged with the Wikidata places. If its servers are unavailable the Wikidata areas stay listed and the run
+        //    fails, so it is tried again later.
+        List<Candidate> osm;
+        try
+        {
+            await queue.OverpassSlots.WaitAsync(ct);
+            try { osm = await OverpassAsync(lat0, lng0, o.RadiusKm * 1000, ct); }
+            finally { queue.OverpassSlots.Release(); }
+        }
+        catch (Exception ex) when (wiki.Count > 0 && (ex is HttpRequestException or TaskCanceledException) && !ct.IsCancellationRequested)
+        {
+            city.AreaDiscoveryNote = Trim($"{wiki.Count} Wikidata places listed; OpenStreetMap unavailable ({ex.Message}), retrying later.", 400);
+            await db.SaveChangesAsync(ct);
+            throw;
+        }
+        var summary = await MergeAsync(city, [.. wiki, .. osm], started, retire: true, useAi: o.UseAi, ct);
+        city.AreasDiscoveredOn = DateTimeOffset.UtcNow;
+        city.AreaDiscoveryNote = Trim($"{osm.Count} OSM + {wiki.Count} Wikidata places; {summary}.", 400);
+        await db.SaveChangesAsync(ct);
+        ReferenceDataCache.Invalidate(cache); // curated cities carry their areas in the cached city lists
+        logger.LogInformation("Area discovery for {City}: {Note}", city.Name, city.AreaDiscoveryNote);
+    }
+
+    private static bool Discovered(string? source) => source is "osm" or "wikidata";
+
+    /// <summary>
+    /// Upserts the places as the city's areas (top-level areas, then neighbourhoods and unverified places as sub-localities of their
+    /// nearest area). <paramref name="retire"/>: deactivate discovered areas these places no longer include (only with the full list).
+    /// </summary>
+    private async Task<string> MergeAsync(City city, List<Candidate> places, DateTimeOffset started, bool retire, bool useAi, CancellationToken ct)
+    {
+        var o = options.Value;
+        var cityId = city.Id;
+        // India Post verifies PIN codes; other countries have no such directory, so their areas are listed without that check.
+        var india = string.Equals(city.State.CountryCode, "IN", StringComparison.OrdinalIgnoreCase);
+        var countryName = CountryName(city.State.CountryCode);
+
         var existing = await db.Areas.Where(a => a.CityId == cityId).ToListAsync(ct);
         var usedByBusinesses = (await db.Businesses.Where(b => b.CityId == cityId && b.AreaId != null).Select(b => b.AreaId!.Value).Distinct().ToListAsync(ct)).ToHashSet();
-        var zones = existing.Where(a => a.Source == null && a.Pincode.Length == 6).Select(a => a.Pincode[..3]).ToHashSet();
+        var zones = india ? existing.Where(a => a.Source == null && a.Pincode.Length == 6).Select(a => a.Pincode[..3]).ToHashSet() : [];
 
-        // 1. Collect places from OpenStreetMap.
-        var places = await OverpassAsync(lat0, lng0, o.RadiusKm * 1000, ct);
         var majors = MergeNearDuplicates(places.Where(p => MajorPlaces.Contains(p.Place)).ToList());
         var neighbourhoods = places.Where(p => p.Place == "neighbourhood").ToList();
 
-        // 2. AI clean-up of the top-level list (optional; skipped when the model is unavailable).
+        // AI clean-up of the top-level list (optional; skipped when the model is unavailable).
         var aiNote = "AI clean-up skipped";
-        if (o.UseAi && aiOptions.Value.Enabled && majors.Count > 0)
+        if (useAi && aiOptions.Value.Enabled && majors.Count > 0)
         {
-            try { aiNote = await AiCleanupAsync(city.Name, city.State.Name, majors, ct); }
+            try { aiNote = await AiCleanupAsync(city.Name, city.State.Name, countryName, majors, ct); }
             catch (AiUnavailableException) { aiNote = "AI clean-up unavailable"; }
             catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
@@ -186,7 +285,7 @@ internal sealed class AreaDiscoveryRun(
             var area = byRef.GetValueOrDefault(c.Ref) ?? bySlug.GetValueOrDefault(c.Slug)
                        ?? c.AltNames.Select(n => bySlug.GetValueOrDefault(Slugify(n))).FirstOrDefault(a => a is not null);
             var type = TypeFor(c.Place);
-            if (area is { Source: "osm" } && area.ParentAreaId == null && !await PinExistsAsync(area.Pincode, city.State.Name, ct))
+            if (india && area is not null && Discovered(area.Source) && area.ParentAreaId == null && !await PinExistsAsync(area.Pincode, city.State.Name, ct))
             {
                 // A PIN stored by an earlier run that India Post doesn't recognise: fix it, or demote the area to a sub-locality.
                 if (await ResolvePinAsync(c, city.State.Name, zones, () => nominatimCalls++ < o.MaxNominatimLookups, ct) is { } fixedPin)
@@ -200,7 +299,7 @@ internal sealed class AreaDiscoveryRun(
                 area.ExternalRef ??= c.Ref;
                 area.AreaType ??= type;
                 area.LastVerifiedOn = started;
-                if (area.Source == "osm")
+                if (Discovered(area.Source))
                 {
                     area.IsActive = true;
                     area.Latitude = (decimal)c.Lat;
@@ -213,13 +312,13 @@ internal sealed class AreaDiscoveryRun(
             }
             if (bySlug.ContainsKey(c.Slug)) continue;
 
-            var pin = await ResolvePinAsync(c, city.State.Name, zones, () => nominatimCalls++ < o.MaxNominatimLookups, ct);
+            var pin = india ? await ResolvePinAsync(c, city.State.Name, zones, () => nominatimCalls++ < o.MaxNominatimLookups, ct) : Postcode(c.Postcode);
             if (pin is null) { unverified.Add(c); noPin++; continue; }
 
             var created = new Area
             {
                 CityId = cityId, Name = c.Name, Slug = c.Slug, Pincode = pin, Latitude = (decimal)c.Lat, Longitude = (decimal)c.Lng,
-                AreaType = type, AltNames = JoinAliases(null, c.AltNames, c.Name), Source = "osm", ExternalRef = c.Ref,
+                AreaType = type, AltNames = JoinAliases(null, c.AltNames, c.Name), Source = c.Source, ExternalRef = c.Ref,
                 LastVerifiedOn = started, CreatedBy = Agent,
             };
             db.Areas.Add(created);
@@ -245,7 +344,7 @@ internal sealed class AreaDiscoveryRun(
 
             if (byRef.GetValueOrDefault(n.Ref) is { } sub)
             {
-                if (sub.Source != "osm") continue;
+                if (!Discovered(sub.Source)) continue;
                 sub.Name = n.Name; sub.ParentAreaId = nearest.p.Id; sub.Pincode = nearest.p.Pincode; sub.IsActive = true;
                 sub.AreaType = n.Place == "neighbourhood" ? "Neighbourhood" : TypeFor(n.Place);
                 sub.AltNames = JoinAliases(null, n.AltNames, n.Name); sub.LastVerifiedOn = started;
@@ -259,7 +358,7 @@ internal sealed class AreaDiscoveryRun(
                 CityId = cityId, Name = n.Name, Slug = slug, Pincode = nearest.p.Pincode, Latitude = (decimal)n.Lat, Longitude = (decimal)n.Lng,
                 AreaType = n.Place == "neighbourhood" ? "Neighbourhood" : TypeFor(n.Place), ParentAreaId = nearest.p.Id,
                 AltNames = JoinAliases(null, n.AltNames, n.Name),
-                Source = "osm", ExternalRef = n.Ref, LastVerifiedOn = started, CreatedBy = Agent,
+                Source = n.Source, ExternalRef = n.Ref, LastVerifiedOn = started, CreatedBy = Agent,
             };
             db.Areas.Add(created);
             bySlug[slug] = created;
@@ -269,19 +368,18 @@ internal sealed class AreaDiscoveryRun(
 
         // 5. Previously discovered areas the sources no longer list are retired (never curated areas or areas businesses use).
         var retired = 0;
-        foreach (var stale in existing.Where(a => a.Source == "osm" && a.IsActive && (a.LastVerifiedOn ?? DateTimeOffset.MinValue) < started && !usedByBusinesses.Contains(a.Id)))
+        if (retire)
         {
-            stale.IsActive = false;
-            retired++;
+            foreach (var stale in existing.Where(a => Discovered(a.Source) && a.IsActive && (a.LastVerifiedOn ?? DateTimeOffset.MinValue) < started
+                                                      && !usedByBusinesses.Contains(a.Id)))
+            {
+                stale.IsActive = false;
+                retired++;
+            }
         }
 
-        city.AreasDiscoveredOn = DateTimeOffset.UtcNow;
-        city.AreaDiscoveryNote = Trim(
-            $"{places.Count} OSM places; areas +{added} (updated {updated}, {noPin} without verified PIN listed as sub-localities); sub-localities +{subsAdded} " +
-            $"(updated {subsUpdated}); retired {retired}; {aiNote}.", 400);
-        await db.SaveChangesAsync(ct);
-        ReferenceDataCache.Invalidate(cache); // curated cities carry their areas in the cached city lists
-        logger.LogInformation("Area discovery for {City}: {Note}", city.Name, city.AreaDiscoveryNote);
+        return $"areas +{added} (updated {updated}, {noPin} without verified PIN listed as sub-localities); sub-localities +{subsAdded} " +
+               $"(updated {subsUpdated}); retired {retired}; {aiNote}";
     }
 
     // ---------------- Sources ----------------
@@ -298,36 +396,46 @@ internal sealed class AreaDiscoveryRun(
                     "way[\"place\"~\"^(suburb|quarter|neighbourhood|town|village)$\"][\"name\"];" +
                     "relation[\"place\"~\"^(suburb|quarter|neighbourhood|town|village)$\"][\"name\"];" +
                     ");out center tags;";
-        // Public servers are often overloaded (504/429, or a "runtime error" remark): try the next one.
+        // Public servers are often overloaded (504/429, a "runtime error" remark, or minutes without an answer). They are asked one after
+        // another: the next as soon as one fails, or OverpassStaggerSeconds after the last one started; the first answer wins.
+        var o = options.Value;
+        // Each server is tried twice: busy servers often fail one request (a 504, or a connection dropped during the TLS handshake) and
+        // answer the next.
+        var servers = o.FallbackOverpassUrls.Prepend(o.OverpassUrl).Where(u => !string.IsNullOrWhiteSpace(u)).Distinct().ToList();
+        var urls = new Queue<string>(servers.Concat(servers));
+        using var race = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        race.CancelAfter(TimeSpan.FromSeconds(o.OverpassTimeoutSeconds));
+        var asking = new List<Task<OverpassResult>>();
         OverpassResult? result = null;
         Exception? lastError = null;
-        foreach (var url in options.Value.FallbackOverpassUrls.Prepend(options.Value.OverpassUrl).Where(u => !string.IsNullOrWhiteSpace(u)).Distinct())
+        try
         {
-            try
+            while (result is null && (asking.Count > 0 || urls.Count > 0))
             {
-                using var content = new FormUrlEncodedContent([new KeyValuePair<string, string>("data", query)]);
-                using var response = await Client().PostAsync(url, content, ct);
-                if ((int)response.StatusCode == 429 || (int)response.StatusCode >= 500)
+                if (urls.Count > 0 && (asking.Count == 0 || asking.All(t => !t.IsCompleted))) asking.Add(AskOverpassAsync(urls.Dequeue(), query, race.Token));
+                var stagger = urls.Count > 0 ? Task.Delay(TimeSpan.FromSeconds(o.OverpassStaggerSeconds), race.Token) : Task.Delay(Timeout.Infinite, race.Token);
+                var first = await Task.WhenAny([.. asking, stagger]);
+                if (first == stagger)
                 {
-                    lastError = new HttpRequestException($"{url} answered {(int)response.StatusCode}");
-                    continue;
+                    if (race.IsCancellationRequested) break;
+                    continue; // nobody answered yet: ask the next server too
                 }
-                response.EnsureSuccessStatusCode();
-                var answer = await response.Content.ReadFromJsonAsync<OverpassResult>(Json, ct);
-                if (answer?.Remark?.Contains("error", StringComparison.OrdinalIgnoreCase) == true)
-                {
-                    lastError = new HttpRequestException($"{url}: {answer.Remark}");
-                    continue;
-                }
-                result = answer;
-                break;
-            }
-            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
-            {
-                lastError = ex;
+                var done = (Task<OverpassResult>)first;
+                asking.Remove(done);
+                try { result = await done; }
+                catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException && !ct.IsCancellationRequested) { lastError = ex; }
             }
         }
-        if (result is null) throw lastError ?? new HttpRequestException("No Overpass server answered.");
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            lastError ??= new TaskCanceledException($"No Overpass server answered within {o.OverpassTimeoutSeconds}s.");
+        }
+        finally
+        {
+            race.Cancel(); // stop the requests still waiting
+            foreach (var t in asking) _ = t.ContinueWith(x => _ = x.Exception, TaskScheduler.Default);
+        }
+        if (result is null) throw new HttpRequestException($"No Overpass server answered ({lastError?.Message ?? "no servers configured"}).", lastError);
 
         var list = new List<Candidate>();
         foreach (var e in result?.Elements ?? [])
@@ -336,7 +444,7 @@ internal sealed class AreaDiscoveryRun(
             var (elat, elng) = e.Lat is { } la && e.Lon is { } lo ? (la, lo) : e.Center is { } c ? (c.Lat, c.Lon) : (double.NaN, double.NaN);
             if (double.IsNaN(elat) || GeoMath.HaversineKm(lat, lng, elat, elng) * 1000 > radiusM) continue;
             var name = CleanName(Latin(e.Tags.GetValueOrDefault("name:en")) ?? Latin(e.Tags.GetValueOrDefault("name")));
-            if (name is null || NotALocality.IsMatch(name)) continue;
+            if (name is null || NotALocality.IsMatch(name) || RoadFeature.IsMatch(name)) continue;
             var cand = new Candidate
             {
                 Ref = $"{e.Type}/{e.Id}", Name = name, Place = place, Lat = elat, Lng = elng,
@@ -348,6 +456,106 @@ internal sealed class AreaDiscoveryRun(
             list.Add(cand);
         }
         return list;
+    }
+
+    private async Task<OverpassResult> AskOverpassAsync(string url, string query, CancellationToken ct)
+    {
+        using var content = new FormUrlEncodedContent([new KeyValuePair<string, string>("data", query)]);
+        using var response = await Client().PostAsync(url, content, ct);
+        if ((int)response.StatusCode == 429 || (int)response.StatusCode >= 500) throw new HttpRequestException($"{url} answered {(int)response.StatusCode}");
+        response.EnsureSuccessStatusCode();
+        var answer = await response.Content.ReadFromJsonAsync<OverpassResult>(Json, ct) ?? throw new HttpRequestException($"{url}: empty answer");
+        if (answer.Remark?.Contains("error", StringComparison.OrdinalIgnoreCase) == true) throw new HttpRequestException($"{url}: {answer.Remark}");
+        return answer;
+    }
+
+    /// <summary>Wikidata types of place listed as areas, and how each is treated (MajorPlaces are top-level areas).</summary>
+    private static readonly Dictionary<string, string> WikidataTypes = new()
+    {
+        ["Q123705"] = "suburb",   // neighbourhood
+        ["Q188509"] = "suburb",   // suburb
+        ["Q2983893"] = "suburb",  // quarter
+        ["Q4286337"] = "suburb",  // city district
+        ["Q211690"] = "suburb",   // London borough
+        ["Q3957"] = "town",
+        ["Q532"] = "village",
+        ["Q17343829"] = "locality", // unincorporated community (US)
+        ["Q486972"] = "locality",   // human settlement
+    };
+
+    /// <summary>
+    /// The city's neighbourhoods, districts and suburbs from Wikidata: those recorded as located in the city (matched by its GeoNames id),
+    /// and - when that finds few - places of those types around the city centre. Empty when Wikidata is unavailable.
+    /// </summary>
+    private async Task<List<Candidate>> WikidataAsync(City city, double lat, double lng, int radiusKm, Func<List<Candidate>, Task> list,
+        CancellationToken ct)
+    {
+        var types = string.Join(' ', WikidataTypes.Keys.Select(k => "wd:" + k));
+        const string Select = "SELECT ?area ?areaLabel ?coord ?postal ?type WHERE {{ {0} ?area wdt:P31 ?type . VALUES ?type {{ {1} }} " +
+                              "?area wdt:P625 ?coord . OPTIONAL {{ ?area wdt:P281 ?postal . }} FILTER NOT EXISTS {{ ?area wdt:P576 ?ended . }} " +
+                              "SERVICE wikibase:label {{ bd:serviceParam wikibase:language \"en,mul,fr,es,de,pt,it,nl\". }} }}";
+        var places = new Dictionary<string, Candidate>();
+        try
+        {
+            if (city.ExternalRef is { } ext && ext.StartsWith("geonames:", StringComparison.Ordinal) && long.TryParse(ext[9..], out var geonamesId))
+            {
+                var inCity = $"?city wdt:P1566 \"{geonamesId}\" . {{ ?area wdt:P131 ?city . }} UNION {{ ?area wdt:P131/wdt:P131 ?city . }}";
+                await SparqlAsync(string.Format(CultureInfo.InvariantCulture, Select, inCity, types), lat, lng, radiusKm, places, ct);
+                if (places.Count > 0) await list(places.Values.ToList());
+            }
+            if (places.Count < 40)
+            {
+                var before = places.Count;
+                var around = string.Create(CultureInfo.InvariantCulture,
+                    $"SERVICE wikibase:around {{ ?area wdt:P625 ?c . bd:serviceParam wikibase:center \"Point({lng} {lat})\"^^geo:wktLiteral ; wikibase:radius \"{Math.Min(radiusKm, 12)}\" . }}");
+                await SparqlAsync(string.Format(CultureInfo.InvariantCulture, Select, around, types), lat, lng, radiusKm, places, ct);
+                if (places.Count > before) await list(places.Values.ToList());
+            }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException && !ct.IsCancellationRequested)
+        {
+            logger.LogWarning("Wikidata unavailable for {City} ({Message}); continuing with OpenStreetMap", city.Name, ex.Message);
+        }
+        return places.Values.ToList();
+    }
+
+    private async Task SparqlAsync(string query, double lat, double lng, int radiusKm, Dictionary<string, Candidate> places, CancellationToken ct)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(60));
+        using var request = new HttpRequestMessage(HttpMethod.Get, options.Value.WikidataSparqlUrl + "?query=" + Uri.EscapeDataString(query));
+        request.Headers.Accept.ParseAdd("application/sparql-results+json");
+        using var response = await Client().SendAsync(request, timeout.Token);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<SparqlResult>(Json, timeout.Token);
+        foreach (var row in result?.Results?.Bindings ?? [])
+        {
+            var id = row.GetValueOrDefault("area")?.Value?.Split('/')[^1];
+            var typeId = row.GetValueOrDefault("type")?.Value?.Split('/')[^1];
+            if (id is null || typeId is null || !WikidataTypes.TryGetValue(typeId, out var place)) continue;
+            var key = "wikidata/" + id;
+            if (places.TryGetValue(key, out var seen))
+            {
+                // Several types: keep the most specific one (a neighbourhood that is also a human settlement is a neighbourhood).
+                if (place == "suburb" && seen.Place != "suburb") places[key] = new Candidate
+                    { Ref = key, Name = seen.Name, Place = place, Lat = seen.Lat, Lng = seen.Lng, Postcode = seen.Postcode, Source = "wikidata" };
+                continue;
+            }
+            var label = row.GetValueOrDefault("areaLabel")?.Value;
+            if (label is null || Regex.IsMatch(label, @"^Q\d+$")) continue; // no label in a Latin-script language
+            var name = CleanName(Latin(label));
+            // Heritage listings ("Bremond Block Historic District") are typed like neighbourhoods but aren't where people say they live.
+            if (name is null || NotALocality.IsMatch(name) || RoadFeature.IsMatch(name) || name.Contains("Historic District", StringComparison.OrdinalIgnoreCase)) continue;
+            // "Point(-79.38 43.65)"
+            var point = row.GetValueOrDefault("coord")?.Value is { } wkt ? Regex.Match(wkt, @"Point\(([-\d.eE]+) ([-\d.eE]+)\)") : Match.Empty;
+            if (!point.Success) continue;
+            var (plng, plat) = (double.Parse(point.Groups[1].Value, CultureInfo.InvariantCulture), double.Parse(point.Groups[2].Value, CultureInfo.InvariantCulture));
+            if (GeoMath.HaversineKm(lat, lng, plat, plng) > radiusKm) continue;
+            places[key] = new Candidate
+            {
+                Ref = key, Name = name, Place = place, Lat = plat, Lng = plng, Postcode = row.GetValueOrDefault("postal")?.Value, Source = "wikidata",
+            };
+        }
     }
 
     private async Task<string?> IndiaPostPinAsync(string name, string state, HashSet<string> zones, CancellationToken ct)
@@ -424,7 +632,7 @@ internal sealed class AreaDiscoveryRun(
     /// Asks the local model which entries to drop, which to merge and which spellings to fix. Only structural decisions are taken
     /// from the model, and renames must stay close to an existing spelling, so it cannot introduce a different place.
     /// </summary>
-    private async Task<string> AiCleanupAsync(string cityName, string state, List<Candidate> majors, CancellationToken ct)
+    private async Task<string> AiCleanupAsync(string cityName, string state, string country, List<Candidate> majors, CancellationToken ct)
     {
         int dropped = 0, merged = 0, renamed = 0;
         foreach (var batch in majors.ToList().Chunk(60))
@@ -432,13 +640,13 @@ internal sealed class AreaDiscoveryRun(
             var lines = string.Join('\n', batch.Select((c, i) =>
                 $"{i + 1} | {c.Name} | {c.Place}{(c.AltNames.Count > 0 ? " | also: " + string.Join(", ", c.AltNames.Take(3)) : "")}"));
             var prompt =
-                $"Places in {cityName}, {state}, India from OpenStreetMap (id | name | type | other names):\n{lines}\n\n" +
+                $"Places in {cityName}, {state}, {country} from OpenStreetMap (id | name | type | other names):\n{lines}\n\n" +
                 "Clean this list of localities people use in addresses:\n" +
                 "- drop: ids that are not residential or commercial localities (landmarks, campuses, single buildings, bus stops, junctions, water bodies), or are clearly misspelt duplicates you also merge;\n" +
                 "- merge: groups of ids that are the same locality spelt differently, canonical id first;\n" +
                 "- rename: ids whose name should use the common English spelling (keep it recognisably the same name); at most 20.\n" +
                 "Only use the given ids. Reply as JSON: {\"drop\":[3],\"merge\":[[1,7]],\"rename\":[{\"id\":2,\"name\":\"...\"}]}";
-            var content = await ai.ChatJsonAsync("You know Indian cities and their localities well. Reply with JSON only.", prompt, ct, maxOutputTokens: 1600);
+            var content = await ai.ChatJsonAsync($"You know the cities of {country} and their localities well. Reply with JSON only.", prompt, ct, maxOutputTokens: 1600);
             if (content is null) continue;
             var reply = JsonSerializer.Deserialize<CleanupReply>(content, Json);
             Candidate? At(int id) => id >= 1 && id <= batch.Length ? batch[id - 1] : null;
@@ -511,6 +719,19 @@ internal sealed class AreaDiscoveryRun(
         "suburb" => "Area", "quarter" => "Locality", "locality" => "Locality", "town" => "Town", "village" => "Village", _ => "Area",
     };
 
+    /// <summary>A postcode outside India as OpenStreetMap writes it ("H2T 1S4", "SW1A 1AA", "10001"), or "" when the place has none.</summary>
+    private static string Postcode(string? raw)
+    {
+        var code = Regex.Replace((raw ?? "").Split(';')[0].Trim().ToUpperInvariant(), @"\s+", " ");
+        return code.Length is > 0 and <= 10 && code.Any(char.IsLetterOrDigit) ? code : "";
+    }
+
+    private static string CountryName(string code)
+    {
+        try { return new RegionInfo(code).EnglishName; }
+        catch (ArgumentException) { return code; }
+    }
+
     private static string? ValidPin(string? raw, HashSet<string> zones)
     {
         var pin = new string((raw ?? "").Where(char.IsDigit).ToArray());
@@ -565,6 +786,9 @@ internal sealed class AreaDiscoveryRun(
     private static string Trim(string s, int max) => s.Length <= max ? s : s[..(max - 1)] + "…";
 
     private sealed record OverpassResult(List<OverpassElement>? Elements, string? Remark);
+    private sealed record SparqlResult(SparqlResults? Results);
+    private sealed record SparqlResults(List<Dictionary<string, SparqlValue>>? Bindings);
+    private sealed record SparqlValue(string? Value);
     private sealed record OverpassElement(string Type, long Id, double? Lat, double? Lon, OverpassCenter? Center, Dictionary<string, string>? Tags);
     private sealed record OverpassCenter(double Lat, double Lon);
     private sealed record IndiaPostResult(string? Status, List<IndiaPostOffice>? PostOffice);

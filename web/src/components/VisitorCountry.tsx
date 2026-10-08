@@ -1,75 +1,75 @@
-import { useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { Tooltip } from '@mui/material';
-import { api } from '@/lib/api';
-import { useCities, useCityAreas, useVisitorDistrict } from '@/lib/hooks';
+import { useLocationSync, useVisitorLocation } from '@/lib/hooks';
 
 export { useVisitorDistrict, type VisitorDistrict } from '@/lib/hooks';
-import { useCity } from '@/stores/city';
 
-interface VisitorCountry { countryCode: string; source: 'cdn' | 'geoip' | 'default' }
+interface VisitorCountry { countryCode: string; source: 'geoip' | 'default' }
 
 let regionNames: Intl.DisplayNames | null = null;
-const countryName = (code: string) => {
+export const countryName = (code: string) => {
   try { regionNames ??= new Intl.DisplayNames(['en-IN'], { type: 'region' }); return regionNames.of(code) ?? code; } catch { return code; }
 };
 
-/** The visitor's country (detected on the server from their IP address). */
+/**
+ * The visitor's country, detected on the server from their IP address (part of the one IP location request). source "default" when
+ * the IP couldn't be located (the server's best guess).
+ */
 export function useVisitorCountry() {
-  return useQuery({
-    queryKey: ['geo', 'country'],
-    queryFn: () => api.get<VisitorCountry>('/api/geo/country'),
-    staleTime: Infinity,
-    retry: false,
-  });
+  const location = useVisitorLocation();
+  const data: VisitorCountry | undefined = location.data?.country
+    ? { countryCode: location.data.country, source: location.data.located ? 'geoip' : 'default' }
+    : undefined;
+  return { ...location, data };
 }
 
-/** The visitor's country name (e.g. "India") from their IP address; null until detected. */
-export function useVisitorCountryName(): string | null {
-  const { data } = useVisitorCountry();
-  return data?.countryCode ? countryName(data.countryCode) : null;
+/** The country being browsed: always the visitor's (from their IP); null until detected. */
+export function useBrowsingCountryCode(): string | null {
+  return useVisitorCountry().data?.countryCode ?? null;
 }
+
+/** The name of the country being browsed (e.g. "India"); null until detected. */
+export function useVisitorCountryName(): string | null {
+  const code = useBrowsingCountryCode();
+  return code ? countryName(code) : null;
+}
+
+// Possessive: "India's", but "United States'" for names ending in s.
+const possessive = (country: string) => `${country}${/s$/i.test(country) ? "'" : "'s"}`;
 
 /** "India's real-time local business network." for the visitor's country (from their IP); neutral wording until it is known. */
 export function useNetworkTagline(): string {
   const country = useVisitorCountryName();
-  // Possessive: "India's", but "United States'" for names ending in s.
-  return country ? `${country}${/s$/i.test(country) ? "'" : "'s"} real-time local business network.` : 'The real-time local business network.';
+  return country ? `${possessive(country)} real-time local business network.` : 'The real-time local business network.';
 }
+
+/**
+ * Fills a country into database copy: "{country}" becomes "Canada" and "{country's}" becomes "Canada's" ("your country" while
+ * the country is unknown).
+ */
+export const withCountry = (text: string, country: string | null) => text
+  .replace(/\{country's\}/g, country ? possessive(country) : "your country's")
+  .replace(/\{country\}/g, country ?? 'your country');
 
 /**
  * Small ISO country code shown above the logo. The line height is reserved while loading so the header never shifts.
  */
 export function CountryCode({ onDark }: { onDark?: boolean }) {
   const { data } = useVisitorCountry();
+  const code = data?.countryCode;
   const tone = onDark ? 'text-on-navy-faint' : 'text-muted';
-  if (!data) return <span className="block h-3" aria-hidden />;
-  const name = countryName(data.countryCode);
+  if (!code) return <span className="block h-3" aria-hidden />;
+  const name = countryName(code);
+  const title = data.source === 'default' ? `${name} (default)` : `Browsing from ${name}`;
   return (
-    <Tooltip title={data.source === 'default' ? `${name} (default)` : `Browsing from ${name}`} placement="bottom-start">
+    <Tooltip title={title} placement="bottom-start">
       <span className={`block h-3 w-fit text-[10px] font-semibold leading-3 tracking-[0.14em] ${tone}`} aria-label={`Country: ${name}`}>
-        {data.countryCode}
+        {code}
       </span>
     </Tooltip>
   );
 }
 
-/** Pre-selects the visitor's detected district (and area, when the IP names one we list) unless they've picked a city themselves. */
+/** Keeps the selected place in step with the visitor's IP location (see useLocationSync). Mount once, in the layout. */
 export function useDistrictAutoSelect() {
-  const { data: district } = useVisitorDistrict();
-  const applyDetected = useCity((s) => s.applyDetected);
-  // The server names the area's id, so the detection applies at once, without waiting for the (large) city list. Only an older
-  // response without it falls back to looking the area up.
-  const direct = !!district && (!district.areaSlug || !!district.areaId);
-  const { data: cities } = useCities();
-  const city = district && !direct ? cities?.find((c) => c.slug === district.citySlug) : undefined;
-  const inlineArea = city?.areas.find((a) => a.slug === district?.areaSlug);
-  // Cities outside the curated list carry no areas in the cities payload: look the area up in the city's full area list.
-  const fetched = useCityAreas(city && district?.areaSlug && !inlineArea ? city.slug : null);
-  useEffect(() => {
-    if (district && direct) { applyDetected(district.citySlug, district.areaId ?? null); return; }
-    if (!city) return;
-    if (district?.areaSlug && !inlineArea && fetched.isLoading) return;
-    applyDetected(city.slug, (inlineArea ?? fetched.areas.find((a) => a.slug === district?.areaSlug))?.id ?? null);
-  }, [direct, city, district, inlineArea, fetched.isLoading, fetched.areas, applyDetected]);
+  useLocationSync();
 }

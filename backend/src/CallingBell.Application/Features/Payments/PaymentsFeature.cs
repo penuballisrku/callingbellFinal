@@ -27,7 +27,7 @@ public sealed record CheckoutOrderDto(Guid OrderId, string OrderNumber, string G
     CheckoutPrefillDto Prefill);
 
 public sealed record PaymentResultDto(Guid OrderId, string OrderNumber, string Status, string PlanName, string BillingCycle, DateTime? ActiveFrom,
-    DateTime? ActiveUntil, string? InvoiceNumber, decimal Total, string? PaymentMethod, string? FailureReason);
+    DateTime? ActiveUntil, string? InvoiceNumber, decimal Total, string? PaymentMethod, string? FailureReason, string Currency = "INR");
 
 public sealed record GetPaymentConfigQuery : IRequest<PaymentConfigDto>;
 
@@ -43,11 +43,17 @@ public sealed record HandlePaymentWebhookCommand(string Body, string? Signature)
 
 internal static class Pricing
 {
+    /// <summary>India's GST, reported by the payment config for screens that still show it.</summary>
     public const decimal GstRate = 0.18m;
-    public static (decimal Subtotal, decimal Tax, decimal Total) For(SubscriptionPlan plan, string cycle)
+
+    /// <summary>
+    /// The plan's price in the business's country: the rupee price converted to its currency at a fair local price, plus that
+    /// country's tax (18% GST in India; none where Calling Bell doesn't collect tax). Same figures as GET /api/plans for that country.
+    /// </summary>
+    public static (decimal Subtotal, decimal Tax, decimal Total) For(SubscriptionPlan plan, string cycle, CountryPrice country)
     {
-        var subtotal = cycle == "Annual" ? plan.AnnualPrice : plan.MonthlyPrice;
-        var tax = Math.Round(subtotal * GstRate, 2, MidpointRounding.AwayFromZero);
+        var subtotal = country.Convert(cycle == "Annual" ? plan.AnnualPrice : plan.MonthlyPrice);
+        var tax = country.Tax(subtotal);
         return (subtotal, tax, subtotal + tax);
     }
 }
@@ -75,7 +81,8 @@ public sealed class CreatePlanOrderValidator : AbstractValidator<CreatePlanOrder
     }
 }
 
-public sealed class CreatePlanOrderHandler(IUnitOfWork uow, ICurrentUser user, IPaymentGateway gateway) : IRequestHandler<CreatePlanOrderCommand, CheckoutOrderDto>
+public sealed class CreatePlanOrderHandler(IUnitOfWork uow, ICurrentUser user, IPaymentGateway gateway, CountryPricingService pricing)
+    : IRequestHandler<CreatePlanOrderCommand, CheckoutOrderDto>
 {
     public async Task<CheckoutOrderDto> Handle(CreatePlanOrderCommand r, CancellationToken ct)
     {
@@ -83,7 +90,9 @@ public sealed class CreatePlanOrderHandler(IUnitOfWork uow, ICurrentUser user, I
         if (!gateway.IsConfigured) throw new BadRequestException("Online payments are not available right now. Our team will help you activate your plan.");
         var plan = await uow.Repository<SubscriptionPlan>().QueryNoTracking().FirstOrDefaultAsync(p => p.Code == r.PlanCode && p.IsActive, ct)
                    ?? throw new BadRequestException("Choose a valid plan.");
-        var (subtotal, tax, total) = Pricing.For(plan, r.BillingCycle);
+        // Charged in the currency of the country the business is in.
+        var country = await pricing.ForBusinessAsync(business.Id, ct);
+        var (subtotal, tax, total) = Pricing.For(plan, r.BillingCycle, country);
         if (subtotal <= 0) throw new BadRequestException("The Free plan doesn't need a payment.");
 
         var owner = await uow.Repository<Business>().QueryNoTracking().Where(b => b.Id == business.Id)
@@ -92,7 +101,7 @@ public sealed class CreatePlanOrderHandler(IUnitOfWork uow, ICurrentUser user, I
         var order = new PaymentOrder
         {
             OrderNumber = References.New("ORD"), BusinessId = business.Id, PlanId = plan.Id, BillingCycle = r.BillingCycle,
-            Amount = subtotal, TaxAmount = tax, TotalAmount = total, Currency = "INR", Gateway = gateway.Name,
+            Amount = subtotal, TaxAmount = tax, TotalAmount = total, Currency = country.CurrencyCode, Gateway = gateway.Name,
             Status = PaymentOrderStatuses.Created, Gstin = string.IsNullOrWhiteSpace(r.Gstin) ? null : r.Gstin.Trim().ToUpperInvariant()
         };
         uow.Repository<PaymentOrder>().Add(order);
@@ -100,7 +109,7 @@ public sealed class CreatePlanOrderHandler(IUnitOfWork uow, ICurrentUser user, I
 
         try
         {
-            var gatewayOrder = await gateway.CreateOrderAsync(order.OrderNumber, (long)(total * 100), order.Currency,
+            var gatewayOrder = await gateway.CreateOrderAsync(order.OrderNumber, Currencies.ToMinor(total, order.Currency), order.Currency,
                 new Dictionary<string, string> { ["orderNumber"] = order.OrderNumber, ["businessId"] = business.Id.ToString(), ["plan"] = plan.Code, ["cycle"] = r.BillingCycle },
                 ct);
             order.GatewayOrderId = gatewayOrder.Id;
@@ -115,7 +124,7 @@ public sealed class CreatePlanOrderHandler(IUnitOfWork uow, ICurrentUser user, I
         await uow.SaveChangesAsync(ct);
 
         var digits = new string((owner.OwnerPhone ?? owner.PhoneNumber ?? string.Empty).Where(char.IsDigit).ToArray());
-        return new CheckoutOrderDto(order.Id, order.OrderNumber, gateway.Name, gateway.PublicKey!, order.GatewayOrderId!, (long)(total * 100), order.Currency,
+        return new CheckoutOrderDto(order.Id, order.OrderNumber, gateway.Name, gateway.PublicKey!, order.GatewayOrderId!, Currencies.ToMinor(total, order.Currency), order.Currency,
             plan.Code, plan.Name, r.BillingCycle, subtotal, tax, total, business.Name,
             new CheckoutPrefillDto(owner.DisplayName, owner.Email ?? string.Empty, digits.Length >= 10 ? digits[^10..] : digits));
     }
@@ -230,14 +239,16 @@ internal static class SubscriptionActivator
         var snapshot = await uow.Repository<PaymentOrder>().QueryNoTracking().Where(o => o.Id == orderId)
             .Select(o => new { o.Status, o.GatewayOrderId, o.TotalAmount, o.Currency }).FirstAsync(ct);
         if (snapshot.Status != PaymentOrderStatuses.Paid &&
-            (payment.OrderId != snapshot.GatewayOrderId || payment.Amount != (long)(snapshot.TotalAmount * 100) || !SuccessStatuses.Contains(payment.Status)))
+            (payment.OrderId != snapshot.GatewayOrderId || payment.Amount != Currencies.ToMinor(snapshot.TotalAmount, snapshot.Currency)
+             || !string.Equals(payment.Currency, snapshot.Currency, StringComparison.OrdinalIgnoreCase) || !SuccessStatuses.Contains(payment.Status)))
         {
             var failed = await uow.Repository<PaymentOrder>().Query().FirstAsync(o => o.Id == orderId, ct);
             failed.Status = PaymentOrderStatuses.Failed;
             failed.GatewayPaymentId = payment.Id;
             failed.FailureReason = payment.ErrorDescription
                 ?? (payment.OrderId != snapshot.GatewayOrderId ? "The payment belongs to a different order."
-                    : payment.Amount != (long)(snapshot.TotalAmount * 100) ? $"Paid amount {payment.Amount / 100m:0.00} does not match the order total {snapshot.TotalAmount:0.00} {snapshot.Currency}."
+                    : payment.Amount != Currencies.ToMinor(snapshot.TotalAmount, snapshot.Currency) || !string.Equals(payment.Currency, snapshot.Currency, StringComparison.OrdinalIgnoreCase)
+                        ? $"Paid amount {payment.Amount} {payment.Currency} (smallest unit) does not match the order total {snapshot.TotalAmount} {snapshot.Currency}."
                     : $"Payment status is '{payment.Status}'.");
             try { await uow.SaveChangesAsync(ct); } catch (DbUpdateConcurrencyException) { return await PaymentResults.ForAsync(uow, orderId, ct); }
             throw new BadRequestException("This payment could not be confirmed. If money was deducted, Razorpay will refund it automatically.");
@@ -266,14 +277,14 @@ internal static class SubscriptionActivator
                 {
                     SubscriptionNumber = References.New("SUB"), BusinessId = order.BusinessId, PlanId = order.PlanId, BillingCycle = order.BillingCycle,
                     StartDate = start, EndDate = (order.BillingCycle == "Annual" ? start.AddYears(1) : start.AddMonths(1)).AddDays(-1),
-                    Amount = order.Amount, Status = SubscriptionStatuses.Active, AutoRenew = false
+                    Amount = order.Amount, Currency = order.Currency, Status = SubscriptionStatuses.Active, AutoRenew = false
                 };
                 subs.Add(subscription);
 
                 var invoice = new Payment
                 {
                     InvoiceNumber = $"INV-{References.New("SB")}", BusinessId = order.BusinessId, PaymentType = "Subscription", ReferenceId = subscription.Id,
-                    Amount = order.Amount, TaxAmount = order.TaxAmount, TotalAmount = order.TotalAmount, PaymentMode = Mode(payment.Method),
+                    Amount = order.Amount, TaxAmount = order.TaxAmount, TotalAmount = order.TotalAmount, Currency = order.Currency, PaymentMode = Mode(payment.Method),
                     Status = "Success", PaidOn = DateTimeOffset.UtcNow
                 };
                 uow.Repository<Payment>().Add(invoice);
@@ -294,7 +305,7 @@ internal static class SubscriptionActivator
 
             if (activated && ownerId is not null)
                 await NotificationPublisher.PublishAsync(uow, notifier, ownerId, "Payment received",
-                    $"Your {planName} plan is now active. Your invoice is available in Plan & billing.", "PaymentReceived", "/business/plan", ct);
+                    $"Your {planName} plan is now active. Your invoice is available in Plan & billing.", "PaymentReceived", "/owner/plan", ct);
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -317,6 +328,6 @@ internal static class PaymentResults
             .Select(o => new PaymentResultDto(o.Id, o.OrderNumber, o.Status, o.Plan.Name, o.BillingCycle,
                 uow.Repository<BusinessSubscription>().QueryNoTracking().Where(s => s.Id == o.SubscriptionId).Select(s => (DateTime?)s.StartDate).FirstOrDefault(),
                 uow.Repository<BusinessSubscription>().QueryNoTracking().Where(s => s.Id == o.SubscriptionId).Select(s => (DateTime?)s.EndDate).FirstOrDefault(),
-                o.InvoiceNumber, o.TotalAmount, o.PaymentMethod, o.FailureReason))
+                o.InvoiceNumber, o.TotalAmount, o.PaymentMethod, o.FailureReason, o.Currency))
             .FirstAsync(ct);
 }

@@ -14,11 +14,11 @@ import AutorenewRounded from '@mui/icons-material/AutorenewRounded';
 import StorefrontOutlined from '@mui/icons-material/StorefrontOutlined';
 import { useSnackbar } from 'notistack';
 import { ApiError, api, errorMessage } from '@/lib/api';
-import { useCities, useCityAreas, useDocumentTitle, useLookup } from '@/lib/hooks';
+import { useCities, useCityAreas, useDocumentTitle, useLookup, usePlans } from '@/lib/hooks';
 import { MEDIA_LIMITS, checkFile, releasePending, toPending, uploadMedia, type PendingMedia } from '@/lib/media';
 import { payForPlan, priceBreakdown, usePaymentConfig } from '@/lib/payments';
 import { moneyPrecise } from '@/lib/format';
-import type { BusinessRegistrationResult, Category, CreatedBusiness, MediaKind, Plan } from '@/lib/types';
+import type { BusinessRegistrationResult, Category, CreatedBusiness, MediaKind } from '@/lib/types';
 import { useAuth } from '@/stores/auth';
 import { useSelectedBusiness } from '@/stores/ownerBusiness';
 import { ErrorState } from '@/components/ui';
@@ -38,7 +38,8 @@ type Task = { key: string; label: string; status: 'pending' | 'active' | 'done' 
 export default function BusinessWizard({ mode }: { mode: 'register' | 'setup' }) {
   useDocumentTitle(mode === 'register' ? 'List your business' : 'Set up your business');
   const categories = useQuery({ queryKey: ['categories'], queryFn: () => api.get<Category[]>('/api/categories'), staleTime: 30 * 60_000 });
-  const plans = useQuery({ queryKey: ['plans'], queryFn: () => api.get<Plan[]>('/api/plans'), staleTime: 600_000 });
+  // Priced for the visitor's country (the cities offered are in it too); checkout charges the same in that currency.
+  const plans = usePlans();
   const cities = useCities();
   const serviceTypes = useLookup('ServiceType');
   const socialPlatforms = useLookup('SocialPlatform');
@@ -120,7 +121,7 @@ function Wizard({ mode, data, paymentsEnabled }: { mode: 'register' | 'setup'; d
   const billingCycle = useWatch({ control: form.control, name: 'business.billingCycle' });
   const plan = data.plans.find((p) => p.code === planCode);
   const isPaidPlan = !!plan && plan.monthlyPrice > 0;
-  const orderTotal = plan ? priceBreakdown(billingCycle === 'Annual' ? plan.annualPrice : plan.monthlyPrice).total : 0;
+  const orderTotal = plan ? priceBreakdown(billingCycle === 'Annual' ? plan.annualPrice : plan.monthlyPrice, plan).total : 0;
   // The payment step comes right after plan selection, and only for paid plans.
   const steps = useMemo(() => STEPS.filter((s) => (mode === 'register' || s.key !== 'account') && (isPaidPlan || s.key !== 'payment')), [mode, isPaidPlan]);
   const goToKey = (key: StepKey) => { const i = steps.findIndex((s) => s.key === key); if (i >= 0) goTo(i); };
@@ -286,7 +287,7 @@ function Wizard({ mode, data, paymentsEnabled }: { mode: 'register' | 'setup'; d
 
   const finish = () => {
     try { sessionStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
-    navigate('/business?welcome=1', { replace: true });
+    navigate('/owner?welcome=1', { replace: true });
   };
 
   const onValid = async (v: WizardForm) => {
@@ -312,7 +313,7 @@ function Wizard({ mode, data, paymentsEnabled }: { mode: 'register' | 'setup'; d
     setTasks([
       ...(mode === 'register' ? [{ key: 'account', label: 'Creating your account', status: 'active' as const }] : []),
       { key: 'business', label: `Creating ${b.businessName}`, status: mode === 'register' ? 'pending' : 'active' },
-      ...(isPaidPlan && paymentsEnabled ? [{ key: 'payment', label: `Payment · ${plan!.name} ${b.billingCycle.toLowerCase()} (${moneyPrecise(orderTotal)})`, status: 'pending' as const }] : []),
+      ...(isPaidPlan && paymentsEnabled ? [{ key: 'payment', label: `Payment · ${plan!.name} ${b.billingCycle.toLowerCase()} (${moneyPrecise(orderTotal, plan)})`, status: 'pending' as const }] : []),
       ...order.filter((k) => items.some((m) => m.kind === k)).map((k) => ({
         key: `media-${k}`, label: kindLabel[k], status: 'pending' as const,
         detail: k === 'photo' || k === 'video' ? `${items.filter((m) => m.kind === k).length} file(s)` : undefined,
@@ -438,7 +439,7 @@ function Wizard({ mode, data, paymentsEnabled }: { mode: 'register' | 'setup'; d
                 <Button type="submit" variant="contained" color={isLast ? 'secondary' : 'primary'} size="large"
                   endIcon={isLast ? <CheckRounded /> : <ArrowForwardRounded />} disabled={emailStatus === 'checking'}>
                   {isLast
-                    ? `${mode === 'register' ? 'Create account' : 'Create business'}${isPaidPlan && paymentsEnabled ? ` & pay ${moneyPrecise(orderTotal)}` : mode === 'register' ? ' & finish' : ''}`
+                    ? `${mode === 'register' ? 'Create account' : 'Create business'}${isPaidPlan && paymentsEnabled ? ` & pay ${moneyPrecise(orderTotal, plan)}` : mode === 'register' ? ' & finish' : ''}`
                     : 'Continue'}
                 </Button>
               </div>

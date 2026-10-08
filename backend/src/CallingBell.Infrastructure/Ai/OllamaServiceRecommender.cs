@@ -40,10 +40,17 @@ internal sealed class OllamaServiceRecommender(
         var pickCount = Math.Min(request.PickCount, request.Candidates.Count);
         var relatedCount = Math.Min(request.RelatedCount, request.RelatedCandidates.Count);
 
+        // A city with no listings yet: the candidates are the national catalogue, so local demand can't be weighed.
+        var scope = request.CatalogOnly
+            ? "No providers are listed in this place yet. Figures below are national, across all of India; nearest provider is unknown.\n" +
+              "Choose from what residents of this place most likely need, given its size, climate, economy, lifestyle and the season.\n\n"
+            : "";
+        var area = request.CatalogOnly ? "across India" : "nearby";
         var prompt =
             $"Place: {request.Place}, {request.City}, {request.State}\nLocal time: {AiText.When(request.LocalTime)}\nSeason: {AiText.SeasonOf(request.LocalTime)}\n\n" +
-            $"SERVICES (id | service | sub-category | bookings nearby in 90 days | rating | nearest provider):\n{services}\n\n" +
-            $"CATEGORIES (id | sub-category | category | businesses nearby | bookings | nearest):\n{categories}\n\n" +
+            scope +
+            $"SERVICES (id | service | sub-category | bookings {area} in 90 days | rating | nearest provider):\n{services}\n\n" +
+            $"CATEGORIES (id | sub-category | category | businesses {area} | bookings | nearest):\n{categories}\n\n" +
             $"1. Pick exactly {pickCount} SERVICES ids, best first, with a reason (max 14 words) why each is in demand here now.\n" +
             $"2. Pick {relatedCount} CATEGORIES ids that people booking those services are also likely to need here now, " +
             "with a reason (max 12 words) how each complements them.\n" +
