@@ -22,7 +22,9 @@ export function OwnerLeads() {
   useDocumentTitle('Leads');
   const business = useBusiness();
   const types = useLookup('EnquiryType');
-  const [status, setStatus] = useState('');
+  // ?status=New (from the dashboard's "needs attention" tiles) opens on that tab.
+  const [urlParams] = useSearchParams();
+  const [status, setStatus] = useState(() => urlParams.get('status') ?? '');
   const [type, setType] = useState('');
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
@@ -173,8 +175,10 @@ export function OwnerBookings() {
   const queryClient = useQueryClient();
   const { enqueueSnackbar } = useSnackbar();
   const statuses = useLookup('BookingStatus');
-  const [scope, setScope] = useState('upcoming');
-  const [status, setStatus] = useState('');
+  // ?scope=all&status=Pending (from the dashboard's "needs attention" tiles) opens with that filter.
+  const [urlParams] = useSearchParams();
+  const [scope, setScope] = useState(() => urlParams.get('scope') ?? 'upcoming');
+  const [status, setStatus] = useState(() => urlParams.get('status') ?? '');
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
   const [action, setAction] = useState<{ booking: OwnerBooking; status: string; label: string } | null>(null);
