@@ -1,3 +1,157 @@
+# Calling Bell — engineering guide
+
+Read this part first. It describes the code as it is. The product brief further down ("Calling Bell Platform") is the original
+requirements document; where the two differ (e.g. it mentions Dapper, Elasticsearch and a `/business` portal), the code and this guide win.
+
+## Stack as built
+
+- **Database:** SQL Server (local: `.\SQLEXPRESS`, database `CallingBell`). Schema and seed data come from the numbered scripts in
+  `database/scripts`, run through `RunAll.sql`. There are no EF migrations in use.
+- **API:** .NET 8, Clean Architecture in `backend/src`:
+  - `CallingBell.Domain`: entities and constants (`DomainConstants.cs`).
+  - `CallingBell.Application`: one file per feature under `Features/*`, holding the request records, FluentValidation validators and
+    MediatR handlers together. Shared helpers live in `Common` (`Phones`, `IndianTime`, `ReverseGeocoder`, `ReferenceDataCache`, `GeoMath`).
+  - `CallingBell.Infrastructure`: EF Core `ApplicationDbContext`, Identity/JWT, OTP, AI (Ollama), geo (MaxMind, ip-api, Overpass,
+    Wikidata), Google Places, Razorpay, and notification providers.
+  - `CallingBell.Api`: thin controllers (`Controllers/*.cs`), SignalR hubs, the SEO middleware that serves the built SPA.
+- **Data access:** EF Core with `IUnitOfWork` / `Repository<T>()` (`Query()` tracked, `QueryNoTracking()` read-only). Not Dapper, no stored
+  procedures.
+- **Web:** one Vite app in `web` for all three portals: React 19 + TypeScript (strict), React Router 7, MUI 7 + Tailwind 4, TanStack
+  Query 5, Zustand, React Hook Form + Zod, SignalR, AG Grid / Recharts (admin), Firebase (web push only, lazy-loaded).
+- **Portals:** customer site at `/`, business owner portal at `/owner/*`, admin console at `/admin/*`. `/business/:slug` is the
+  public business page (old `/business/{section}` owner links redirect to `/owner`).
+
+## Running locally
+
+```powershell
+# Database (SQLCMD mode). -C trusts the local certificate; -I is required (QUOTED_IDENTIFIER) for the scripts.
+cd database\scripts; sqlcmd -S .\SQLEXPRESS -E -C -I -d CallingBell -i RunAll.sql
+
+# API: http://localhost:5080, Swagger at /swagger
+cd backend; dotnet run --project src/CallingBell.Api --launch-profile http
+
+# Web: http://localhost:5173, proxies /api and /hubs to VITE_API_PROXY (default http://localhost:5080)
+cd web; npm install; npm run dev
+npm run build        # tsc -b + vite build (the type check is the lint step: there is no ESLint)
+
+# Tests
+dotnet test backend/tests/CallingBell.Seo.Tests
+dotnet test backend/tests/CallingBell.Onboarding.Tests
+python backend/tests/seo-smoke/seo_smoke.py   # needs the API running
+.\tests\RunAllTests.ps1 -Phone 98XXXXXXXX           # everything: unit, build, API, phone OTP, browser (tests/README.md)
+```
+
+- **Locked build output:** while the API runs from `bin/Debug`, a second `dotnet build`/`test` fails with file locks. Build to another
+  folder (`dotnet build src/CallingBell.Api -o $env:TEMP\cb-build`) or pass `--artifacts-path` to `dotnet test`.
+- **Demo accounts:** password `CallingBell@2026`, e.g. `admin@demo.callingbell.in`, `anand.deshmukh@demo.callingbell.in` (owner),
+  `vikas.mishra@demo.callingbell.in` (customer).
+- **OTP in development:** `Authentication:Otp:ExposeCodeInResponse` is true in `appsettings.Development.json`, so sign-in screens
+  show the code. The Development "Log" SMS provider writes a masked line instead of sending.
+- **Local AI is optional:** Ollama (`qwen3-embedding:0.6b`, `llama2`) powers semantic search, summaries and the assistant. Everything
+  degrades to rules and keywords when it isn't running.
+
+## API conventions
+
+- **Response envelope:** every endpoint returns `ApiResponse<T>`: `{ success, message, data, pagination, errors }`. Controllers use
+  `Success(...)`, `Paged(...)`, `Done(...)` from `ApiControllerBase`. Exceptions map to status codes in
+  `Api/Infrastructure/ApiInfrastructure.cs`:
+  - `ValidationException`: 400 with `errors: { field: [messages] }`.
+  - `NotFoundException`: 404.
+  - `ConflictException`: 409.
+  - `ForbiddenAccessException`: 403.
+  - `ExternalServiceException`: the provider's status.
+- **Validation:** FluentValidation through the MediatR `ValidationBehaviour`. Field keys like `business.services[0].name` map to form
+  paths on the web.
+- **Public cache:**
+  - Public GET endpoints use output caching (`CachePolicies.PublicCatalog`).
+  - `PublicCacheInvalidationBehaviour` clears it, and the SEO cache, after any `*Command` in the Admin, Owner, Onboarding, Payments or
+    Engagement features.
+  - `ReferenceDataCache` caches cities, areas and the category tree; call `ReferenceDataCache.Invalidate` after changing them.
+- **Auth:** JWT plus rotating refresh tokens, roles and permission policies (`Permissions.*`), and rate-limit policies `auth`, `submissions`,
+  `public-search` and `assistant` (Program.cs).
+- **Database rules:** `AuditableEntity` gives CreatedBy/On, ModifiedBy/On and a soft-delete `IsDeleted` with a global query filter. The audit
+  columns are set by `AuditSaveChangesInterceptor`, never by handlers.
+- **Tables with triggers** must be declared in their EF mapping (`b.ToTable(t => t.HasTrigger("..."))`). EF Core 8 saves with an
+  `OUTPUT` clause that SQL Server rejects on triggered tables. `Businesses` has `TR_Businesses_SlugHistory`.
+- **Locations are data:** India stores phone numbers as `+91 98765 43210` (`Phones.Normalize`); providers get E.164
+  (`Phones.ToE164`); logs get `Phones.Mask`. All times are IST via `IndianTime`.
+
+## Database scripts
+
+- **Idempotent and numbered:** every script is safe to re-run (guards on `OBJECT_ID` / `COL_LENGTH` / `sys.indexes`, `MERGE` for
+  seed rows).
+- **Adding a script:** write it as `NN_Name.sql` and add `:r $(ScriptDir)\NN_Name.sql` to `RunAll.sql`. RunAll.sql uses **CRLF** line
+  endings, so edit it as bytes. Order matters: `08_Users` runs before the business scripts.
+- **Schema with seed:** new tables are created inside their feature script (e.g. `27_Seo`, `28_PopularSearches`, `29_Notifications`,
+  `30_JoinCallingBell`), not in `00_Schema`.
+- **No hard-coded data:** categories, cities, plans, content, images (`dbo.Media` served as `/api/media/{id}`), popular searches,
+  notification routes, providers and templates all live in tables.
+
+## Web conventions
+
+- **Structure:**
+  - `src/features/<area>`: pages and feature components.
+  - `src/components`: shared UI (`ui.tsx` has `Img` with fallback, `EmptyState`, `ErrorState`, `PageHeader`, `Panel`).
+  - `src/lib`: `api.ts` unwraps the envelope and throws `ApiError`; `types.ts` holds all DTO types.
+  - `src/stores`: `auth`, `city` (the location selection), `theme`, `ownerBusiness`.
+  - Import alias: `@/` → `src/`.
+- **Server state:** TanStack Query. Only public, non-personal query keys listed in `PERSISTED` (`lib/queryCache.ts`) are saved to
+  localStorage. Never persist Google Maps data (Google's terms) or personal data.
+- **Styling:**
+  - Use Tailwind utilities with the theme tokens from `index.css` (`bg-surface`, `text-ink`, `text-muted`, `border-line`,
+    `bg-accent-soft`, …). They switch with `data-theme` (light/dark) and `data-accent`. Prefer tokens over hex colours.
+  - MUI provides inputs, dialogs, menus and grids.
+  - Layouts must work at 360 px with no horizontal scroll, and must avoid layout shift (reserve space, use skeletons).
+- **Locations:**
+  - The visitor's country, state, city and area come from one IP lookup (`GET /api/geo/district`, query key `['geo','location']`).
+  - The picker is `CitySelect` in `components/LocationPicker.tsx`, backed by `stores/city.ts`.
+- **SEO:**
+  - `SeoHead` and `useSeoPage` (`features/seo/seo.tsx`) apply head data from `GET /api/seo`.
+  - The API's `SpaSeoMiddleware` renders the same data into `index.html` for crawlers when `Seo:SpaRoot` points at `web/dist`.
+- **Verifying UI changes:** run the API and Vite, then drive the pages with Playwright (`playwright-core` + the installed Chrome).
+  Check desktop and 390 px, console errors, horizontal overflow and CLS.
+
+## Feature map (where things live)
+
+- **Search:**
+  - Calling Bell listings: `Features/Businesses`; search parsing and suggestions: `Features/Search/*`.
+  - Google Maps and OpenStreetMap ("AI recommended") tiers: `ExternalSearchFeature`; Google Places: `Infrastructure/Search/GooglePlacesSearch`.
+  - Explore nearby: `/nearby` (`features/places`). Its "Popular searches" come from `dbo.PopularSearches`, counted per search.
+- **Location:**
+  - Country from IP: MaxMind / ip-api, cached per IP.
+  - Reverse geocoding: `ReverseGeocoder` + `GeoGrid`.
+  - Background workers: `CityCatalogWorker` (GeoNames cities) and `AreaDiscoveryWorker` (Wikidata, then Overpass).
+- **Business sign-up:**
+  - Wizard: `features/onboarding` (`BusinessWizard`, `steps.tsx`, `schema.ts`). Server side: `Features/Onboarding`.
+  - **Join Calling Bell:** `?source=google:…|osm:…&hint=…`. The details come from `GET /api/places/join-calling-bell`; the server
+    re-reads the place, cleans it and matches the Calling Bell category, city and area.
+  - Duplicate protection: `BusinessDuplicateFinder`, which matches the same source, phone, website or location with a similar name.
+  - Claims: `POST /api/businesses/{id}/claim-requests`.
+- **Notifications:**
+  - In-app: `NotificationPublisher` plus the SignalR `NotificationHub`.
+  - Beyond the app: a notification with a `RouteCode` is queued and `NotificationDispatcher` (background service) walks
+    `dbo.NotificationRoutingRules`: NEW_LEAD = web push → WhatsApp → RCS → SMS; BOOKING = web push → WhatsApp.
+  - Providers live in `Infrastructure/Notifications/Providers`. Provider webhooks update `NotificationDeliveries`; a late failure
+    continues the route.
+  - OTP goes WhatsApp (authentication template) → SMS (`PhoneOtpService`, `/api/auth/request-otp` and `/api/auth/verify-otp`).
+- **SEO:** `Features/Seo` builds pages, schema.org data and sitemaps; it serves `/robots.txt`, `/sitemap*.xml` and `/api/seo`.
+- **Payments:** Razorpay checkout and webhook (`Features/Payments`, `Infrastructure/Payments`).
+
+## Secrets and configuration
+
+- **Never commit secrets.** That covers the Google Places key, the JWT key, Razorpay keys, the Firebase service account, WhatsApp and
+  SMS tokens, and webhook secrets.
+- **Where they go:** `dotnet user-secrets` (the API has a UserSecretsId) in development; environment variables (`Section__Key`)
+  or Azure App Service settings / Key Vault elsewhere.
+- **What appsettings.json holds:** only non-secret defaults. Optional providers stay `Enabled: false` until configured. The app must
+  keep working (degrading gracefully) when Google, Ollama, Firebase, WhatsApp or SMS are not configured.
+- **Third-party data rules:**
+  - Store only Google place ids, never other Places content (photos, ratings, hours). Photos are proxied through
+    `/api/places/photo`, so the key stays on the server.
+  - OpenStreetMap data needs attribution.
+
+---
+
 # Calling Bell Platform
 
 ## Vision

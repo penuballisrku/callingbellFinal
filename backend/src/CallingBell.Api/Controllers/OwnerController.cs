@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.RateLimiting;
 using CallingBell.Application.Common.Models;
 using CallingBell.Application.Features.Engagement;
 using CallingBell.Application.Features.Businesses;
@@ -18,6 +19,9 @@ public sealed class OwnerController : ApiControllerBase
     public sealed record BookingUpdate(string Status, string? Reason);
     public sealed record ReplyRequest(string Reply);
     public sealed record AvailabilityRequest(string Status);
+    public sealed record StaffRequest(string FullName, string? Title, string? Phone, string? Email, string? Bio, int? YearsExperience, string? Languages,
+        bool AcceptsBookings, bool IsActive, IReadOnlyList<Guid>? ServiceIds, IReadOnlyList<CallingBell.Application.Features.Staff.StaffHourDto>? Hours);
+    public sealed record AssignStaffRequest(Guid? StaffId);
 
     [HttpGet("businesses")]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<OwnerBusinessDto>>>> Businesses(CancellationToken ct) =>
@@ -47,6 +51,37 @@ public sealed class OwnerController : ApiControllerBase
     [HttpGet("businesses/{id:guid}/bookings")]
     public async Task<ActionResult<ApiResponse<OwnerListResult<OwnerBookingDto>>>> Bookings(Guid id, [FromQuery] GetOwnerBookingsQuery query, CancellationToken ct) =>
         Success(await Sender.Send(query with { BusinessId = id }, ct));
+
+    // ---------- Team ----------
+
+    [HttpGet("businesses/{id:guid}/staff")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<CallingBell.Application.Features.Staff.OwnerStaffDto>>>> Staff(Guid id, CancellationToken ct) =>
+        Success(await Sender.Send(new CallingBell.Application.Features.Staff.GetOwnerStaffQuery(id), ct));
+
+    [HttpPost("businesses/{id:guid}/staff")]
+    public async Task<ActionResult<ApiResponse<CallingBell.Application.Features.Staff.OwnerStaffDto>>> AddStaff(Guid id, StaffRequest body, CancellationToken ct) =>
+        Success(await Sender.Send(ToCommand(id, null, body), ct), "Team member added");
+
+    [HttpPut("businesses/{id:guid}/staff/{staffId:guid}")]
+    public async Task<ActionResult<ApiResponse<CallingBell.Application.Features.Staff.OwnerStaffDto>>> UpdateStaff(Guid id, Guid staffId, StaffRequest body, CancellationToken ct) =>
+        Success(await Sender.Send(ToCommand(id, staffId, body), ct), "Team member updated");
+
+    /// <summary>Removes a team member; their upcoming bookings become unassigned (the count is returned).</summary>
+    [HttpDelete("businesses/{id:guid}/staff/{staffId:guid}")]
+    public async Task<ActionResult<ApiResponse<int>>> DeleteStaff(Guid id, Guid staffId, CancellationToken ct) =>
+        Success(await Sender.Send(new CallingBell.Application.Features.Staff.DeleteStaffCommand(id, staffId), ct), "Team member removed");
+
+    /// <summary>Assigns a booking to a team member who does the service and is free then (null to unassign).</summary>
+    [HttpPut("businesses/{id:guid}/bookings/{bookingId:guid}/staff")]
+    public async Task<ActionResult<ApiResponse<object>>> AssignStaff(Guid id, Guid bookingId, AssignStaffRequest body, CancellationToken ct)
+    {
+        await Sender.Send(new CallingBell.Application.Features.Staff.AssignBookingStaffCommand(id, bookingId, body.StaffId), ct);
+        return Done(body.StaffId is null ? "Booking unassigned" : "Booking assigned");
+    }
+
+    private static CallingBell.Application.Features.Staff.SaveStaffCommand ToCommand(Guid businessId, Guid? staffId, StaffRequest b) =>
+        new(businessId, staffId, b.FullName, b.Title, b.Phone, b.Email, b.Bio, b.YearsExperience, b.Languages, b.AcceptsBookings, b.IsActive,
+            b.ServiceIds ?? [], b.Hours);
 
     [HttpPatch("businesses/{id:guid}/bookings/{bookingId:guid}")]
     public async Task<ActionResult<ApiResponse<OwnerBookingDto>>> UpdateBooking(Guid id, Guid bookingId, BookingUpdate body, CancellationToken ct) =>
@@ -119,6 +154,16 @@ public sealed class OwnerController : ApiControllerBase
     [HttpGet("businesses/{id:guid}/media")]
     public async Task<ActionResult<ApiResponse<OwnerMediaDto>>> Media(Guid id, CancellationToken ct) =>
         Success(await Sender.Send(new GetOwnerMediaQuery(id), ct));
+
+    public sealed record ImportPhotosRequest(IReadOnlyList<string> References);
+
+    /// <summary>
+    /// Copies chosen photos of the Google Maps place this business was created from ("Join Calling Bell") into its gallery. Only for the
+    /// owner, only that place's photos, and only when Onboarding:AllowExternalPhotoImport is on (403 otherwise). Returns how many were added.
+    /// </summary>
+    [HttpPost("businesses/{id:guid}/media/import"), EnableRateLimiting("submissions")]
+    public async Task<ActionResult<ApiResponse<int>>> ImportPhotos(Guid id, ImportPhotosRequest body, CancellationToken ct) =>
+        Success(await Sender.Send(new CallingBell.Application.Features.Onboarding.ImportSourcePhotosCommand(id, body.References ?? []), ct), "Photos imported");
 
     [HttpPost("businesses/{id:guid}/media"), RequestSizeLimit(UploadLimit), RequestFormLimits(MultipartBodyLengthLimit = UploadLimit)]
     public async Task<ActionResult<ApiResponse<OwnerMediaItemDto>>> UploadMedia(Guid id, [FromForm] MediaUploadForm form, CancellationToken ct)

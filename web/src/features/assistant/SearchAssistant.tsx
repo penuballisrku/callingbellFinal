@@ -164,48 +164,59 @@ export function SearchAssistant() {
             <SendRounded fontSize="small" />
           </IconButton>
         </div>
-        <p className="mt-1.5 text-[11px] text-faint">Results come from businesses listed on Calling Bell. AI suggestions can be imperfect.</p>
+        <p className="mt-1.5 text-[11px] text-faint">Calling Bell businesses first, then Google Maps, then OpenStreetMap. AI suggestions can be imperfect.</p>
       </form>
     </Drawer>
   );
 }
 
-const NEARBY_SHOWN = 5;
+/** Places an answer shows (the server returns up to this many Calling Bell businesses). */
+const ANSWER_SIZE = 5;
 
 /**
- * Real places near the searched location when nothing is listed on Calling Bell: Google Maps first, then the places the AI picked from
- * OpenStreetMap (the same sources and order as the search page, de-duplicated by the server).
+ * Tops an answer up to {@link ANSWER_SIZE} places, in priority order: Calling Bell businesses (shown above), then Google Maps, then
+ * OpenStreetMap, the free open source map, which is only searched when Google Maps is off, fails or finds too few. The server leaves out
+ * places a higher source already listed.
  */
-function NearbyPlaces({ filters, onClose }: { filters: AssistantFilters; onClose: () => void }) {
-  const { data, isLoading, isError } = useExternalSearch({ q: filters.q, category: filters.category, sub: filters.sub, city: filters.city, areaId: filters.areaId });
-  const places = [
-    ...(data?.google.items ?? []).map((p) => ({ p, source: 'google' as const })),
-    ...(data?.ai.items ?? []).map((p) => ({ p, source: 'ai' as const })),
-  ];
-  const stillSearching = !!data?.ai.searching || data?.ai.aiStatus === 'pending';
+function NearbyPlaces({ filters, need, listed, onClose }: { filters: AssistantFilters; need: number; listed: number; onClose: () => void }) {
+  const { data, isLoading, isError } = useExternalSearch({ q: filters.q, category: filters.category, sub: filters.sub, city: filters.city, areaId: filters.areaId },
+    { aiWhenGoogleBelow: need });
+  const google = (data?.google.items ?? []).map((p) => ({ p, source: 'google' as const }));
+  const osm = (data?.ai.items ?? []).map((p) => ({ p, source: 'ai' as const }));
+  const places = [...google, ...osm].slice(0, need);
+  const available = google.length + osm.length;
+  const stillSearching = google.length < need && (!!data?.ai.searching || data?.ai.aiStatus === 'pending');
+  const sources = [google.length > 0 && 'Google Maps', places.some((x) => x.source === 'ai') && 'OpenStreetMap'].filter(Boolean).join(' and ');
+
+  // Below Calling Bell's own results, nothing is shown when the map has nothing to add.
+  if (listed > 0 && !isLoading && places.length === 0 && !stillSearching) return null;
 
   return (
     <div className="space-y-2">
+      {listed > 0 && <p className="flex items-center gap-1.5 pt-1 text-xs font-semibold uppercase tracking-wide text-muted"><MapOutlined sx={{ fontSize: 15 }} />More places nearby</p>}
       {isLoading ? (
         <>
-          <p className="flex items-center gap-2 text-xs text-muted" role="status"><MapOutlined sx={{ fontSize: 16 }} />Looking for places nearby…</p>
+          {listed === 0 && <p className="flex items-center gap-2 text-xs text-muted" role="status"><MapOutlined sx={{ fontSize: 16 }} />Looking for places nearby…</p>}
           {[0, 1].map((i) => <Skeleton key={i} variant="rounded" height={92} />)}
         </>
-      ) : isError ? (
-        <p className="text-xs text-muted">The map search isn't responding right now.</p>
       ) : places.length === 0 ? (
-        <p className="text-xs text-muted">{stillSearching ? 'Still searching the map for places nearby…' : 'No places were found on the map nearby either.'}</p>
+        <p className="text-xs text-muted">
+          {isError ? "The map search isn't responding right now." : stillSearching ? 'Still searching the map for places nearby…' : 'No places were found on the map nearby either.'}
+        </p>
       ) : (
         <>
           <ul className="space-y-2">
-            {places.slice(0, NEARBY_SHOWN).map(({ p, source }) => <li key={`${source}-${p.id}`}><CompactPlace p={p} source={source} /></li>)}
+            {places.map(({ p, source }) => <li key={`${source}-${p.id}`}><CompactPlace p={p} source={source} /></li>)}
           </ul>
-          <p className="text-[11px] text-faint">Not listed on Calling Bell. Details from {data?.google.items.length ? 'Google Maps' : 'OpenStreetMap'}.</p>
+          <p className="text-[11px] text-faint">
+            Not listed on Calling Bell. Details from {sources}
+            {sources.includes('OpenStreetMap') && <> (© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline">OpenStreetMap contributors</a>)</>}.
+          </p>
         </>
       )}
       {!isLoading && (
         <Button component={Link} to={searchHref(filters)} onClick={onClose} size="small" startIcon={<MapOutlined />}>
-          {places.length > NEARBY_SHOWN ? `See all ${places.length} places nearby` : 'Open the full search'}
+          {available > places.length ? `See all ${available} places nearby` : 'Open the full search'}
         </Button>
       )}
     </div>
@@ -289,8 +300,8 @@ function AnswerView({ turn, disabled, onSuggest, onRemoveChip, onRetry, onClose 
           {r.results.map((b) => <li key={b.id}><BusinessCard b={b} layout="compact" onOpen={onClose} /></li>)}
         </ul>
       )}
-      {r.total === 0 && r.filters.city && (r.filters.sub || r.filters.category || r.filters.q) && (
-        <NearbyPlaces filters={r.filters} onClose={onClose} />
+      {r.results.length < ANSWER_SIZE && (r.filters.sub || r.filters.category || r.filters.q) && (
+        <NearbyPlaces filters={r.filters} need={ANSWER_SIZE - r.results.length} listed={r.results.length} onClose={onClose} />
       )}
       {r.total > r.results.length && (
         <Button component={Link} to={searchHref(r.filters)} onClick={onClose} size="small" endIcon={<ArrowForwardRounded />}>

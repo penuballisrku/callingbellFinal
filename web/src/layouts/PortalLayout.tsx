@@ -4,6 +4,7 @@ import { Drawer, IconButton, useMediaQuery } from '@mui/material';
 import MenuRounded from '@mui/icons-material/MenuRounded';
 import { useNotificationStream } from '@/lib/realtime';
 import { Logo, NotificationBell, ThemeMenu, UserMenu } from './Shared';
+import { MessagesButton } from '@/features/chat/Chat';
 import { CountryCode } from '@/components/VisitorCountry';
 
 export interface PortalNavItem { to: string; label: string; icon: ReactNode; end?: boolean; badge?: number }
@@ -49,6 +50,7 @@ export function PortalLayout({ title, nav, headerExtra, footer }: { title: strin
           {!desktop && <IconButton onClick={() => setOpen(true)} aria-label="Open navigation"><MenuRounded /></IconButton>}
           <div className="min-w-0 flex-1">{headerExtra}</div>
           <ThemeMenu />
+          <span className="hidden sm:inline-flex"><MessagesButton /></span>
           <NotificationBell />
           <UserMenu />
         </header>

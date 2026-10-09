@@ -4,6 +4,7 @@ using CallingBell.Application.Common.Interfaces;
 using CallingBell.Application.Common.Models;
 using CallingBell.Application.Features.Businesses;
 using CallingBell.Application.Features.Notifications;
+using CallingBell.Application.Features.Notifications.Delivery;
 using CallingBell.Domain.Constants;
 using CallingBell.Domain.Entities;
 using FluentValidation;
@@ -45,7 +46,7 @@ public sealed class CreateEnquiryValidator : AbstractValidator<CreateEnquiryComm
     }
 }
 
-public sealed class CreateEnquiryHandler(IUnitOfWork uow, ICurrentUser user, IRealtimeNotifier notifier)
+public sealed class CreateEnquiryHandler(IUnitOfWork uow, ICurrentUser user, IRealtimeNotifier notifier, INotificationDispatchSignal dispatch)
     : IRequestHandler<CreateEnquiryCommand, CreatedReferenceDto>
 {
     public async Task<CreatedReferenceDto> Handle(CreateEnquiryCommand r, CancellationToken ct)
@@ -84,7 +85,9 @@ public sealed class CreateEnquiryHandler(IUnitOfWork uow, ICurrentUser user, IRe
         var title = r.EnquiryType switch { "Quotation" => "New quotation request", "Callback" => "Callback requested", _ => "New enquiry" };
         await NotificationPublisher.PublishAsync(uow, notifier, business.OwnerUserId, title,
             $"{enquiry.CustomerName}{(serviceName is null ? "" : $" · {serviceName}")}: {Truncate(enquiry.Message, 110)}",
-            "Lead", "/owner/leads", ct);
+            "Lead", $"/owner/leads?lead={enquiry.Id}", ct,
+            new NotificationRouting(NotificationRoutes.NewLead, "Enquiry", enquiry.Id, $"{NotificationRoutes.NewLead}:{enquiry.Id}:{business.OwnerUserId}"),
+            dispatch);
 
         return new CreatedReferenceDto(enquiry.Id, enquiry.EnquiryNumber);
     }
@@ -163,8 +166,9 @@ public static class ReviewAggregates
 
 // ===================== Bookings =====================
 
+/// <param name="StaffId">A chosen team member; null = any available (assigned automatically when the business has a team).</param>
 public sealed record CreateBookingCommand(Guid BusinessId, Guid ServiceId, DateTimeOffset ScheduledStart, string? ServiceAddress, string? Notes,
-    string? ContactPhone) : IRequest<CreatedReferenceDto>;
+    string? ContactPhone, Guid? StaffId = null) : IRequest<CreatedReferenceDto>;
 
 public sealed class CreateBookingValidator : AbstractValidator<CreateBookingCommand>
 {
@@ -178,7 +182,8 @@ public sealed class CreateBookingValidator : AbstractValidator<CreateBookingComm
     }
 }
 
-public sealed class CreateBookingHandler(IUnitOfWork uow, ICurrentUser user, IRealtimeNotifier notifier) : IRequestHandler<CreateBookingCommand, CreatedReferenceDto>
+public sealed class CreateBookingHandler(IUnitOfWork uow, ICurrentUser user, IRealtimeNotifier notifier, INotificationDispatchSignal dispatch)
+    : IRequestHandler<CreateBookingCommand, CreatedReferenceDto>
 {
     public async Task<CreatedReferenceDto> Handle(CreateBookingCommand r, CancellationToken ct)
     {
@@ -198,7 +203,7 @@ public sealed class CreateBookingHandler(IUnitOfWork uow, ICurrentUser user, IRe
 
         // Re-validate the slot server-side; the UI may be showing stale availability.
         var start = r.ScheduledStart.ToOffset(IndianTime.Offset);
-        var slots = await SlotCalculator.GetSlotsAsync(uow, business.Id, service.Id, start.Date, ct);
+        var slots = await SlotCalculator.GetSlotsAsync(uow, business.Id, service.Id, start.Date, ct, r.StaffId);
         if (!slots.Any(s => s.Available && s.Start == start))
         {
             throw new ConflictException("That time slot is no longer available. Please pick another slot.");
@@ -223,19 +228,25 @@ public sealed class CreateBookingHandler(IUnitOfWork uow, ICurrentUser user, IRe
             ServiceAddress = r.ServiceAddress?.Trim(),
             Notes = r.Notes?.Trim()
         };
+        // The chosen professional, or the free one with the least work that day.
+        var team = await Staff.StaffSchedule.LoadAsync(uow, business.Id, service.Id, start.Date, ct);
+        booking.StaffId = r.StaffId ?? team.PickFree(booking.ScheduledStart, booking.ScheduledEnd)?.Id;
         uow.Repository<Booking>().Add(booking);
         await uow.SaveChangesAsync(ct);
 
         await NotificationPublisher.PublishAsync(uow, notifier, business.OwnerUserId, "New booking",
-            $"{booking.CustomerName} booked {service.Name} for {start:dd MMM, h:mm tt}", "Booking", "/owner/bookings", ct);
+            $"{booking.CustomerName} booked {service.Name} for {start:dd MMM, h:mm tt}", "Booking", "/owner/bookings", ct,
+            new NotificationRouting(NotificationRoutes.Booking, "Booking", booking.Id, $"{NotificationRoutes.Booking}:Created:{booking.Id}:{business.OwnerUserId}"),
+            dispatch);
 
         return new CreatedReferenceDto(booking.Id, booking.BookingNumber);
     }
 }
 
+/// <param name="IsVideo">Held over video: "Join video call" once confirmed.</param>
 public sealed record MyBookingDto(Guid Id, string BookingNumber, string BusinessName, string BusinessSlug, string? BusinessLogoUrl, string ServiceName,
     DateTimeOffset ScheduledStart, DateTimeOffset ScheduledEnd, string Status, decimal Amount, string PaymentStatus, string? ServiceAddress,
-    string? BusinessPhone, bool CanCancel, bool CanReview);
+    string? BusinessPhone, bool CanCancel, bool CanReview, string? StaffName = null, bool IsVideo = false);
 
 public sealed record GetMyBookingsQuery : PagedRequest, IRequest<PagedResult<MyBookingDto>>
 {
@@ -264,7 +275,9 @@ public sealed class GetMyBookingsHandler(IUnitOfWork uow, ICurrentUser user) : I
             .Select(b => new MyBookingDto(b.Id, b.BookingNumber, b.Business.Name, b.Business.Slug, b.Business.LogoUrl, b.Service.Name,
                 b.ScheduledStart, b.ScheduledEnd, b.Status, b.Amount, b.PaymentStatus, b.ServiceAddress, b.Business.PhoneNumber,
                 (b.Status == BookingStatuses.Pending || b.Status == BookingStatuses.Confirmed) && b.ScheduledStart > cancelCutoff,
-                b.Status == BookingStatuses.Completed && !b.Business.Reviews.Any(rv => rv.CustomerUserId == userId)))
+                b.Status == BookingStatuses.Completed && !b.Business.Reviews.Any(rv => rv.CustomerUserId == userId),
+                b.Staff != null ? b.Staff.FullName : null,
+                b.Service.Type == "Online" || b.Service.Type == "Consultation" && b.Business.OffersVideoConsultation))
             .ToListAsync(ct);
         return PagedResult<MyBookingDto>.Create(items, r.Page, r.PageSize, total);
     }

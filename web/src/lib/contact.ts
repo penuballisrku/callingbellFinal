@@ -21,14 +21,27 @@ export function whatsAppHref(phone: string | null | undefined, name: string): st
 
 const waText = (name: string) => `Hi ${name}, I found your business on Calling Bell and would like to know more about your services.`;
 
+/**
+ * What the visitor is browsing, from the page address (Explore nearby or search: ?sub=, ?category=, ?q=), so "Join Calling Bell" can
+ * suggest that category when the map's own category is too vague.
+ */
+export function joinHint(search: URLSearchParams): string | null {
+  return search.get('sub') || search.get('category') || search.get('q')?.trim() || null;
+}
+
 /** Google Maps directions to a point, or to a name and address when there are no coordinates. */
 export function directionsHref(lat?: number | null, lng?: number | null, query?: string | null): string | null {
   if (lat != null && lng != null) return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
   return query ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}` : null;
 }
 
-/** Business sign-up, pre-filled with what is known about the place (the owner can change everything). */
-export function joinHref(p: { name: string; phone?: string | null; website?: string | null; address?: string | null }): string {
+/**
+ * Business sign-up, pre-filled with what is known about the place (the owner can change everything). With the place's source id
+ * ("google:…" / "osm:node/1") only that reference goes in the URL; the sign-up form loads the full details from the API.
+ */
+export function joinHref(p: { name: string; phone?: string | null; website?: string | null; address?: string | null; sourceId?: string | null },
+  hint?: string | null): string {
+  if (p.sourceId) return `/register?${new URLSearchParams({ type: 'business', source: p.sourceId, ...(hint ? { hint: hint.slice(0, 120) } : {}) })}`;
   const params = new URLSearchParams({ type: 'business', name: p.name });
   if (p.phone) params.set('phone', p.phone);
   if (p.website) params.set('website', p.website);

@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router';
+import { JoinVideoButton } from '@/features/video/JoinVideoButton';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Button, Drawer, IconButton, InputAdornment, MenuItem, Pagination, Skeleton, Tab, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tabs, TextField,
@@ -11,7 +13,7 @@ import { useSnackbar } from 'notistack';
 import { api, errorMessage } from '@/lib/api';
 import { ago, date, dateTime, money, number } from '@/lib/format';
 import { useDebounced, useDocumentTitle, useLookup } from '@/lib/hooks';
-import type { OwnerBooking, OwnerLead, OwnerList } from '@/lib/types';
+import type { OwnerBooking, OwnerLead, OwnerList, OwnerStaff } from '@/lib/types';
 import { ConfirmDialog, EmptyState, ErrorState, PageHeader, StatusBadge } from '@/components/ui';
 import { useBusiness } from './OwnerPortal';
 
@@ -32,6 +34,15 @@ export function OwnerLeads() {
     queryFn: () => api.get<OwnerList<OwnerLead>>(`/api/owner/businesses/${business.id}/leads`, { status, type, q: search, page, pageSize: 15 }),
     placeholderData: keepPreviousData,
   });
+  // A notification link (/owner/leads?lead={id}: web push, WhatsApp, SMS) opens that lead once the list has it; new leads are first.
+  const [params, setParams] = useSearchParams();
+  const linkedLead = params.get('lead');
+  useEffect(() => {
+    if (!linkedLead || !data) return;
+    const lead = data.page.items.find((l) => l.id === linkedLead);
+    if (lead) setSelected(lead);
+    setParams((p) => { const next = new URLSearchParams(p); next.delete('lead'); return next; }, { replace: true });
+  }, [linkedLead, data, setParams]);
   const total = Object.values(data?.statusCounts ?? {}).reduce((a, n) => a + n, 0);
   // Lead status tabs come from the EnquiryStatus lookup table.
   const leadStatuses = [...useLookup('EnquiryStatus')].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -155,8 +166,10 @@ const bookingActions: Record<string, { status: string; label: string; color?: 's
 };
 
 export function OwnerBookings() {
+
   useDocumentTitle('Bookings');
   const business = useBusiness();
+  const team = useQuery({ queryKey: ['owner', 'staff', business.id], queryFn: () => api.get<OwnerStaff[]>(`/api/owner/businesses/${business.id}/staff`) });
   const queryClient = useQueryClient();
   const { enqueueSnackbar } = useSnackbar();
   const statuses = useLookup('BookingStatus');
@@ -204,7 +217,7 @@ export function OwnerBookings() {
           <TableContainer className={isFetching ? 'opacity-60' : ''}>
             <Table size="small" className="table-stack">
               <TableHead>
-                <TableRow><TableCell>When</TableCell><TableCell>Customer</TableCell><TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>Service</TableCell><TableCell align="right">Amount</TableCell><TableCell>Status</TableCell><TableCell align="right">Actions</TableCell></TableRow>
+                <TableRow><TableCell>When</TableCell><TableCell>Customer</TableCell><TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>Service</TableCell><TableCell>Professional</TableCell><TableCell align="right">Amount</TableCell><TableCell>Status</TableCell><TableCell align="right">Actions</TableCell></TableRow>
               </TableHead>
               <TableBody>
                 {data!.page.items.map((b) => (
@@ -212,9 +225,11 @@ export function OwnerBookings() {
                     <TableCell data-label="When" sx={{ whiteSpace: 'nowrap' }}><div className="font-semibold">{date(b.scheduledStart)}</div><div className="text-xs text-muted">{new Date(b.scheduledStart).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}</div></TableCell>
                     <TableCell data-label="Customer"><div className="font-medium">{b.customerName}</div><div className="text-xs text-muted">{b.customerPhone}</div></TableCell>
                     <TableCell data-label="Service" sx={{ display: { xs: 'none', md: 'table-cell' }, maxWidth: 280 }}><div>{b.serviceName}</div>{b.serviceAddress && <div className="truncate text-xs text-muted">{b.serviceAddress}</div>}</TableCell>
+                    <TableCell data-label="Professional"><StaffPicker booking={b} team={team.data ?? []} /></TableCell>
                     <TableCell data-label="Amount" align="right"><div className="font-semibold">{money(b.amount)}</div><div className="text-xs text-muted">{b.paymentStatus}</div></TableCell>
                     <TableCell data-label="Status"><StatusBadge type="BookingStatus" code={b.status} /></TableCell>
                     <TableCell data-label="" align="right" sx={{ whiteSpace: 'nowrap' }}>
+                      {b.isVideo && b.status === 'Confirmed' && <JoinVideoButton bookingId={b.id} />}
                       {(bookingActions[b.status] ?? []).map((a) => (
                         <Button key={a.status} size="small" color={a.color ?? 'inherit'} variant={a.color === 'primary' || a.color === 'success' ? 'contained' : 'text'} sx={{ ml: 0.5 }}
                           onClick={() => setAction({ booking: b, status: a.status, label: a.label })}>{a.label}</Button>
@@ -234,5 +249,31 @@ export function OwnerBookings() {
         message={action ? `${action.booking.serviceName} for ${action.booking.customerName} on ${dateTime(action.booking.scheduledStart)}. The customer will be notified.` : ''}
         onConfirm={() => action && update.mutate({ id: action.booking.id, status: action.status })} onClose={() => setAction(null)} />
     </>
+  );
+}
+
+/** Who does the booking: any team member who does the service; the server checks they're working and free then. */
+function StaffPicker({ booking: b, team }: { booking: OwnerBooking; team: OwnerStaff[] }) {
+  const business = useBusiness();
+  const { enqueueSnackbar } = useSnackbar();
+  const queryClient = useQueryClient();
+  const assign = useMutation({
+    mutationFn: (staffId: string) => api.put(`/api/owner/businesses/${business.id}/bookings/${b.id}/staff`, { staffId: staffId || null }),
+    onSuccess: (_, staffId) => {
+      enqueueSnackbar(staffId ? `Assigned to ${team.find((t) => t.id === staffId)?.fullName}` : 'Unassigned', { variant: 'success' });
+      void queryClient.invalidateQueries({ queryKey: ['owner', 'bookings'] });
+      void queryClient.invalidateQueries({ queryKey: ['owner', 'staff'] });
+    },
+    onError: (e) => enqueueSnackbar(errorMessage(e), { variant: 'error' }),
+  });
+  const editable = b.status === 'Pending' || b.status === 'Confirmed';
+  const options = team.filter((t) => t.isActive && t.acceptsBookings && (!b.serviceId || t.serviceIds.includes(b.serviceId)));
+  if (!editable || options.length === 0) return <span className={b.staffName ? 'text-sm' : 'text-sm text-muted'}>{b.staffName ?? 'Not assigned'}</span>;
+  return (
+    <TextField select size="small" value={b.staffId ?? ''} onChange={(e) => assign.mutate(e.target.value)} disabled={assign.isPending}
+      sx={{ minWidth: 160 }} slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': `Professional for ${b.bookingNumber}` } }}>
+      <MenuItem value=""><span className="text-muted">Not assigned</span></MenuItem>
+      {options.map((t) => <MenuItem key={t.id} value={t.id}>{t.fullName}</MenuItem>)}
+    </TextField>
   );
 }

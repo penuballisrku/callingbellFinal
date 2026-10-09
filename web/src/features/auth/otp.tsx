@@ -4,7 +4,8 @@ import CheckCircleRounded from '@mui/icons-material/CheckCircleRounded';
 import { ApiError, api, errorMessage } from '@/lib/api';
 
 export type OtpPurpose = 'SignIn' | 'SignUp';
-export interface OtpChallenge { maskedPhone: string; expiresInSeconds: number; resendInSeconds: number; developmentCode?: string | null }
+/** channel: how the code was sent, "WhatsApp" or "SMS" (WhatsApp first, SMS when WhatsApp can't deliver it). */
+export interface OtpChallenge { maskedPhone: string; expiresInSeconds: number; resendInSeconds: number; developmentCode?: string | null; channel?: string | null }
 export interface PhoneVerificationResult { verificationToken: string; expiresAt: string }
 
 export const OTP_LENGTH = 6;
@@ -26,10 +27,11 @@ export function useOtpChallenge(purpose: OtpPurpose) {
     return () => clearTimeout(t);
   }, [cooldown]);
 
-  const send = async (phoneNumber: string) => {
+  /** channel "SMS" skips WhatsApp ("Send by SMS instead"). */
+  const send = async (phoneNumber: string, channel?: 'SMS') => {
     setSending(true);
     try {
-      const { data } = await api.post<OtpChallenge>('/api/auth/otp/send', { phoneNumber, purpose });
+      const { data } = await api.post<OtpChallenge>('/api/auth/otp/send', { phoneNumber, purpose, channel });
       setChallenge(data);
       setCooldown(data.resendInSeconds);
       return data;
@@ -42,8 +44,10 @@ export function useOtpChallenge(purpose: OtpPurpose) {
   return { challenge, sending, cooldown, send, reset };
 }
 
-export function OtpCodeField({ value, onChange, onEnter, error, disabled, autoFocus = true }: {
+export function OtpCodeField({ value, onChange, onEnter, error, disabled, autoFocus = true, channel }: {
   value: string; onChange: (code: string) => void; error?: string; disabled?: boolean; autoFocus?: boolean;
+  /** Where the code went, for the hint ("from WhatsApp" / "from the SMS"). */
+  channel?: string | null;
   /** Called on Enter instead of submitting a surrounding form. */
   onEnter?: () => void;
 }) {
@@ -51,27 +55,39 @@ export function OtpCodeField({ value, onChange, onEnter, error, disabled, autoFo
     <TextField label="Verification code" value={value} autoFocus={autoFocus} disabled={disabled} required
       onChange={(e) => onChange(e.target.value.replace(/\D/g, '').slice(0, OTP_LENGTH))}
       onKeyDown={onEnter ? (e) => { if (e.key === 'Enter') { e.preventDefault(); onEnter(); } } : undefined}
-      error={!!error} helperText={error ?? `Enter the ${OTP_LENGTH}-digit code from the SMS`}
+      error={!!error} helperText={error ?? `Enter the ${OTP_LENGTH}-digit code ${channel === 'WhatsApp' ? 'we sent on WhatsApp' : 'from the SMS'}`}
       slotProps={{ htmlInput: { inputMode: 'numeric', autoComplete: 'one-time-code', maxLength: OTP_LENGTH, 'aria-label': 'Verification code', style: { letterSpacing: '0.4em', fontVariantNumeric: 'tabular-nums' } } }} />
   );
 }
 
-/** "Code sent to +91 ••••• •3210 · Change number · Resend in 24s", plus the code itself in local development. */
-export function OtpSentNote({ challenge, cooldown, sending, onResend, onChangeNumber }: {
+/**
+ * "Code sent on WhatsApp to +91 ••••• •3210 · Change number · Resend in 24s", "Send by SMS instead" once a WhatsApp code can be resent,
+ * plus the code itself in local development.
+ */
+export function OtpSentNote({ challenge, cooldown, sending, onResend, onChangeNumber, onSendSms }: {
   challenge: OtpChallenge; cooldown: number; sending: boolean; onResend: () => void; onChangeNumber: () => void;
+  /** Resend by SMS instead of WhatsApp. */
+  onSendSms?: () => void;
 }) {
+  const via = challenge.channel === 'WhatsApp' ? ' on WhatsApp' : challenge.channel === 'SMS' ? ' by SMS' : '';
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted">
-        We sent a code to <span className="font-semibold text-ink">{challenge.maskedPhone}</span>.{' '}
+        We sent a code{via} to <span className="font-semibold text-ink">{challenge.maskedPhone}</span>.{' '}
         <button type="button" onClick={onChangeNumber} className="font-semibold text-ink underline-offset-2 hover:underline">Change number</button>
         <span aria-hidden> · </span>
         {cooldown > 0
           ? <span aria-live="polite">Resend in {cooldown}s</span>
           : <button type="button" onClick={onResend} disabled={sending} className="font-semibold text-ink underline-offset-2 hover:underline disabled:opacity-60">{sending ? 'Sending…' : 'Resend code'}</button>}
+        {challenge.channel === 'WhatsApp' && onSendSms && cooldown <= 0 && !sending && (
+          <>
+            <span aria-hidden> · </span>
+            <button type="button" onClick={onSendSms} className="font-semibold text-ink underline-offset-2 hover:underline">Send by SMS instead</button>
+          </>
+        )}
       </p>
       {challenge.developmentCode && (
-        <Alert severity="info" variant="outlined">Development mode: no SMS is sent. Your code is <strong>{challenge.developmentCode}</strong>.</Alert>
+        <Alert severity="info" variant="outlined">Development mode: no message is sent. Your code is <strong>{challenge.developmentCode}</strong>.</Alert>
       )}
     </div>
   );
@@ -100,11 +116,11 @@ export function PhoneVerification({ phoneNumber, verified, validatePhone, onVeri
   // A different number needs a new code.
   useEffect(() => { reset(); setCode(''); setCodeError(undefined); setError(null); }, [digits]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const sendCode = async () => {
+  const sendCode = async (channel?: 'SMS') => {
     setError(null);
     if (!(await validatePhone())) return;
     try {
-      await send(phoneNumber);
+      await send(phoneNumber, channel);
       setCode('');
       setCodeError(undefined);
     } catch (e) {
@@ -142,15 +158,15 @@ export function PhoneVerification({ phoneNumber, verified, validatePhone, onVeri
       {error && <Alert severity="error">{error}</Alert>}
       {!challenge ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-muted">We'll text a one-time code to verify this number. You'll use it to sign in.</p>
+          <p className="text-sm text-muted">We'll send a one-time code on WhatsApp (or by SMS) to verify this number. You'll use it to sign in.</p>
           <Button variant="outlined" onClick={() => void sendCode()} disabled={sending}>{sending ? 'Sending…' : 'Send code'}</Button>
         </div>
       ) : (
         <>
-          <OtpSentNote challenge={challenge} cooldown={cooldown} sending={sending} onResend={() => void sendCode()} onChangeNumber={() => { reset(); setCode(''); }} />
+          <OtpSentNote challenge={challenge} cooldown={cooldown} sending={sending} onResend={() => void sendCode()} onSendSms={() => void sendCode('SMS')} onChangeNumber={() => { reset(); setCode(''); }} />
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
             <div className="flex-1">
-              <OtpCodeField value={code} onChange={(v) => { setCode(v); setCodeError(undefined); }} onEnter={() => void verify()} error={codeError} disabled={verifying} />
+              <OtpCodeField value={code} onChange={(v) => { setCode(v); setCodeError(undefined); }} onEnter={() => void verify()} error={codeError} disabled={verifying} channel={challenge.channel} />
             </div>
             <Button variant="contained" onClick={() => void verify()} disabled={verifying} sx={{ height: 56, minWidth: 120 }}>
               {verifying ? 'Verifying…' : 'Verify'}

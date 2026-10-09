@@ -66,10 +66,15 @@ export const router = createBrowserRouter([
       { path: 'support', lazy: page(() => import('@/features/about/ContactSupportPage')) },
       { path: 'login', lazy: page(() => import('@/features/auth/LoginPage')) },
       { path: 'register', lazy: page(() => import('@/features/auth/RegisterPage')) },
+      // Video consultations: full screen, for the two people in the call.
+      { path: 'video/:roomId', lazy: page(() => import('@/features/video/VideoRoomPage')) },
       {
         path: 'account',
         element: <RequireAuth />,
-        children: [{ index: true, lazy: page(() => import('@/features/account/AccountPage')) }],
+        children: [
+          { index: true, lazy: page(() => import('@/features/account/AccountPage')) },
+          { path: 'bookings', loader: () => redirect('/account?tab=upcoming') },
+        ],
       },
       { path: '*', element: <RouteError /> },
     ],

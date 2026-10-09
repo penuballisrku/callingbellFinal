@@ -25,7 +25,11 @@ public sealed record BusinessProfileInput(
     string? Languages, bool AcceptsOnlineBooking, bool OffersHomeService, bool OffersVideoConsultation,
     string BusinessPhone, string? WhatsAppNumber, string? BusinessEmail, string? Website,
     string CitySlug, string? AreaSlug, string AddressLine, string? Landmark, string Pincode,
-    IReadOnlyList<OnboardingServiceInput> Services, string PlanCode, string BillingCycle, IReadOnlyList<OnboardingSocialLinkInput>? SocialLinks);
+    IReadOnlyList<OnboardingServiceInput> Services, string PlanCode, string BillingCycle, IReadOnlyList<OnboardingSocialLinkInput>? SocialLinks,
+    string? SourceId = null, double? Latitude = null, double? Longitude = null, IReadOnlyList<OnboardingHourInput>? Hours = null);
+
+/// <summary>Opening hours for one day (0 = Sunday): "HH:mm" times, or closed.</summary>
+public sealed record OnboardingHourInput(int DayOfWeek, string? Open, string? Close, bool IsClosed);
 
 /// <summary>
 /// The business starts on the Free plan. When a paid plan was chosen, <see cref="RequestedPlanCode"/> is set and the client
@@ -69,6 +73,10 @@ internal static class OnboardingRules
         Uri.TryCreate(value, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp) && uri.Host.Contains('.');
 
     public static bool IsPincode(string? value) => value is not null && Pincode.IsMatch(value.Trim());
+
+    /// <summary>"09:30" (24-hour) as a time of day.</summary>
+    public static bool TryTime(string? value, out TimeSpan time) =>
+        TimeSpan.TryParseExact(value?.Trim(), @"hh\:mm", System.Globalization.CultureInfo.InvariantCulture, out time) && time < TimeSpan.FromDays(1);
 }
 
 public sealed class BusinessProfileInputValidator : AbstractValidator<BusinessProfileInput>
@@ -125,6 +133,21 @@ public sealed class BusinessProfileInputValidator : AbstractValidator<BusinessPr
         });
         RuleFor(x => x.SocialLinks).Must(l => l!.Select(x => x.Platform).Distinct().Count() == l!.Count)
             .When(x => x.SocialLinks is { Count: > 0 }).WithMessage("Add each social platform only once.");
+
+        // Join Calling Bell: the source place, its position and hours.
+        RuleFor(x => x.SourceId).Must(s => JoinImport.ParseSource(s) is not null).When(x => !string.IsNullOrWhiteSpace(x.SourceId))
+            .WithMessage("Unknown source business.");
+        RuleFor(x => x.Latitude).InclusiveBetween(-90, 90).When(x => x.Latitude.HasValue);
+        RuleFor(x => x.Longitude).InclusiveBetween(-180, 180).When(x => x.Longitude.HasValue);
+        RuleFor(x => x).Must(x => x.Latitude.HasValue == x.Longitude.HasValue).WithName("latitude").WithMessage("Give both latitude and longitude.");
+        RuleFor(x => x.Hours).Must(h => h!.Count <= 7 && h.Select(d => d.DayOfWeek).Distinct().Count() == h.Count).When(x => x.Hours is { Count: > 0 })
+            .WithMessage("Give each day's hours once.");
+        RuleForEach(x => x.Hours).ChildRules(h =>
+        {
+            h.RuleFor(x => x.DayOfWeek).InclusiveBetween(0, 6);
+            h.RuleFor(x => x).Must(x => x.IsClosed || OnboardingRules.TryTime(x.Open, out var o) && OnboardingRules.TryTime(x.Close, out var c) && c > o)
+                .WithName("hours").WithMessage("Enter an opening time before the closing time, or mark the day closed.");
+        });
     }
 }
 
@@ -155,6 +178,9 @@ internal sealed record ResolvedBusinessInput(Category Category, SubCategory SubC
 
 internal sealed class BusinessFactory(IUnitOfWork uow)
 {
+    /// <summary>A position from the source is used only within this distance of the chosen city; otherwise the area's position is.</summary>
+    private const double MaxKmFromCity = 80;
+
     /// <summary>Checks every reference against the database before anything is written (no partial sign-ups).</summary>
     public async Task<ResolvedBusinessInput> ResolveAsync(BusinessProfileInput input, CancellationToken ct)
     {
@@ -197,6 +223,16 @@ internal sealed class BusinessFactory(IUnitOfWork uow)
         }
 
         if (errors.Count > 0) throw new ValidationException(errors);
+
+        // Never a second listing for the same business: same source place, or the same phone / website / location with a similar name.
+        var source = JoinImport.ParseSource(input.SourceId);
+        var existing = await new BusinessDuplicateFinder(uow).FindAsync(new DuplicateProbe(source, input.BusinessName, [input.BusinessPhone, input.WhatsAppNumber],
+            input.Website, city!.Id, input.Latitude, input.Longitude), ct);
+        if (existing.FirstOrDefault(e => e.IsStrong) is { } dup)
+            throw new ConflictException(dup.MatchedBy == "SourceId"
+                ? $"This business is already on Calling Bell as \u201C{dup.Name}\u201D. Claim it instead of creating it again."
+                : $"\u201C{dup.Name}\u201D is already on Calling Bell with the same {(dup.MatchedBy == "Location" ? "location" : dup.MatchedBy.ToLowerInvariant())}. Claim it instead of creating a duplicate.");
+
         var free = await uow.Repository<SubscriptionPlan>().QueryNoTracking().FirstAsync(p => p.Code == PlanCodes.Free, ct);
         return new ResolvedBusinessInput(category!, sub!, city!, area, plan!, free);
     }
@@ -220,8 +256,10 @@ internal sealed class BusinessFactory(IUnitOfWork uow)
             AddressLine = Clean(input.AddressLine),
             Landmark = Clean(input.Landmark),
             Pincode = input.Pincode.Trim(),
-            Latitude = r.Area?.Latitude,
-            Longitude = r.Area?.Longitude,
+            Latitude = SourcePosition(input, r) is { } p1 ? (decimal)p1.Lat : r.Area?.Latitude,
+            Longitude = SourcePosition(input, r) is { } p2 ? (decimal)p2.Lon : r.Area?.Longitude,
+            SourceProvider = JoinImport.ParseSource(input.SourceId)?.Provider,
+            SourceExternalId = JoinImport.ParseSource(input.SourceId)?.ExternalId,
             PhoneNumber = Phones.Normalize(input.BusinessPhone),
             WhatsAppNumber = string.IsNullOrWhiteSpace(input.WhatsAppNumber) ? null : Phones.Normalize(input.WhatsAppNumber),
             Email = Clean(input.BusinessEmail),
@@ -245,6 +283,17 @@ internal sealed class BusinessFactory(IUnitOfWork uow)
             {
                 BusinessId = business.Id, Name = s.Name.Trim(), Description = s.Description?.Trim() ?? string.Empty, Price = s.Price,
                 PriceUnit = Clean(s.PriceUnit), DurationMinutes = s.DurationMinutes, Type = s.Type, IsPopular = i == 0, IsActive = true
+            });
+        }
+
+        foreach (var h in input.Hours ?? [])
+        {
+            OnboardingRules.TryTime(h.Open, out var open);
+            OnboardingRules.TryTime(h.Close, out var close);
+            uow.Repository<BusinessHour>().Add(new BusinessHour
+            {
+                BusinessId = business.Id, DayOfWeek = (byte)h.DayOfWeek, IsClosed = h.IsClosed,
+                OpenTime = h.IsClosed ? null : open, CloseTime = h.IsClosed ? null : close,
             });
         }
 
@@ -283,6 +332,14 @@ internal sealed class BusinessFactory(IUnitOfWork uow)
             paid ? r.Plan.Code : null, paid ? r.Plan.Name : null, input.BillingCycle);
     }
 
+    /// <summary>The source's exact position when it lies in the chosen city (it is more precise than the area's centre).</summary>
+    private static (double Lat, double Lon)? SourcePosition(BusinessProfileInput input, ResolvedBusinessInput r)
+    {
+        if (input is not { Latitude: { } lat, Longitude: { } lon }) return null;
+        if (r.City is { Latitude: { } clat, Longitude: { } clon } && JoinImport.DistanceMetres(lat, lon, (double)clat, (double)clon) > MaxKmFromCity * 1000) return null;
+        return (Math.Round(lat, 6), Math.Round(lon, 6));
+    }
+
     private async Task<HashSet<string>> LookupCodes(string type, CancellationToken ct) =>
         (await uow.Repository<LookupValue>().QueryNoTracking().Where(l => l.LookupType == type && l.IsActive).Select(l => l.Code).ToListAsync(ct)).ToHashSet();
 
@@ -311,17 +368,6 @@ internal sealed class BusinessFactory(IUnitOfWork uow)
     }
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : Regex.Replace(value.Trim(), @"\s{2,}", " ");
-}
-
-internal static class Phones
-{
-    public static string Normalize(string phone)
-    {
-        var digits = new string(phone.Where(char.IsDigit).ToArray());
-        if (digits.Length == 12 && digits.StartsWith("91")) digits = digits[2..];
-        if (digits.Length == 11 && digits.StartsWith('0')) digits = digits[1..];
-        return digits.Length == 10 ? $"+91 {digits[..5]} {digits[5..]}" : phone.Trim();
-    }
 }
 
 public static class SocialLinks

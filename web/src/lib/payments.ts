@@ -2,10 +2,15 @@ import { useQuery } from '@tanstack/react-query';
 import { api, errorMessage } from './api';
 import type { CheckoutOrder, PaymentConfig, PaymentResult, Plan } from './types';
 import { currencyDigits } from './format';
+import { queryClient } from './queryCache';
+
+/** The server's simulated gateway for development (TestPaymentGateway): checkout opens a test window instead of Razorpay. */
+export const TEST_GATEWAY = 'Test';
 
 /** Whether online checkout is available (Razorpay keys configured on the server). */
 export function usePaymentConfig() {
-  return useQuery({ queryKey: ['payments', 'config'], queryFn: () => api.get<PaymentConfig>('/api/payments/config'), staleTime: 10 * 60_000 });
+  // Re-checked after a minute, so a page left open sees payments switched on (or off) on the server without a reload.
+  return useQuery({ queryKey: ['payments', 'config'], queryFn: () => api.get<PaymentConfig>('/api/payments/config'), staleTime: 60_000 });
 }
 
 export const GST_RATE = 0.18;
@@ -71,9 +76,11 @@ export type CheckoutOutcome =
 export async function payForPlan(businessId: string, plan: { planCode: string; billingCycle: string; gstin?: string | null }): Promise<CheckoutOutcome> {
   let order: CheckoutOrder;
   try {
+    // Razorpay's script loads alongside the order, unless the server is known to use simulated test payments.
+    const testMode = queryClient.getQueryData<PaymentConfig>(['payments', 'config'])?.gateway === TEST_GATEWAY;
     [order] = await Promise.all([
       api.post<CheckoutOrder>(`/api/owner/businesses/${businessId}/payments/orders`, { ...plan, gstin: plan.gstin || null }).then((r) => r.data),
-      loadCheckout(),
+      testMode ? undefined : loadCheckout(),
     ]);
   } catch (e) {
     return { status: 'failed', reason: errorMessage(e) };
@@ -82,6 +89,26 @@ export async function payForPlan(businessId: string, plan: { planCode: string; b
   const base = `/api/owner/businesses/${businessId}/payments/orders/${order.orderId}`;
   const record = (outcome: 'Cancelled' | 'Failed', reason?: string) =>
     api.post(`${base}/outcome`, { outcome, reason: reason ?? null }).catch(() => undefined);
+
+  if (order.gateway === TEST_GATEWAY) {
+    const { openTestCheckout } = await import('./testCheckout');
+    const test = await openTestCheckout(order);
+    if (test.status !== 'paid') {
+      const reason = test.status === 'failed' ? test.reason : undefined;
+      void record(test.status === 'failed' ? 'Failed' : 'Cancelled', reason);
+      return { status: test.status, reason: reason ?? 'Payment was not completed.', orderId: order.orderId };
+    }
+    try {
+      const verified = await api.post<PaymentResult>(`${base}/verify`, {
+        gatewayOrderId: order.gatewayOrderId, gatewayPaymentId: test.paymentId, signature: test.signature,
+      });
+      return { status: 'paid', result: verified.data };
+    } catch (e) {
+      return { status: 'failed', reason: errorMessage(e), orderId: order.orderId };
+    }
+  }
+  await loadCheckout().catch(() => undefined);
+  if (!window.Razorpay) return { status: 'failed', reason: 'Could not load the secure payment window. Check your connection and try again.', orderId: order.orderId };
 
   return new Promise<CheckoutOutcome>((resolve) => {
     let lastError: string | undefined;

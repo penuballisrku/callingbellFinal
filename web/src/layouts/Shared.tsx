@@ -18,6 +18,8 @@ import { ago, initials } from '@/lib/format';
 import { isAdmin, isOwner, useAuth } from '@/stores/auth';
 import type { NotificationItem } from '@/lib/types';
 import { EmptyState } from '@/components/ui';
+import { PushNotificationToggle, usePushBridge } from '@/components/PushNotifications';
+import { disablePush } from '@/lib/push';
 
 /** Brand logo. `light` renders the inverted version for navy surfaces. */
 export function Logo({ light }: { light?: boolean }) {
@@ -79,6 +81,8 @@ export function NotificationBell({ dark }: { dark?: boolean }) {
     mutationFn: () => api.post('/api/me/notifications/read'),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
   });
+  // Shown only while signed in, so web push is kept registered (and notification clicks handled) for signed-in users only.
+  usePushBridge();
 
   return (
     <>
@@ -93,6 +97,7 @@ export function NotificationBell({ dark }: { dark?: boolean }) {
           <Typography fontWeight={700}>Notifications</Typography>
           <Button size="small" disabled={!data?.unreadCount || markRead.isPending} onClick={() => markRead.mutate()}>Mark all read</Button>
         </div>
+        <PushNotificationToggle />
         <div className="max-h-[420px] overflow-y-auto">
           {!data?.items.length ? <EmptyState title="You're all caught up" message="New leads, bookings and updates will appear here." /> : data.items.map((n) => (
             <button key={n.id} type="button" onClick={() => { setAnchor(null); if (n.linkUrl) navigate(n.linkUrl); }}
@@ -119,6 +124,8 @@ export function UserMenu({ dark }: { dark?: boolean }) {
 
   const signOut = async () => {
     setAnchor(null);
+    // While still signed in: this browser stops receiving the account's push notifications.
+    await disablePush().catch(() => undefined);
     if (refreshToken) await api.post('/api/auth/logout', { refreshToken }).catch(() => undefined);
     clear();
     queryClient.clear();

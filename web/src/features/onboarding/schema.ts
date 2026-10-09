@@ -26,6 +26,23 @@ export const serviceSchema = z.object({
   type: z.string().min(1, 'Choose how this service is delivered'),
 });
 
+/** One day's opening hours (0 = Sunday). Empty open and close = not given; closed = closed all day. */
+export const hourSchema = z.object({
+  dayOfWeek: z.number().int().min(0).max(6),
+  open: z.string(),
+  close: z.string(),
+  closed: z.boolean(),
+}).superRefine((h, ctx) => {
+  if (h.closed || (!h.open && !h.close)) return;
+  if (!h.open) ctx.addIssue({ code: 'custom', path: ['open'], message: 'Opening time' });
+  else if (!h.close) ctx.addIssue({ code: 'custom', path: ['close'], message: 'Closing time' });
+  else if (h.close <= h.open) ctx.addIssue({ code: 'custom', path: ['close'], message: 'After opening' });
+});
+
+/** Monday first, as people read a week. */
+export const WEEK = [1, 2, 3, 4, 5, 6, 0] as const;
+export const emptyHours = () => WEEK.map((dayOfWeek) => ({ dayOfWeek, open: '', close: '', closed: false }));
+
 export const socialSchema = z.object({
   platform: z.string().min(1, 'Choose a platform'),
   url: z.string().trim().min(1, 'Enter the profile URL').refine(isUrl, 'Enter a valid URL starting with https://'),
@@ -58,6 +75,11 @@ export const businessSchema = z.object({
   planCode: z.string().min(1, 'Choose a plan'),
   billingCycle: z.enum(['Monthly', 'Annual']),
   socialLinks: z.array(socialSchema),
+  hours: z.array(hourSchema),
+  /** "Join Calling Bell": the Google Maps / OpenStreetMap place this listing is created from, and its exact position. */
+  sourceId: z.string(),
+  latitude: z.number().nullable(),
+  longitude: z.number().nullable(),
 });
 
 const accountShape = {
@@ -102,19 +124,20 @@ export const defaultValues = (mode: 'register' | 'setup', user?: { displayName?:
     acceptsOnlineBooking: true, offersHomeService: false, offersVideoConsultation: false,
     businessPhone: '', whatsAppNumber: '', businessEmail: '', website: '', citySlug: '', areaSlug: '', addressLine: '', landmark: '', pincode: '',
     services: [emptyService()], planCode: 'FREE', billingCycle: 'Monthly', socialLinks: [],
+    hours: emptyHours(), sourceId: '', latitude: null, longitude: null,
   },
 });
 
 /** Wizard steps and the form fields each one validates before moving on. */
 export const STEPS = [
   { key: 'account', label: 'Account', title: 'Create your account', subtitle: 'You will use this to sign in and manage your business.',
-    fields: ['displayName', 'email', 'phoneNumber'] },
+    fields: ['displayName', 'email', 'phoneNumber', 'business.categorySlug', 'business.subCategorySlug'] },
   { key: 'business', label: 'Business', title: 'About your business', subtitle: 'Tell customers who you are and what you do.',
     fields: ['business.businessName', 'business.categorySlug', 'business.subCategorySlug', 'business.tagline', 'business.description',
       'business.yearEstablished', 'business.teamSize', 'business.languages'] },
   { key: 'contact', label: 'Contact & address', title: 'Contact information & address', subtitle: 'How and where customers can reach you.',
     fields: ['business.businessPhone', 'business.whatsAppNumber', 'business.businessEmail', 'business.website', 'business.citySlug',
-      'business.areaSlug', 'business.addressLine', 'business.landmark', 'business.pincode'] },
+      'business.areaSlug', 'business.addressLine', 'business.landmark', 'business.pincode', 'business.hours'] },
   { key: 'offer', label: 'Services & plan', title: 'Services & plan', subtitle: 'List what you offer and choose how you want to grow.',
     fields: ['business.services', 'business.planCode', 'business.billingCycle'] },
   { key: 'payment', label: 'Payment', title: 'Billing & payment', subtitle: 'Review your order. You will pay securely with Razorpay right after your profile is created.',

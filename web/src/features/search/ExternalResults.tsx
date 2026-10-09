@@ -13,12 +13,12 @@ import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import WhatsApp from '@mui/icons-material/WhatsApp';
 import StarRounded from '@mui/icons-material/StarRounded';
 import { LogoMark } from '@/components/Logo';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { api } from '@/lib/api';
 import { number } from '@/lib/format';
 import type { ExternalPlace, ExternalSearch, ExternalTier, PlaceContact } from '@/lib/types';
 import { Img } from '@/components/ui';
-import { joinHref, telHref, whatsAppHref } from '@/lib/contact';
+import { joinHint, joinHref, telHref, whatsAppHref } from '@/lib/contact';
 
 const PAGE = 8;
 /** Polls of the external search while the AI works (every 8 s); after that the visitor can check again by hand. */
@@ -27,6 +27,9 @@ const FAST_POLLS = 20;
 
 /** `place`: a place typed in the search that isn't a listed city or area ("lawyers in Nellore"); results are near it instead. */
 export interface ExternalSearchParams { q?: string | null; category?: string | null; sub?: string | null; city?: string | null; areaId?: string | null; place?: string | null }
+
+/** `aiWhenGoogleBelow`: search OpenStreetMap only when Google Maps returns fewer places than this (unset: always, as on the search page). */
+export interface ExternalSearchOptions { aiWhenGoogleBelow?: number }
 
 /**
  * The Google results the page shows, sent back with each AI tier request (only what the server needs: duplicates and the overview).
@@ -59,7 +62,7 @@ function mergeGooglePages(pages: ExternalSearch[]): ExternalTier {
  * places, writes its overview or OpenStreetMap is still being searched; each poll sends back the Google results shown, so the server can
  * leave out duplicates without calling Google again (nothing from Google is stored on the server).
  */
-export function useExternalSearch(p: ExternalSearchParams) {
+export function useExternalSearch(p: ExternalSearchParams, options: ExternalSearchOptions = {}) {
   const enabled = !!(p.q?.trim() || p.category || p.sub);
   const search = { q: p.q, category: p.category, sub: p.sub, city: p.city, area: p.areaId, place: p.place };
   const baseKey = ['external-search', p.q ?? '', p.category ?? '', p.sub ?? '', p.city ?? '', p.areaId ?? '', p.place ?? ''];
@@ -76,6 +79,9 @@ export function useExternalSearch(p: ExternalSearchParams) {
     retry: 1,
   });
   const googleTier = googleQuery.data ? mergeGooglePages(googleQuery.data.pages) : undefined;
+  // OpenStreetMap is the last resort when only a few places are wanted: asked only when Google is off, failed or found too few.
+  const aiNeeded = options.aiWhenGoogleBelow === undefined
+    || (googleTier?.status === 'ready' ? googleTier.items.length : 0) < options.aiWhenGoogleBelow;
 
   const aiKey = [...baseKey, 'ai'];
   const aiQuery = useQuery({
@@ -89,7 +95,7 @@ export function useExternalSearch(p: ExternalSearchParams) {
       return res.data;
     },
     // After Google has answered (or failed), so the first AI request already leaves out places Google shows.
-    enabled: enabled && !googleQuery.isPending,
+    enabled: enabled && !googleQuery.isPending && aiNeeded,
     staleTime: 300_000,
     retry: 1,
     // Poll while the AI is ranking or writing its overview, or the full OpenStreetMap search is still finishing (ten minutes at most;
@@ -106,7 +112,7 @@ export function useExternalSearch(p: ExternalSearchParams) {
   const g = googleQuery.data?.pages[0];
   const a = aiQuery.data;
   const data: ExternalSearch | undefined = g || a
-    ? { ...(a ?? g!), ai: a?.ai ?? (g?.ai.status === 'skipped' && aiQuery.isPending ? AI_LOADING : (g ?? a)!.ai), google: googleTier ?? a!.google }
+    ? { ...(a ?? g!), ai: a?.ai ?? (g?.ai.status === 'skipped' && aiQuery.isPending && aiNeeded ? AI_LOADING : (g ?? a)!.ai), google: googleTier ?? a!.google }
     : undefined;
   /** False once automatic refreshing has given up; the page then offers to check again by hand. */
   const polling = (queryClient.getQueryState(aiKey)?.dataUpdateCount ?? 0) < MAX_POLLS;
@@ -415,8 +421,10 @@ type PlaceDetails = ReturnType<typeof usePlaceDetails>;
  * Accent-tinted so it stands out from the card's own details and actions.
  */
 export function ClaimBusinessBanner({ place, className }: {
-  place: { name: string; phone?: string | null; website?: string | null; address?: string | null }; className?: string;
+  place: { name: string; phone?: string | null; website?: string | null; address?: string | null; sourceId?: string | null }; className?: string;
 }) {
+  // The search the result came from suggests the category when the map's own is vague.
+  const [search] = useSearchParams();
   return (
     <div className={`flex flex-col gap-3 rounded-xl border border-[color-mix(in_srgb,var(--cb-accent)_45%,transparent)] bg-accent-soft p-3 sm:flex-row sm:items-center ${className ?? ''}`}>
       <span aria-hidden className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-surface shadow-[var(--cb-shadow-xs)]"><LogoMark size={22} /></span>
@@ -424,7 +432,7 @@ export function ClaimBusinessBanner({ place, className }: {
         <p className="text-sm font-bold text-ink">Own {place.name}?</p>
         <p className="text-xs text-ink-2">List it free on Calling Bell and get enquiries, bookings and reviews from customers nearby.</p>
       </div>
-      <Button size="small" variant="contained" disableElevation component={Link} to={joinHref(place)}
+      <Button size="small" variant="contained" disableElevation component={Link} to={joinHref(place, joinHint(search))}
         sx={{
           flexShrink: 0, bgcolor: 'var(--cb-accent)', color: 'var(--cb-on-accent)', fontWeight: 700, px: 2,
           '&:hover': { bgcolor: 'color-mix(in srgb, var(--cb-accent) 88%, #000)' },
@@ -579,7 +587,7 @@ function PlaceCard({ p, source, onSelect }: { p: ExternalPlace; source: 'ai' | '
         </div>
       </div>
       <PlaceActions p={p} d={d} source={source} />
-      <ClaimBusinessBanner className="mt-3" place={{ name: p.name, phone: d.phone, website: d.website, address: p.address }} />
+      <ClaimBusinessBanner className="mt-3" place={{ name: p.name, phone: d.phone, website: d.website, address: p.address, sourceId: p.id }} />
       <p className="mt-2 text-xs text-muted">
         {d.fromGoogle ? 'Phone, rating and photo from Google Maps' : source === 'google' ? 'Details from Google Maps' : 'Details from OpenStreetMap'}
       </p>

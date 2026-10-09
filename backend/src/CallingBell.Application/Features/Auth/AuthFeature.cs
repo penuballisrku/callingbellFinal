@@ -1,8 +1,10 @@
+using CallingBell.Application.Common;
 using CallingBell.Application.Common.Exceptions;
 using CallingBell.Application.Common.Interfaces;
 using CallingBell.Application.Features.Onboarding;
 using FluentValidation;
 using MediatR;
+using Microsoft.Extensions.Logging;
 using ValidationException = CallingBell.Application.Common.Exceptions.ValidationException;
 
 namespace CallingBell.Application.Features.Auth;
@@ -22,7 +24,11 @@ public sealed record RegisterRequest(string DisplayName, string Email, string Ph
 public enum OtpPurpose { SignIn, SignUp }
 
 /// <summary>A code was sent. <see cref="DevelopmentCode"/> is only filled when the server is configured to expose it (local development).</summary>
-public sealed record OtpChallengeDto(string MaskedPhone, int ExpiresInSeconds, int ResendInSeconds, string? DevelopmentCode);
+/// <param name="Channel">How it was sent: "WhatsApp" or "SMS".</param>
+public sealed record OtpChallengeDto(string MaskedPhone, int ExpiresInSeconds, int ResendInSeconds, string? DevelopmentCode, string? Channel = null);
+
+/// <summary>Which channel to send a code on. Auto = WhatsApp first, then SMS (dbo.NotificationRoutingRules, route OTP).</summary>
+public enum OtpChannelPreference { Auto, Sms }
 
 public sealed record PhoneVerificationDto(string VerificationToken, DateTimeOffset ExpiresAt);
 
@@ -64,7 +70,8 @@ public sealed class LoginHandler(IIdentityService identity) : IRequestHandler<Lo
 
 // ---------- OTP: send a code ----------
 /// <param name="Purpose">"SignIn" or "SignUp".</param>
-public sealed record SendOtpCommand(string PhoneNumber, string Purpose) : IRequest<OtpChallengeDto>;
+/// <param name="Channel">"SMS" to skip WhatsApp ("Send by SMS instead"); omit for WhatsApp first, then SMS.</param>
+public sealed record SendOtpCommand(string PhoneNumber, string Purpose, string? Channel = null) : IRequest<OtpChallengeDto>;
 
 public sealed class SendOtpValidator : AbstractValidator<SendOtpCommand>
 {
@@ -73,6 +80,7 @@ public sealed class SendOtpValidator : AbstractValidator<SendOtpCommand>
         RuleFor(x => x.PhoneNumber).NotEmpty().WithMessage(AuthRules.IndianMobileMessage)
             .Matches(AuthRules.IndianMobile).WithMessage(AuthRules.IndianMobileMessage);
         RuleFor(x => x.Purpose).Must(p => p is nameof(OtpPurpose.SignIn) or nameof(OtpPurpose.SignUp)).WithMessage("Purpose must be SignIn or SignUp.");
+        RuleFor(x => x.Channel).Must(c => c is null or "SMS" or "AUTO").WithMessage("channel must be SMS or AUTO.");
     }
 }
 
@@ -86,7 +94,90 @@ public sealed class SendOtpHandler(IIdentityService identity, IPhoneOtpService o
         if (purpose == OtpPurpose.SignIn && !registered)
             throw new ValidationException(new Dictionary<string, string[]> { ["phoneNumber"] = ["No account uses this mobile number. Create an account to get started."] });
         if (purpose == OtpPurpose.SignUp && registered) throw AuthRules.PhoneTaken();
-        return await otp.SendAsync(phone, purpose, ct);
+        return await otp.SendAsync(phone, purpose, ct, r.Channel == "SMS" ? OtpChannelPreference.Sms : OtpChannelPreference.Auto);
+    }
+}
+
+// ---------- OTP (generic): request a code ----------
+/// <param name="PhoneNumber">E.164, e.g. "+919876543210" (a 10-digit Indian number is also accepted).</param>
+/// <param name="Purpose">"LOGIN" or "SIGNUP".</param>
+/// <param name="Channel">"SMS" to skip WhatsApp ("Send by SMS instead"); omit for WhatsApp first, then SMS.</param>
+public sealed record RequestOtpCommand(string PhoneNumber, string Purpose, string? Channel = null) : IRequest<RequestOtpResultDto>;
+
+/// <summary>The same answer whether or not a code was sent, so the response never reveals which numbers have accounts.</summary>
+public sealed record RequestOtpResultDto(int ExpiresInSeconds, int ResendInSeconds, string? DevelopmentCode);
+
+public sealed class RequestOtpValidator : AbstractValidator<RequestOtpCommand>
+{
+    public RequestOtpValidator()
+    {
+        RuleFor(x => x.PhoneNumber).NotEmpty().MaximumLength(20).Must(p => Phones.ToE164(p) is not null)
+            .WithMessage("Enter a valid mobile number with its country code, e.g. +919876543210.");
+        RuleFor(x => x.Purpose).Must(p => p is "LOGIN" or "SIGNUP").WithMessage("purpose must be LOGIN or SIGNUP.");
+        RuleFor(x => x.Channel).Must(c => c is null or "SMS" or "AUTO").WithMessage("channel must be SMS or AUTO.");
+    }
+}
+
+/// <summary>
+/// Sends a code only when it can be used (LOGIN: the number has an account; SIGNUP: it has none) but answers the same either way. Sent on
+/// WhatsApp first (authentication template), by SMS if WhatsApp can't deliver it; never both.
+/// </summary>
+public sealed class RequestOtpHandler(IIdentityService identity, IPhoneOtpService otp, ILogger<RequestOtpHandler> logger)
+    : IRequestHandler<RequestOtpCommand, RequestOtpResultDto>
+{
+    public async Task<RequestOtpResultDto> Handle(RequestOtpCommand r, CancellationToken ct)
+    {
+        var phone = Phones.Normalize(Phones.ToE164(r.PhoneNumber)!);
+        var purpose = r.Purpose == "LOGIN" ? OtpPurpose.SignIn : OtpPurpose.SignUp;
+        var registered = await identity.IsPhoneRegisteredAsync(phone, ct);
+        string? developmentCode = null;
+        if (purpose == OtpPurpose.SignIn == registered)
+        {
+            try
+            {
+                var challenge = await otp.SendAsync(phone, purpose, ct, r.Channel == "SMS" ? OtpChannelPreference.Sms : OtpChannelPreference.Auto);
+                developmentCode = challenge.DevelopmentCode;
+            }
+            catch (ExternalServiceException)
+            {
+                // Every channel failed. Still the generic answer (an error here would reveal the number has an account).
+                logger.LogWarning("OTP request: no channel could deliver the code");
+            }
+            catch (BadRequestException)
+            {
+                // Per-number limits (resend wait, codes per 15 minutes): likewise not revealed; the IP limit still applies to everyone.
+                logger.LogInformation("OTP request: limit reached for the number");
+            }
+        }
+        return new RequestOtpResultDto(otp.ExpirySeconds, otp.ResendSeconds, developmentCode);
+    }
+}
+
+// ---------- OTP (generic): verify a code ----------
+/// <param name="Purpose">"LOGIN" (signs in) or "SIGNUP" (returns a verification token for registration).</param>
+public sealed record VerifyOtpCommand(string PhoneNumber, string Code, string Purpose) : IRequest<VerifyOtpResultDto>;
+
+public sealed record VerifyOtpResultDto(AuthResultDto? Auth, PhoneVerificationDto? Verification);
+
+public sealed class VerifyOtpValidator : AbstractValidator<VerifyOtpCommand>
+{
+    public VerifyOtpValidator()
+    {
+        RuleFor(x => x.PhoneNumber).NotEmpty().MaximumLength(20).Must(p => Phones.ToE164(p) is not null).WithMessage("Enter a valid mobile number.");
+        RuleFor(x => x.Code).NotEmpty().WithMessage(AuthRules.OtpCodeMessage).Matches(AuthRules.OtpCode).WithMessage(AuthRules.OtpCodeMessage);
+        RuleFor(x => x.Purpose).Must(p => p is "LOGIN" or "SIGNUP").WithMessage("purpose must be LOGIN or SIGNUP.");
+    }
+}
+
+/// <summary>Checks the latest code (5 tries, then a new code is needed) and signs in or issues the sign-up verification token.</summary>
+public sealed class VerifyOtpHandler(IIdentityService identity, IPhoneOtpService otp) : IRequestHandler<VerifyOtpCommand, VerifyOtpResultDto>
+{
+    public async Task<VerifyOtpResultDto> Handle(VerifyOtpCommand r, CancellationToken ct)
+    {
+        var phone = Phones.Normalize(Phones.ToE164(r.PhoneNumber)!);
+        if (r.Purpose == "SIGNUP") return new VerifyOtpResultDto(null, await otp.VerifyForSignUpAsync(phone, r.Code.Trim(), ct));
+        await otp.VerifyAsync(phone, OtpPurpose.SignIn, r.Code.Trim(), ct);
+        return new VerifyOtpResultDto(await identity.SignInWithPhoneAsync(phone, ct), null);
     }
 }
 

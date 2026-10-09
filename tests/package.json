@@ -1,0 +1,11 @@
+{
+  "name": "callingbell-tests",
+  "private": true,
+  "description": "Browser tests for Calling Bell (Playwright driving the installed Chrome).",
+  "scripts": {
+    "e2e": "node e2e/phase2.cjs"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.63.0"
+  }
+}

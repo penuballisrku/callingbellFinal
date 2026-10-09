@@ -1,3 +1,7 @@
+using CallingBell.Infrastructure.Notifications.Providers;
+using CallingBell.Infrastructure.Notifications;
+using CallingBell.Application.Features.Notifications.Delivery;
+using CallingBell.Application.Features.Notifications;
 using CallingBell.Application.Common.Interfaces;
 using CallingBell.Domain.Entities;
 using CallingBell.Infrastructure.Ai;
@@ -11,6 +15,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace CallingBell.Infrastructure;
 
@@ -51,7 +56,33 @@ public static class DependencyInjection
         services.AddScoped<IIdentityService, IdentityService>();
         services.Configure<OtpOptions>(configuration.GetSection(OtpOptions.Section));
         services.AddScoped<IPhoneOtpService, PhoneOtpService>();
-        services.AddSingleton<ISmsSender, LoggingSmsSender>();
+        services.AddSingleton<OtpCodeVault>();
+        services.AddScoped<IOtpFallback, OtpSmsFallback>();
+
+        // ---------- Notifications beyond the app: web push, WhatsApp, RCS, SMS (credentials from env / Key Vault only) ----------
+        services.Configure<NotificationOptions>(configuration.GetSection(NotificationOptions.Section));
+        var notify = configuration.GetSection(NotificationOptions.Section).Get<NotificationOptions>() ?? new NotificationOptions();
+        services.AddHttpClient(FcmWebPushProvider.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(10));
+        services.AddHttpClient(GoogleServiceAccountTokens.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(10));
+        services.AddHttpClient(MetaWhatsAppClient.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(Math.Clamp(notify.WhatsApp.TimeoutSeconds, 2, 30)));
+        services.AddHttpClient(ProviderHttp.RcsClient, c => c.Timeout = TimeSpan.FromSeconds(Math.Clamp(notify.Rcs.TimeoutSeconds, 2, 30)));
+        services.AddHttpClient(ProviderHttp.SmsClient, c => c.Timeout = TimeSpan.FromSeconds(Math.Clamp(notify.Sms.TimeoutSeconds, 2, 30)));
+        services.AddSingleton<GoogleServiceAccountTokens>();
+        services.AddSingleton<IDeliveryAckSigner, DeliveryAckSigner>();
+        services.AddSingleton<CallingBell.Application.Features.Chat.IChatAttachmentSigner, ChatAttachmentSigner>();
+        services.Configure<CallingBell.Application.Features.Video.VideoOptions>(configuration.GetSection(CallingBell.Application.Features.Video.VideoOptions.Section));
+        services.AddSingleton<IWebPushClientConfig, WebPushClientConfig>();
+        services.AddScoped<MetaWhatsAppClient>();
+        services.AddScoped<INotificationProvider, FcmWebPushProvider>();
+        services.AddScoped<INotificationProvider, WhatsAppProvider>();
+        services.AddScoped<INotificationProvider, WhatsAppAuthenticationProvider>();
+        services.AddScoped<INotificationProvider, RcsProvider>();
+        services.AddScoped<INotificationProvider, Msg91SmsProvider>();
+        services.AddScoped<INotificationProvider, TwilioSmsProvider>();
+        services.AddScoped<INotificationProvider, LogSmsProvider>();
+        services.AddSingleton<NotificationDispatchSignal>();
+        services.AddSingleton<INotificationDispatchSignal>(sp => sp.GetRequiredService<NotificationDispatchSignal>());
+        services.AddHostedService<NotificationDispatcher>();
 
         services.Configure<GeoIpOptions>(configuration.GetSection(GeoIpOptions.Section));
         services.AddSingleton<IGeoLocationService, MaxMindGeoLocationService>();
@@ -129,9 +160,19 @@ public static class DependencyInjection
         services.AddScoped<IPopularSearchCounter, PopularSearchCounter>();
         services.AddHttpClient(PhotonPlaceGeocoder.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(8));
         services.AddSingleton<IPlaceGeocoder, PhotonPlaceGeocoder>();
+        // Join Calling Bell: photos copied from the source only when Onboarding:AllowExternalPhotoImport is on (licence permitting).
+        services.Configure<CallingBell.Application.Features.Onboarding.OnboardingOptions>(configuration.GetSection(CallingBell.Application.Features.Onboarding.OnboardingOptions.Section));
+        services.AddHttpClient(ExternalPhotoFetcher.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(20));
+        services.AddScoped<CallingBell.Application.Features.Onboarding.IExternalPhotoFetcher, ExternalPhotoFetcher>();
 
         services.Configure<RazorpayOptions>(configuration.GetSection(RazorpayOptions.Section));
-        services.AddHttpClient<IPaymentGateway, RazorpayGateway>(c => c.Timeout = TimeSpan.FromSeconds(20));
+        services.AddHttpClient<RazorpayGateway>(c => c.Timeout = TimeSpan.FromSeconds(20));
+        // Razorpay when its keys are set; otherwise, in development, simulated test payments (Payments:Test:Enabled).
+        services.Configure<TestPaymentOptions>(configuration.GetSection(TestPaymentOptions.Section));
+        services.AddSingleton<TestPaymentGateway>();
+        services.AddTransient<IPaymentGateway>(sp => sp.GetRequiredService<RazorpayGateway>() is { IsConfigured: true } razorpay ? razorpay
+            : sp.GetRequiredService<IOptions<TestPaymentOptions>>().Value.Enabled ? sp.GetRequiredService<TestPaymentGateway>()
+            : sp.GetRequiredService<RazorpayGateway>());
 
         return services;
     }

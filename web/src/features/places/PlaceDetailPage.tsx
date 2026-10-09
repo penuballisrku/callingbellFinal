@@ -162,7 +162,7 @@ function Details({ d, seed }: { d: PlaceDetails; seed?: GooglePlace }) {
       </header>
 
       <PlaceActions className="mt-4 border-y border-line py-3 sm:border-0 sm:py-0"
-        place={{ name: d.name, phone: d.phone ?? seed?.phone, internationalPhone: d.internationalPhone ?? seed?.internationalPhone, address: d.address, directionsUrl: directions, mapsUrl }} />
+        place={{ name: d.name, phone: d.phone ?? seed?.phone, internationalPhone: d.internationalPhone ?? seed?.internationalPhone, address: d.address, directionsUrl: directions, mapsUrl, sourceId: `${d.source}:${d.sourceId}` }} />
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0 space-y-8">
@@ -212,7 +212,7 @@ function Details({ d, seed }: { d: PlaceDetails; seed?: GooglePlace }) {
             </Block>
           )}
 
-          <ClaimBusinessBanner place={{ name: d.name, phone: d.phone ?? d.mobile, website: d.website, address: d.address }} />
+          <ClaimBusinessBanner place={{ name: d.name, phone: d.phone ?? d.mobile, website: d.website, address: d.address, sourceId: `${d.source}:${d.sourceId}` }} />
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-[88px] lg:self-start">

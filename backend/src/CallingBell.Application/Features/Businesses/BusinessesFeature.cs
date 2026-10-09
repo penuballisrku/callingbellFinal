@@ -373,19 +373,25 @@ public sealed class GetBusinessReviewsHandler(IUnitOfWork uow) : IRequestHandler
 
 public sealed record SlotDto(string Time, DateTimeOffset Start, bool Available);
 
-public sealed record GetAvailableSlotsQuery(Guid BusinessId, Guid ServiceId, DateTime Date) : IRequest<IReadOnlyList<SlotDto>>;
+/// <param name="StaffId">Only times when this team member is free.</param>
+public sealed record GetAvailableSlotsQuery(Guid BusinessId, Guid ServiceId, DateTime Date, Guid? StaffId = null) : IRequest<IReadOnlyList<SlotDto>>;
 
 public sealed class GetAvailableSlotsHandler(IUnitOfWork uow) : IRequestHandler<GetAvailableSlotsQuery, IReadOnlyList<SlotDto>>
 {
     public Task<IReadOnlyList<SlotDto>> Handle(GetAvailableSlotsQuery request, CancellationToken ct) =>
-        SlotCalculator.GetSlotsAsync(uow, request.BusinessId, request.ServiceId, request.Date, ct);
+        SlotCalculator.GetSlotsAsync(uow, request.BusinessId, request.ServiceId, request.Date, ct, request.StaffId);
 }
 
 public static class SlotCalculator
 {
     private static readonly string[] Blocking = [BookingStatuses.Pending, BookingStatuses.Confirmed];
 
-    public static async Task<IReadOnlyList<SlotDto>> GetSlotsAsync(IUnitOfWork uow, Guid businessId, Guid serviceId, DateTime date, CancellationToken ct)
+    /// <summary>
+    /// Bookable times for a service on a day. With a team (members who do the service), a time is free when someone who does it is working
+    /// and not booked (and, with <paramref name="staffId"/>, when that person is); without one, the business's general capacity applies.
+    /// </summary>
+    public static async Task<IReadOnlyList<SlotDto>> GetSlotsAsync(IUnitOfWork uow, Guid businessId, Guid serviceId, DateTime date, CancellationToken ct,
+        Guid? staffId = null)
     {
         var business = await uow.Repository<Business>().QueryNoTracking()
             .Where(b => b.Id == businessId && b.Status == BusinessStatuses.Active)
@@ -417,13 +423,18 @@ public static class SlotCalculator
             .ToListAsync(ct);
 
         var earliest = IndianTime.Now.AddMinutes(60);
+        var team = await Staff.StaffSchedule.LoadAsync(uow, businessId, serviceId, date, ct);
+        var chosen = staffId is { } sid ? team.Members.FirstOrDefault(m => m.Id == sid) : null;
+        if (staffId is not null && chosen is null) return [];
         var slots = new List<SlotDto>();
         for (var t = open; t + duration <= close; t += TimeSpan.FromMinutes(30))
         {
             var start = IndianTime.At(date, t);
             var end = start + duration;
-            var overlapping = booked.Count(b => b.ScheduledStart < end && b.ScheduledEnd > start);
-            slots.Add(new SlotDto(t.ToString(@"hh\:mm"), start, start >= earliest && overlapping < capacity));
+            var free = team.HasTeam
+                ? team.FreeCount(start, end) > 0 && (chosen is null || chosen.IsFree(start, end))
+                : booked.Count(b => b.ScheduledStart < end && b.ScheduledEnd > start) < capacity;
+            slots.Add(new SlotDto(t.ToString(@"hh\:mm"), start, start >= earliest && free));
         }
         return slots;
     }

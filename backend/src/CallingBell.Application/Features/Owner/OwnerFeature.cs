@@ -6,6 +6,7 @@ using CallingBell.Application.Features.Businesses;
 using CallingBell.Application.Features.Catalog;
 using CallingBell.Application.Features.Engagement;
 using CallingBell.Application.Features.Notifications;
+using CallingBell.Application.Features.Notifications.Delivery;
 using CallingBell.Domain.Constants;
 using CallingBell.Domain.Entities;
 using FluentValidation;
@@ -66,7 +67,8 @@ public sealed record OwnerLeadDto(Guid Id, string EnquiryNumber, string Customer
 
 public sealed record OwnerBookingDto(Guid Id, string BookingNumber, string CustomerName, string CustomerPhone, string ServiceName,
     DateTimeOffset ScheduledStart, DateTimeOffset ScheduledEnd, string Status, decimal Amount, string PaymentStatus, string? ServiceAddress,
-    string? Notes, string? CancellationReason, DateTimeOffset CreatedOn);
+    string? Notes, string? CancellationReason, DateTimeOffset CreatedOn, Guid? ServiceId = null, Guid? StaffId = null, string? StaffName = null,
+    bool IsVideo = false);
 
 public sealed record OwnerPlanSummaryDto(string Code, string Name, int LeadCredits, int LeadsThisMonth, DateTime? RenewsOn, string BillingCycle);
 
@@ -186,7 +188,9 @@ internal static class OwnerProjections
 
     public static readonly System.Linq.Expressions.Expression<Func<Booking, OwnerBookingDto>> Booking = b =>
         new OwnerBookingDto(b.Id, b.BookingNumber, b.CustomerName, b.CustomerPhone, b.Service.Name, b.ScheduledStart, b.ScheduledEnd, b.Status,
-            b.Amount, b.PaymentStatus, b.ServiceAddress, b.Notes, b.CancellationReason, b.CreatedOn);
+            b.Amount, b.PaymentStatus, b.ServiceAddress, b.Notes, b.CancellationReason, b.CreatedOn, b.ServiceId, b.StaffId,
+            b.Staff != null ? b.Staff.FullName : null,
+            b.Service.Type == "Online" || b.Service.Type == "Consultation" && b.Business.OffersVideoConsultation);
 }
 
 // ===================== Leads =====================
@@ -296,7 +300,8 @@ public sealed class GetOwnerBookingsHandler(IUnitOfWork uow, ICurrentUser user) 
 
 public sealed record UpdateBookingStatusCommand(Guid BusinessId, Guid BookingId, string Status, string? Reason) : IRequest<OwnerBookingDto>;
 
-public sealed class UpdateBookingStatusHandler(IUnitOfWork uow, ICurrentUser user, IRealtimeNotifier notifier)
+public sealed class UpdateBookingStatusHandler(IUnitOfWork uow, ICurrentUser user, IRealtimeNotifier notifier, INotificationDispatchSignal dispatch,
+    Video.VideoRoomService videoRooms)
     : IRequestHandler<UpdateBookingStatusCommand, OwnerBookingDto>
 {
     private static readonly Dictionary<string, string[]> Allowed = new()
@@ -335,8 +340,14 @@ public sealed class UpdateBookingStatusHandler(IUnitOfWork uow, ICurrentUser use
             BookingStatuses.Cancelled => $"{business.Name} cancelled your {booking.Service.Name} booking for {when}.",
             _ => $"Your booking {booking.BookingNumber} was updated to {r.Status}."
         };
+        // A confirmation also reaches the customer outside the app (web push, then WhatsApp); other updates stay in the app.
+        var routing = r.Status == BookingStatuses.Confirmed
+            ? new NotificationRouting(NotificationRoutes.Booking, "Booking", booking.Id, $"{NotificationRoutes.Booking}:Confirmed:{booking.Id}:{booking.CustomerUserId}")
+            : null;
         await NotificationPublisher.PublishAsync(uow, notifier, booking.CustomerUserId, $"Booking {r.Status.ToLowerInvariant()}", message,
-            "Booking", "/account/bookings", ct);
+            "Booking", "/account/bookings", ct, routing, dispatch);
+        // A confirmed online / video consultation gets its private video room (the customer is told where to join).
+        if (r.Status == BookingStatuses.Confirmed) await videoRooms.EnsureForBookingAsync(booking.Id, ct);
 
         return await uow.Repository<Booking>().QueryNoTracking().Where(b => b.Id == booking.Id).Select(OwnerProjections.Booking).FirstAsync(ct);
     }

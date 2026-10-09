@@ -232,3 +232,48 @@ public sealed class GetBannersHandler(IUnitOfWork uow) : IRequestHandler<GetBann
             .Select(b => new BannerDto(b.Id, b.Title, b.Subtitle, b.CtaText, b.LinkUrl, b.ImageUrl, b.MobileImageUrl, b.DesktopImageUrl, b.AltText, b.Placement));
     }
 }
+
+// ---------- Service suggestions (business sign-up) ----------
+/// <summary>A service businesses in a sub-category commonly list, with typical values to pre-fill a new listing's service.</summary>
+/// <param name="TypicalPrice">Median price among the businesses offering it (rounded).</param>
+/// <param name="BusinessCount">How many listed businesses offer it.</param>
+public sealed record ServiceSuggestionDto(string Name, string? Description, decimal TypicalPrice, string? PriceUnit, int DurationMinutes, string Type,
+    int BusinessCount);
+
+public sealed record GetServiceSuggestionsQuery(string SubCategorySlug) : IRequest<IReadOnlyList<ServiceSuggestionDto>>;
+
+/// <summary>
+/// The services active listings in the sub-category offer, most common first (same name, any case, counts once per business), each with
+/// the median price and the most common duration, unit and delivery type. Straight from dbo.BusinessServices: nothing is hard-coded.
+/// </summary>
+public sealed class GetServiceSuggestionsHandler(IUnitOfWork uow) : IRequestHandler<GetServiceSuggestionsQuery, IReadOnlyList<ServiceSuggestionDto>>
+{
+    private const int MaxSuggestions = 40;
+
+    public async Task<IReadOnlyList<ServiceSuggestionDto>> Handle(GetServiceSuggestionsQuery r, CancellationToken ct)
+    {
+        var slug = r.SubCategorySlug.Trim();
+        var rows = await uow.Repository<BusinessService>().QueryNoTracking()
+            .Where(s => s.IsActive && s.Business.Status == BusinessStatuses.Active && s.Business.SubCategory != null && s.Business.SubCategory.Slug == slug)
+            .Select(s => new { s.BusinessId, s.Name, s.Description, s.Price, s.PriceUnit, s.DurationMinutes, s.Type })
+            .Take(2000)
+            .ToListAsync(ct);
+
+        static T Mode<T>(IEnumerable<T> values) => values.GroupBy(v => v).OrderByDescending(g => g.Count()).First().Key;
+        return rows
+            .Where(s => !string.IsNullOrWhiteSpace(s.Name))
+            .GroupBy(s => s.Name.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(g =>
+            {
+                var prices = g.Select(s => s.Price).Order().ToList();
+                var median = prices[prices.Count / 2];
+                var described = g.Select(s => s.Description).FirstOrDefault(d => !string.IsNullOrWhiteSpace(d));
+                return new ServiceSuggestionDto(Mode(g.Select(s => s.Name.Trim())), described,
+                    median >= 100 ? Math.Round(median / 10) * 10 : Math.Round(median), Mode(g.Select(s => s.PriceUnit)),
+                    Mode(g.Select(s => s.DurationMinutes)), Mode(g.Select(s => s.Type)), g.Select(s => s.BusinessId).Distinct().Count());
+            })
+            .OrderByDescending(s => s.BusinessCount).ThenBy(s => s.Name)
+            .Take(MaxSuggestions)
+            .ToList();
+    }
+}

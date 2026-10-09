@@ -23,6 +23,13 @@ public static class DependencyInjection
         services.AddScoped<Features.Seo.ISeoMetadataService, Features.Seo.SeoMetadataService>();
         services.AddScoped<Features.Seo.SitemapService>();
         services.AddScoped<Common.CountryPricingService>();
+        services.AddScoped<Features.Onboarding.BusinessDuplicateFinder>();
+        services.AddScoped<Features.Chat.ChatMessenger>();
+        services.AddScoped<Features.Video.VideoRoomService>();
+        services.AddScoped<Features.Notifications.Delivery.NotificationRouter>();
+        services.AddScoped<Features.Notifications.Delivery.NotificationContentBuilder>();
+        services.AddScoped<Features.Notifications.Delivery.NotificationDispatchProcessor>();
+        services.AddScoped<Features.Notifications.Delivery.DeliveryStatusService>();
 
         return services;
     }

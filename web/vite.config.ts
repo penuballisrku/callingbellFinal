@@ -1,17 +1,24 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 import { fileURLToPath, URL } from 'node:url';
 
 const api = process.env.VITE_API_PROXY ?? 'http://localhost:5080';
 
-export default defineConfig({
-  plugins: [react(), tailwindcss()],
+// `npm run dev:lan`: served over HTTPS on the local network (https://<this PC's IP>:5173), so phones and other devices on the same
+// Wi-Fi get the camera, microphone and location (browsers only allow them on https:// or localhost). The certificate is self-signed:
+// accept the browser's warning once on each device.
+export default defineConfig(({ mode }) => ({
+  plugins: [react(), tailwindcss(), ...(mode === 'lan' ? [basicSsl({ name: 'callingbell-dev' })] : [])],
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   // Identifies this build: the browser's saved page data (src/lib/queryCache.ts) is dropped when it changes.
   define: { 'import.meta.env.VITE_BUILD_ID': JSON.stringify(String(Date.now())) },
   server: {
     port: 5173,
+    host: mode === 'lan' ? true : undefined,
+    // HTTPS tunnels for testing on other devices (camera, microphone and location need HTTPS): VS Code port forwarding, Cloudflare.
+    allowedHosts: ['.devtunnels.ms', '.trycloudflare.com'],
     // Transform the shell and the most visited pages as soon as the dev server starts, so the first page load doesn't wait for it.
     warmup: {
       clientFiles: [
@@ -45,4 +52,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

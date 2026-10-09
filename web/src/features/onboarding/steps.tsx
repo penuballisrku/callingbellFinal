@@ -1,8 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { Controller, useFieldArray, useFormContext, useWatch } from 'react-hook-form';
 import {
-  Button, Checkbox, FormControlLabel, IconButton, InputAdornment, MenuItem, Switch, TextField, ToggleButton, ToggleButtonGroup, Tooltip,
+  Autocomplete, Button, Checkbox, Chip, FormControlLabel, IconButton, InputAdornment, MenuItem, Switch, TextField, ToggleButton, ToggleButtonGroup, Tooltip,
 } from '@mui/material';
 import AddRounded from '@mui/icons-material/AddRounded';
 import DeleteOutlineRounded from '@mui/icons-material/DeleteOutlineRounded';
@@ -22,6 +23,8 @@ import { useCityAreas } from '@/lib/hooks';
 import { emptyService, type StepKey, type WizardForm } from './schema';
 import { asksForGstin, priceBreakdown, taxLabel } from '@/lib/payments';
 import { PhoneVerification, phoneDigits } from '@/features/auth/otp';
+import { ImportedPhotos, type ImportedPhotosState } from './JoinImport';
+import { api } from '@/lib/api';
 
 export interface WizardData { categories: Category[]; cities: City[]; plans: Plan[]; serviceTypes: Lookup[]; socialPlatforms: Lookup[] }
 
@@ -30,6 +33,9 @@ export interface MediaState {
   add: (kind: MediaKind, files: File[]) => void;
   remove: (id: string) => void;
   rename: (id: string, title: string) => void;
+  /** Photos: move one place earlier (-1) or later (1); the first photo is the main photo. */
+  move: (id: string, direction: -1 | 1) => void;
+  makeFirst: (id: string) => void;
   errors: string[];
 }
 
@@ -55,7 +61,9 @@ function useField(name: string) {
 }
 
 /* ======================= 1. Account ======================= */
-export function AccountStep({ emailStatus, onEmailBlur }: { emailStatus: 'idle' | 'checking' | 'available' | 'taken'; onEmailBlur: (email: string) => void }) {
+export function AccountStep({ data, emailStatus, onEmailBlur }: {
+  data: WizardData; emailStatus: 'idle' | 'checking' | 'available' | 'taken'; onEmailBlur: (email: string) => void;
+}) {
   const { register, control, setValue, setError, clearErrors, trigger, formState: { errors } } = useFormContext<WizardForm>();
   const [phoneNumber = '', token, verifiedPhone] = useWatch({ control, name: ['phoneNumber', 'phoneVerificationToken', 'verifiedPhone'] });
   const phoneHelper = errors.phoneNumber?.message ?? 'You will sign in with a one-time code sent to this number';
@@ -83,16 +91,122 @@ export function AccountStep({ emailStatus, onEmailBlur }: { emailStatus: 'idle' 
           </div>
         </div>
       </Section>
+      <Section title="Your business" hint="What you do, so we can set up your listing. You can change these on the next steps.">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <CategoryFields data={data} />
+          <div className="sm:col-span-2"><ServicePicker data={data} /></div>
+        </div>
+      </Section>
     </div>
+  );
+}
+
+/** Industry, then the business category within it (both from the category tree in the database). */
+function CategoryFields({ data }: { data: WizardData }) {
+  const { control, setValue, getValues } = useFormContext<WizardForm>();
+  const categorySlug = useWatch({ control, name: 'business.categorySlug' });
+  const subCategories = data.categories.find((c) => c.slug === categorySlug)?.subCategories ?? [];
+  return (
+    <>
+      <Controller control={control} name="business.categorySlug" render={({ field, fieldState }) => (
+        <TextField select label="Industry type" required {...field} error={!!fieldState.error} helperText={fieldState.error?.message ?? 'The sector you work in'}
+          onChange={(e) => {
+            field.onChange(e.target.value);
+            const subs = data.categories.find((c) => c.slug === e.target.value)?.subCategories ?? [];
+            if (!subs.some((s) => s.slug === getValues('business.subCategorySlug'))) setValue('business.subCategorySlug', '');
+          }}>
+          {data.categories.map((c) => <MenuItem key={c.slug} value={c.slug}>{c.name}</MenuItem>)}
+        </TextField>
+      )} />
+      <Controller control={control} name="business.subCategorySlug" render={({ field, fieldState }) => (
+        <TextField select label="Business category" required {...field} disabled={!categorySlug} error={!!fieldState.error}
+          helperText={fieldState.error?.message ?? (categorySlug ? 'Where customers will find you' : 'Choose an industry first')}>
+          {subCategories.map((s) => <MenuItem key={s.slug} value={s.slug}>{s.name}</MenuItem>)}
+        </TextField>
+      )} />
+    </>
+  );
+}
+
+interface ServiceSuggestion { name: string; description?: string | null; typicalPrice: number; priceUnit?: string | null; durationMinutes: number; type: string; businessCount: number }
+
+/**
+ * Services as a multi-select: the services other businesses in the chosen category offer (from the database, most common first, with
+ * their typical price and duration), or any service typed in. Picked services become the listing's services, pre-filled with those
+ * typical values, and are edited on the "Services & plan" step.
+ */
+function ServicePicker({ data }: { data: WizardData }) {
+  const { control, setValue, getValues, clearErrors, formState: { errors } } = useFormContext<WizardForm>();
+  const [subCategorySlug, services = [], planCode] = useWatch({ control, name: ['business.subCategorySlug', 'business.services', 'business.planCode'] });
+  const suggestions = useQuery({
+    queryKey: ['service-suggestions', subCategorySlug],
+    queryFn: () => api.get<ServiceSuggestion[]>(`/api/subcategories/${encodeURIComponent(subCategorySlug)}/service-suggestions`),
+    enabled: !!subCategorySlug,
+    staleTime: 10 * 60_000,
+  });
+  const options = suggestions.data ?? [];
+  const maxServices = data.plans.find((p) => p.code === planCode)?.maxServices ?? 5;
+  const selected = services.map((s) => s.name.trim()).filter(Boolean);
+  const listError = errors.business?.services as { message?: string; root?: { message?: string } } | undefined;
+  const error = listError?.message ?? listError?.root?.message;
+
+  const change = (names: string[]) => {
+    const current = getValues('business.services');
+    const unique = names.map((n) => n.trim()).filter((n, i, all) => n.length >= 2 && all.findIndex((x) => x.toLowerCase() === n.toLowerCase()) === i);
+    const next = unique.map((name) => {
+      // Keep what was already filled in for a service still picked.
+      const existing = current.find((s) => s.name.trim().toLowerCase() === name.toLowerCase());
+      if (existing) return existing;
+      const s = options.find((o) => o.name.toLowerCase() === name.toLowerCase());
+      return s
+        ? { name: s.name, description: s.description ?? '', price: String(s.typicalPrice), priceUnit: s.priceUnit ?? '', durationMinutes: String(s.durationMinutes || 60), type: s.type }
+        : { ...emptyService(data.serviceTypes[0]?.code ?? ''), name };
+    });
+    setValue('business.services', next.length ? next : [emptyService(data.serviceTypes[0]?.code ?? '')], { shouldDirty: true });
+    if (next.length) clearErrors('business.services');
+  };
+
+  return (
+    <Autocomplete multiple freeSolo autoHighlight filterSelectedOptions disabled={!subCategorySlug}
+      options={options.map((o) => o.name)} value={selected} loading={suggestions.isFetching}
+      onChange={(_, names) => change(names.slice(0, maxServices))}
+      getOptionDisabled={() => selected.length >= maxServices}
+      renderValue={(values, getItemProps) => values.map((v, i) => {
+        const { key, ...props } = getItemProps({ index: i });
+        return <Chip key={key} label={v} size="small" {...props} />;
+      })}
+      renderOption={(props, name) => {
+        const { key, ...rest } = props;
+        const s = options.find((o) => o.name === name);
+        return (
+          <li key={key} {...rest}>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium">{name}</div>
+              {s && (
+                <div className="text-xs text-muted">
+                  {[s.typicalPrice > 0 ? `Typically ${moneyExact(s.typicalPrice)}${s.priceUnit ? ` ${s.priceUnit}` : ''}` : 'Free',
+                    s.durationMinutes ? `${s.durationMinutes} min` : null,
+                    `${number(s.businessCount)} ${s.businessCount === 1 ? 'business' : 'businesses'}`].filter(Boolean).join(' · ')}
+                </div>
+              )}
+            </div>
+          </li>
+        );
+      }}
+      renderInput={(params) => (
+        <TextField {...params} label="Services" required={!selected.length} error={!!error}
+          placeholder={selected.length ? '' : subCategorySlug ? 'Pick services or type your own' : ''}
+          helperText={error ?? (!subCategorySlug ? 'Choose a business category first'
+            : options.length ? `Popular in this category first · up to ${maxServices >= 999 ? 'any number' : maxServices} on the free plan · type to add your own`
+              : suggestions.isFetching ? 'Loading services…' : 'Type a service and press Enter to add it')} />
+      )} />
   );
 }
 
 /* ======================= 2. Business ======================= */
 export function BusinessStep({ data }: { data: WizardData }) {
-  const { control, setValue, getValues } = useFormContext<WizardForm>();
-  const categorySlug = useWatch({ control, name: 'business.categorySlug' });
+  const { control } = useFormContext<WizardForm>();
   const description = useWatch({ control, name: 'business.description' }) ?? '';
-  const subCategories = data.categories.find((c) => c.slug === categorySlug)?.subCategories ?? [];
   const nameField = useField('business.businessName');
   const tagField = useField('business.tagline');
   const descField = useField('business.description');
@@ -105,22 +219,7 @@ export function BusinessStep({ data }: { data: WizardData }) {
       <Section title="Business identity">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2"><TextField label="Business name" required placeholder="e.g. Sharma Electricals" {...nameField} /></div>
-          <Controller control={control} name="business.categorySlug" render={({ field, fieldState }) => (
-            <TextField select label="Industry type" required {...field} error={!!fieldState.error} helperText={fieldState.error?.message ?? 'The sector you work in'}
-              onChange={(e) => {
-                field.onChange(e.target.value);
-                const subs = data.categories.find((c) => c.slug === e.target.value)?.subCategories ?? [];
-                if (!subs.some((s) => s.slug === getValues('business.subCategorySlug'))) setValue('business.subCategorySlug', '');
-              }}>
-              {data.categories.map((c) => <MenuItem key={c.slug} value={c.slug}>{c.name}</MenuItem>)}
-            </TextField>
-          )} />
-          <Controller control={control} name="business.subCategorySlug" render={({ field, fieldState }) => (
-            <TextField select label="Business category" required {...field} disabled={!categorySlug} error={!!fieldState.error}
-              helperText={fieldState.error?.message ?? (categorySlug ? 'Where customers will find you' : 'Choose an industry first')}>
-              {subCategories.map((s) => <MenuItem key={s.slug} value={s.slug}>{s.name}</MenuItem>)}
-            </TextField>
-          )} />
+          <CategoryFields data={data} />
           <div className="sm:col-span-2"><TextField label="Tagline" placeholder="A short line customers see under your name" {...tagField} helperText={tagField.helperText ?? 'Optional · up to 200 characters'} /></div>
           <div className="sm:col-span-2">
             <TextField label="Business description" required multiline minRows={5} {...descField}
@@ -196,7 +295,50 @@ export function ContactStep(_props: { data: WizardData }) {
           <TextField label="Pincode" required inputMode="numeric" {...useField('business.pincode')} />
         </div>
       </Section>
+      <HoursSection />
     </div>
+  );
+}
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/** Opening hours per day: closed, or opening and closing times. Optional; customers see "Open now" from them. */
+function HoursSection() {
+  const { control, setValue, getValues, formState: { errors } } = useFormContext<WizardForm>();
+  const hours = useWatch({ control, name: 'business.hours' }) ?? [];
+  const copyFirst = () => {
+    const [first, ...rest] = getValues('business.hours');
+    if (!first) return;
+    setValue('business.hours', [first, ...rest.map((h) => (h.dayOfWeek === 0 ? h : { ...h, open: first.open, close: first.close, closed: first.closed }))], { shouldDirty: true });
+  };
+  const hourErrors = errors.business?.hours as ({ open?: { message?: string }; close?: { message?: string } } | undefined)[] | undefined;
+  return (
+    <Section title="Opening hours" hint="Optional. Customers see whether you're open now. Leave a day empty if you're not sure.">
+      <div className="divide-y divide-line rounded-lg border border-line">
+        {hours.map((h, i) => (
+          <div key={h.dayOfWeek} className="grid grid-cols-[6.5rem_1fr] items-center gap-x-3 gap-y-2 px-3 py-2 sm:grid-cols-[8rem_7rem_1fr]">
+            <span className="text-sm font-medium">{DAY_NAMES[h.dayOfWeek]}</span>
+            <Controller control={control} name={`business.hours.${i}.closed`} render={({ field }) => (
+              <FormControlLabel control={<Switch size="small" checked={field.value} onChange={(e) => field.onChange(e.target.checked)} />}
+                label={<span className="text-sm text-muted">Closed</span>} sx={{ mr: 0 }} />
+            )} />
+            {!h.closed && (
+              <div className="col-span-2 grid grid-cols-2 gap-2 sm:col-span-1">
+                <Controller control={control} name={`business.hours.${i}.open`} render={({ field }) => (
+                  <TextField type="time" size="small" label="Opens" {...field} error={!!hourErrors?.[i]?.open} helperText={hourErrors?.[i]?.open?.message}
+                    slotProps={{ inputLabel: { shrink: true } }} />
+                )} />
+                <Controller control={control} name={`business.hours.${i}.close`} render={({ field }) => (
+                  <TextField type="time" size="small" label="Closes" {...field} error={!!hourErrors?.[i]?.close} helperText={hourErrors?.[i]?.close?.message}
+                    slotProps={{ inputLabel: { shrink: true } }} />
+                )} />
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      <Button size="small" onClick={copyFirst} disabled={!hours[0] || (!hours[0].closed && !hours[0].open)}>Copy Monday to all weekdays and Saturday</Button>
+    </Section>
   );
 }
 
@@ -359,7 +501,7 @@ export function PaymentStep({ data, paymentsEnabled, onChangePlan }: { data: Wiz
 }
 
 /* ======================= 6. Media & social ======================= */
-export function MediaStep({ data, media }: { data: WizardData; media: MediaState }) {
+export function MediaStep({ data, media, imported }: { data: WizardData; media: MediaState; imported?: ImportedPhotosState | null }) {
   const { control } = useFormContext<WizardForm>();
   const planCode = useWatch({ control, name: 'business.planCode' });
   const plan = data.plans.find((p) => p.code === planCode);
@@ -395,13 +537,18 @@ export function MediaStep({ data, media }: { data: WizardData; media: MediaState
       <Section title={`Business photos (${photos.length}/${maxPhotos >= 999 ? '∞' : maxPhotos})`} hint="Your work, premises, team and products. The first photo becomes your main photo.">
         {photos.length > 0 && (
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-5">
-            {photos.map((p, i) => <MediaTile key={p.id} src={p.previewUrl} kind="photo" primary={i === 0} onRemove={() => media.remove(p.id)} title={p.file.name} />)}
+            {photos.map((p, i) => (
+              <MediaTile key={p.id} src={p.previewUrl} kind="photo" primary={i === 0} onRemove={() => media.remove(p.id)} title={p.file.name}
+                onMakePrimary={i > 0 ? () => media.makeFirst(p.id) : undefined}
+                onMoveEarlier={i > 0 ? () => media.move(p.id, -1) : undefined} onMoveLater={i < photos.length - 1 ? () => media.move(p.id, 1) : undefined} />
+            ))}
           </div>
         )}
         <DropZone accept={IMAGE_ACCEPT} multiple disabled={photos.length >= maxPhotos} onFiles={(f) => media.add('photo', f)}
           title={photos.length >= maxPhotos ? `You've added the maximum for the ${plan?.name} plan` : 'Drag photos here or click to browse'}
           hint={`Up to ${maxPhotos >= 999 ? 'unlimited' : maxPhotos} photos on the ${plan?.name ?? 'selected'} plan`} icon={<PhotoLibraryOutlined />} />
       </Section>
+      {imported && <ImportedPhotos state={imported} maxSelectable={Math.max(0, maxPhotos - photos.length)} />}
 
       <Section title={`Promotional videos (${videos.length}/${MEDIA_LIMITS.maxVideos})`} hint={`MP4, WebM or MOV up to ${MEDIA_LIMITS.maxVideoMb} MB each. Short clips (under 2 minutes) work best.`}>
         {videos.length > 0 && (

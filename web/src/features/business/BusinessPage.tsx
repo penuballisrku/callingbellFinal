@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Chip, Dialog, IconButton, LinearProgress, MenuItem, Pagination, Skeleton, TextField, Tooltip } from '@mui/material';
 import CallRounded from '@mui/icons-material/CallRounded';
+import ChatBubbleOutlineRounded from '@mui/icons-material/ChatBubbleOutlineRounded';
 import WhatsApp from '@mui/icons-material/WhatsApp';
 import EventAvailableRounded from '@mui/icons-material/EventAvailableRounded';
 import RequestQuoteOutlined from '@mui/icons-material/RequestQuoteOutlined';
@@ -26,6 +27,8 @@ import type { BusinessDetail, BusinessImage, Review } from '@/lib/types';
 import { BusinessCard } from '@/components/BusinessCard';
 import { AvailabilityBadge, EmptyState, ErrorState, Img, Panel, Rating, Stars, VerifiedMark } from '@/components/ui';
 import { BookingDialog, EnquiryDialog, ReviewDialog, useRequireLogin } from './Dialogs';
+import { ChatDrawer } from '@/features/chat/Chat';
+import type { TeamMember } from '@/lib/types';
 import { Breadcrumbs, FaqSection, LinkGroups, useSeoPage } from '@/features/seo/seo';
 
 export default function BusinessPage() {
@@ -43,6 +46,7 @@ export default function BusinessPage() {
   // A renamed business: its old address moves to the new one.
   useEffect(() => { if (seo?.redirectTo) navigate(seo.redirectTo, { replace: true }); }, [seo?.redirectTo, navigate]);
 
+  const [chatOpen, setChatOpen] = useState(false);
   const [enquiry, setEnquiry] = useState<{ type: 'Enquiry' | 'Quotation' | 'Callback'; serviceId?: string } | null>(null);
   const [booking, setBooking] = useState<{ serviceId?: string } | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -129,6 +133,7 @@ export default function BusinessPage() {
               </IconButton>
             </Tooltip>
             {b.phoneNumber && <Button variant="outlined" startIcon={<CallRounded />} href={`tel:${b.phoneNumber.replace(/\s/g, '')}`}>Call</Button>}
+            <Button variant="outlined" startIcon={<ChatBubbleOutlineRounded />} onClick={() => requireLogin(() => setChatOpen(true))}>Chat</Button>
             {c.acceptsOnlineBooking
               ? <Button variant="contained" startIcon={<EventAvailableRounded />} onClick={() => requireLogin(() => setBooking({}))}>Book now</Button>
               : <Button variant="contained" startIcon={<RequestQuoteOutlined />} onClick={() => setEnquiry({ type: 'Quotation' })}>Get a quote</Button>}
@@ -177,6 +182,8 @@ export default function BusinessPage() {
               </ul>
             </Panel>
 
+            <TeamSection businessId={c.id} services={b.services} />
+
             {b.images.length > 0 && (
               <Panel title="Photos" headingLevel="h2">
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -206,6 +213,7 @@ export default function BusinessPage() {
                 <div className="grid grid-cols-2 gap-2">
                   {b.phoneNumber && <Button variant="outlined" startIcon={<CallRounded />} href={`tel:${b.phoneNumber.replace(/\s/g, '')}`}>Call</Button>}
                   {b.whatsAppNumber && <Button variant="outlined" startIcon={<WhatsApp />} href={`https://wa.me/${b.whatsAppNumber.replace(/\D/g, '')}`} target="_blank" rel="noopener">WhatsApp</Button>}
+                  <Button variant="outlined" startIcon={<ChatBubbleOutlineRounded />} onClick={() => requireLogin(() => setChatOpen(true))}>Chat</Button>
                   <Button variant="outlined" startIcon={<RequestQuoteOutlined />} onClick={() => setEnquiry({ type: 'Quotation' })}>Get quote</Button>
                   <Button variant="outlined" startIcon={<PhoneCallbackOutlined />} onClick={() => setEnquiry({ type: 'Callback' })}>Callback</Button>
                 </div>
@@ -262,12 +270,14 @@ export default function BusinessPage() {
       {/* Mobile action bar */}
       <div className="fixed inset-x-0 bottom-0 z-30 flex gap-2 border-t border-line bg-surface p-3 md:hidden">
         {b.phoneNumber && <Button variant="outlined" href={`tel:${b.phoneNumber.replace(/\s/g, '')}`} startIcon={<CallRounded />}>Call</Button>}
-        <Button variant="outlined" onClick={() => setEnquiry({ type: 'Enquiry' })}>Enquire</Button>
-        {c.acceptsOnlineBooking && <Button fullWidth variant="contained" onClick={() => requireLogin(() => setBooking({}))}>Book now</Button>}
+        <Button variant="outlined" startIcon={<ChatBubbleOutlineRounded />} onClick={() => requireLogin(() => setChatOpen(true))}>Chat</Button>
+        {c.acceptsOnlineBooking ? <Button fullWidth variant="contained" onClick={() => requireLogin(() => setBooking({}))}>Book now</Button>
+          : <Button fullWidth variant="contained" onClick={() => setEnquiry({ type: 'Enquiry' })}>Enquire</Button>}
       </div>
 
       <EnquiryDialog business={b} open={!!enquiry} initialType={enquiry?.type} serviceId={enquiry?.serviceId} onClose={() => setEnquiry(null)} />
       {booking && <BookingDialog business={b} open serviceId={booking.serviceId} onClose={() => setBooking(null)} />}
+      {chatOpen && <ChatDrawer businessId={c.id} open onClose={() => setChatOpen(false)} />}
       <ReviewDialog business={{ id: c.id, name: c.name, slug }} open={reviewOpen} onClose={() => setReviewOpen(false)} />
       <Dialog open={!!lightbox} onClose={() => setLightbox(null)} maxWidth="lg">
         {lightbox && (
@@ -391,5 +401,33 @@ function BusinessSkeleton() {
         <div className="grid gap-6 lg:grid-cols-[1fr_340px]"><Skeleton variant="rounded" height={400} /><Skeleton variant="rounded" height={300} /></div>
       </div>
     </div>
+  );
+}
+
+/** "Our team": who works here, what they do and their experience (no contact details). Hidden when the business lists no team. */
+function TeamSection({ businessId, services }: { businessId: string; services: { id: string; name: string }[] }) {
+  const team = useQuery({ queryKey: ['team', businessId], queryFn: () => api.get<TeamMember[]>(`/api/businesses/${businessId}/team`), staleTime: 5 * 60_000 });
+  if (!team.data?.length) return null;
+  return (
+    <Panel title="Our team" subtitle={`${team.data.length} ${team.data.length === 1 ? 'professional' : 'professionals'}`} headingLevel="h2">
+      <ul className="grid gap-3 sm:grid-cols-2">
+        {team.data.map((m) => {
+          const does = services.filter((s) => m.serviceIds.includes(s.id)).map((s) => s.name);
+          return (
+            <li key={m.id} className="flex gap-3 rounded-lg border border-line p-3">
+              <span aria-hidden className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-accent-soft text-sm font-bold text-accent-ink">
+                {m.fullName.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('')}
+              </span>
+              <div className="min-w-0">
+                <p className="font-semibold leading-tight">{m.fullName}</p>
+                <p className="text-sm text-muted">{[m.title, m.yearsExperience ? `${m.yearsExperience} yrs experience` : null].filter(Boolean).join(' · ')}</p>
+                {m.languages && <p className="text-xs text-muted">Speaks {m.languages}</p>}
+                {does.length > 0 && <p className="mt-1 line-clamp-2 text-xs text-ink-2">{does.join(', ')}</p>}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </Panel>
   );
 }

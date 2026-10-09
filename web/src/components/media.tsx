@@ -6,6 +6,8 @@ import PlayArrowRounded from '@mui/icons-material/PlayArrowRounded';
 import CheckCircleRounded from '@mui/icons-material/CheckCircleRounded';
 import ErrorOutlineRounded from '@mui/icons-material/ErrorOutlineRounded';
 import StarRounded from '@mui/icons-material/StarRounded';
+import ChevronLeftRounded from '@mui/icons-material/ChevronLeftRounded';
+import ChevronRightRounded from '@mui/icons-material/ChevronRightRounded';
 import { duration } from '@/lib/media';
 
 /**
@@ -47,10 +49,12 @@ export function DropZone({ accept, multiple, disabled, onFiles, title, hint, ico
 }
 
 /** Thumbnail tile for a photo or video, with optional upload progress, status and remove action. */
-export function MediaTile({ src, kind, title, durationSeconds, progress, status, error, onRemove, removeLabel, primary, onMakePrimary, aspect = '4/3', fit = 'cover' }: {
+export function MediaTile({ src, kind, title, durationSeconds, progress, status, error, onRemove, removeLabel, primary, onMakePrimary, onMoveEarlier, onMoveLater, aspect = '4/3', fit = 'cover' }: {
   src?: string | null; kind: 'photo' | 'video' | 'logo' | 'cover'; title?: string | null; durationSeconds?: number | null;
   progress?: number; status?: 'ready' | 'uploading' | 'done' | 'failed'; error?: string; onRemove?: () => void; removeLabel?: string;
   primary?: boolean; onMakePrimary?: () => void; aspect?: string; fit?: 'cover' | 'contain';
+  /** Reordering (photos): shown as arrows at the bottom of the tile. */
+  onMoveEarlier?: () => void; onMoveLater?: () => void;
 }) {
   const [broken, setBroken] = useState(false);
   return (
@@ -82,6 +86,24 @@ export function MediaTile({ src, kind, title, durationSeconds, progress, status,
         </Tooltip>
       )}
 
+      {(onMoveEarlier || onMoveLater) && !status && (
+        <div className="absolute bottom-1 right-1 flex gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
+          {onMoveEarlier && (
+            <Tooltip title="Move earlier">
+              <IconButton size="small" onClick={onMoveEarlier} aria-label={`Move ${title ?? 'photo'} earlier`} sx={{ bgcolor: 'rgba(0,0,0,.6)', color: '#fff', '&:hover': { bgcolor: 'rgba(0,0,0,.8)' } }}>
+                <ChevronLeftRounded sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          )}
+          {onMoveLater && (
+            <Tooltip title="Move later">
+              <IconButton size="small" onClick={onMoveLater} aria-label={`Move ${title ?? 'photo'} later`} sx={{ bgcolor: 'rgba(0,0,0,.6)', color: '#fff', '&:hover': { bgcolor: 'rgba(0,0,0,.8)' } }}>
+                <ChevronRightRounded sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          )}
+        </div>
+      )}
       {(onRemove || onMakePrimary) && status !== 'uploading' && (
         <div className="absolute right-1 top-1 flex gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
           {onMakePrimary && !primary && (

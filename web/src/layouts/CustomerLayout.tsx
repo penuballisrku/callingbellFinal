@@ -10,6 +10,7 @@ import { Logo, NotificationBell, ThemeMenu, UserMenu } from './Shared';
 import { CountryCode, useDistrictAutoSelect, useNetworkTagline } from '@/components/VisitorCountry';
 import { CitySelect } from '@/components/LocationPicker';
 import { SeoHead } from '@/features/seo/seo';
+import { MessagesButton } from '@/features/chat/Chat';
 import { AskAiButton, SearchAssistant } from '@/features/assistant/SearchAssistant';
 import { useAssistant } from '@/features/assistant/store';
 
@@ -33,7 +34,7 @@ export default function CustomerLayout() {
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-40 border-b border-line bg-surface/85 backdrop-blur-md backdrop-saturate-150">
         {/* One row at a fixed height; every control is 40px tall and centred on it, and labels never wrap. */}
-        <div className="container-page flex h-[72px] items-center gap-2 xl:gap-3">
+        <div className="container-page flex h-[72px] items-center gap-1 sm:gap-2 xl:gap-3">
           <div className="flex shrink-0 items-start gap-1">
             <Logo />
             <CountryCode />
@@ -51,6 +52,8 @@ export default function CustomerLayout() {
           <div className="hidden shrink-0 items-center sm:flex"><ThemeMenu /></div>
           {user ? (
             <div className="flex shrink-0 items-center gap-1">
+              {/* On phones, Messages is in the menu (the header has no room for another icon). */}
+              <span className="hidden sm:inline-flex"><MessagesButton /></span>
               <NotificationBell />
               <UserMenu />
             </div>
@@ -69,6 +72,7 @@ export default function CustomerLayout() {
         <div className="mb-4"><CitySelect size="medium" fullWidth /></div>
         <nav className="flex flex-col gap-1" aria-label="Mobile">
           {nav.map((n) => <Link key={n.to} to={n.to} className="rounded-lg px-3 py-2.5 font-medium hover:bg-subtle">{n.label}</Link>)}
+          {user && <Link to={isOwner(user) ? '/owner/messages' : '/account?tab=messages'} className="rounded-lg px-3 py-2.5 font-medium hover:bg-subtle">Messages</Link>}
           {user && <Link to={homeFor(user) === '/' ? '/account' : homeFor(user)} className="rounded-lg px-3 py-2.5 font-medium hover:bg-subtle">
             {isAdmin(user) ? 'Admin console' : isOwner(user) ? 'Business dashboard' : 'My account'}</Link>}
           <button type="button" onClick={() => { setOpen(false); openAssistant(); }}

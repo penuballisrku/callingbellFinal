@@ -1,12 +1,12 @@
 import { Children, type ReactNode } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { Tooltip } from '@mui/material';
 import CallRounded from '@mui/icons-material/CallRounded';
 import WhatsApp from '@mui/icons-material/WhatsApp';
 import DirectionsRounded from '@mui/icons-material/DirectionsRounded';
 import MapOutlined from '@mui/icons-material/MapOutlined';
 import NotificationsActiveRounded from '@mui/icons-material/NotificationsActiveRounded';
-import { joinHref, telHref, whatsAppHref } from '@/lib/contact';
+import { joinHint, joinHref, telHref, whatsAppHref } from '@/lib/contact';
 import type { PlaceDetails } from '@/lib/types';
 
 /* ---------- Actions for a place that isn't on Calling Bell ---------- */
@@ -17,11 +17,12 @@ import type { PlaceDetails } from '@/lib/types';
  * 1024px and 1280px (where the actions share a row with the details) the plain actions show only their icon, named by the tooltip.
  */
 export function PlaceActions({ place: p, compactMid, className = '' }: {
-  place: { name: string; phone?: string | null; internationalPhone?: string | null; address?: string | null; directionsUrl: string; mapsUrl: string };
+  place: { name: string; phone?: string | null; internationalPhone?: string | null; address?: string | null; directionsUrl: string; mapsUrl: string; sourceId?: string | null };
   compactMid?: boolean; className?: string;
 }) {
   const phone = p.internationalPhone ?? p.phone;
   const whatsApp = whatsAppHref(phone, p.name);
+  const [search] = useSearchParams();
   return (
     <div className={`relative z-[1] grid grid-cols-5 gap-1 sm:flex sm:flex-wrap sm:gap-2 ${className}`} role="group" aria-label={`Actions for ${p.name}`}>
       <RowAction href={phone ? telHref(phone) : undefined} icon={<CallRounded sx={{ fontSize: 18 }} />} label="Call" tone="primary"
@@ -30,7 +31,7 @@ export function PlaceActions({ place: p, compactMid, className = '' }: {
         hint={whatsApp ? 'Chat on WhatsApp' : phone ? 'This number can’t receive WhatsApp' : 'No phone number on Google Maps'} compactMid={compactMid} />
       <RowAction href={p.directionsUrl} external icon={<DirectionsRounded sx={{ fontSize: 18 }} />} label="Directions" hint="Directions in Google Maps" compactMid={compactMid} />
       <RowAction href={p.mapsUrl} external icon={<MapOutlined sx={{ fontSize: 18 }} />} label="View on Map" short="Map" hint="Open in Google Maps" compactMid={compactMid} />
-      <RowAction to={joinHref({ name: p.name, phone: p.phone, address: p.address })} icon={<NotificationsActiveRounded sx={{ fontSize: 18 }} />}
+      <RowAction to={joinHref({ name: p.name, phone: p.phone, address: p.address, sourceId: p.sourceId }, joinHint(search))} icon={<NotificationsActiveRounded sx={{ fontSize: 18 }} />}
         label="Join Calling Bell" short="Join" tone="accent" hint={`Own ${p.name}? List it free on Calling Bell`} />
     </div>
   );

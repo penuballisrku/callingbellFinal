@@ -61,10 +61,13 @@ public class Booking : AuditableEntity
     public string? ServiceAddress { get; set; }
     public string? Notes { get; set; }
     public string? CancellationReason { get; set; }
+    /// <summary>The team member doing it (null = not assigned yet).</summary>
+    public Guid? StaffId { get; set; }
 
     public Business Business { get; set; } = null!;
     public BusinessService Service { get; set; } = null!;
     public ApplicationUser Customer { get; set; } = null!;
+    public BusinessStaff? Staff { get; set; }
 }
 
 public class Favorite : BaseEntity

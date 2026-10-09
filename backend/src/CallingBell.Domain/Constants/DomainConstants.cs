@@ -142,3 +142,54 @@ public static class MediaEntityTypes
     public const string BusinessVideo = "BusinessVideo";
     public const string BusinessVideoPoster = "BusinessVideoPoster";
 }
+
+/// <summary>Notification routes: what happened, which decides the channels tried (dbo.NotificationRoutingRules).</summary>
+public static class NotificationRoutes
+{
+    public const string Chat = "CHAT";
+    public const string Video = "VIDEO";
+    public const string NewLead = "NEW_LEAD";
+    public const string Booking = "BOOKING";
+    public const string Otp = "OTP";
+}
+
+public static class NotificationChannels
+{
+    public const string WebPush = "WEB_PUSH";
+    public const string WhatsApp = "WHATSAPP";
+    /// <summary>WhatsApp authentication template (one-time codes, with a copy-code button).</summary>
+    public const string WhatsAppAuthentication = "WHATSAPP_AUTHENTICATION";
+    public const string Rcs = "RCS";
+    public const string Sms = "SMS";
+}
+
+/// <summary>
+/// Where a delivery attempt stands. Accepted means the provider took the message, not that the person received it; Sent, Delivered and
+/// Read come from provider webhooks (or, for web push, the browser's acknowledgement). Unavailable = the channel couldn't be used at all
+/// (no device, no number, provider not configured).
+/// </summary>
+public static class DeliveryStatuses
+{
+    public const string Queued = "Queued";
+    public const string Accepted = "Accepted";
+    public const string Sent = "Sent";
+    public const string Delivered = "Delivered";
+    public const string Read = "Read";
+    public const string Failed = "Failed";
+    public const string Expired = "Expired";
+    public const string Unavailable = "Unavailable";
+
+    /// <summary>The provider took it: the route stops here.</summary>
+    public static bool IsSuccess(string status) => status is Accepted or Sent or Delivered or Read;
+}
+
+/// <summary>A notification's progress through its route (in-app notifications without a route have none).</summary>
+public static class DispatchStatuses
+{
+    public const string Pending = "Pending";
+    public const string Processing = "Processing";
+    /// <summary>A channel accepted it.</summary>
+    public const string Completed = "Completed";
+    /// <summary>Every channel was tried and none could send it.</summary>
+    public const string Exhausted = "Exhausted";
+}

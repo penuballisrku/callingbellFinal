@@ -31,7 +31,11 @@ export default function RegisterPage() {
   if (params.get('type') !== 'business') return <CustomerRegister />;
   // Business sign-up: a multi-step wizard that creates the account and the business profile together.
   if (!user) return <BusinessWizard mode="register" />;
-  if (isOwner(user)) return <Navigate to="/owner/setup" replace />;
+  if (isOwner(user)) {
+    // Keep "Join Calling Bell"'s place and category hint for the owner's business setup.
+    const keep = new URLSearchParams([...params].filter(([k]) => k === 'source' || k === 'hint'));
+    return <Navigate to={`/owner/setup${keep.size ? `?${keep}` : ''}`} replace />;
+  }
   return (
     <div className="container-page py-16">
       <EmptyState title="You're signed in with a customer account" message="Sign out and create a business account to list your business on Calling Bell."

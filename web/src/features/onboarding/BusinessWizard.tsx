@@ -18,7 +18,7 @@ import { useCities, useCityAreas, useDocumentTitle, useLookup, usePlans } from '
 import { MEDIA_LIMITS, checkFile, releasePending, toPending, uploadMedia, type PendingMedia } from '@/lib/media';
 import { payForPlan, priceBreakdown, usePaymentConfig } from '@/lib/payments';
 import { moneyPrecise } from '@/lib/format';
-import type { BusinessRegistrationResult, Category, CreatedBusiness, MediaKind } from '@/lib/types';
+import type { BusinessRegistrationResult, Category, CreatedBusiness, JoinCallingBellBusiness, MediaKind } from '@/lib/types';
 import { useAuth } from '@/stores/auth';
 import { useSelectedBusiness } from '@/stores/ownerBusiness';
 import { ErrorState } from '@/components/ui';
@@ -26,6 +26,7 @@ import { phoneDigits } from '@/features/auth/otp';
 import { STEPS, defaultValues, makeWizardSchema, toFormPath, type WizardForm } from './schema';
 import { AccountStep, BusinessStep, ContactStep, MediaStep, OfferStep, PaymentStep, ReviewStep, type MediaState, type WizardData } from './steps';
 import type { StepKey } from './schema';
+import { DuplicateDialog, ImportError, ImportLoading, ImportedBanner, withImport, type ImportedPhotosState } from './JoinImport';
 
 const DRAFT_KEY = 'cb-business-wizard';
 
@@ -44,12 +45,27 @@ export default function BusinessWizard({ mode }: { mode: 'register' | 'setup' })
   const serviceTypes = useLookup('ServiceType');
   const socialPlatforms = useLookup('SocialPlatform');
   const payments = usePaymentConfig();
+  // "Join Calling Bell": ?source=google:… / osm:… - the full details come from the API (read from the source on the server).
+  const [params] = useSearchParams();
+  const source = params.get('source');
+  const hint = params.get('hint');
+  const [skipImport, setSkipImport] = useState(false);
+  const join = useQuery({
+    queryKey: ['join-calling-bell', source, hint],
+    queryFn: () => api.get<JoinCallingBellBusiness>('/api/places/join-calling-bell', { sourceId: source, hint }),
+    enabled: !!source && !skipImport,
+    staleTime: Infinity,
+    gcTime: 10 * 60_000,
+    retry: (count, e) => !(e instanceof ApiError && e.status < 500) && count < 1,
+  });
 
+  if (source && !skipImport && join.isPending) return <ImportLoading />;
+  if (source && !skipImport && join.isError) return <ImportError error={join.error} onRetry={() => void join.refetch()} onContinue={() => setSkipImport(true)} />;
   if (categories.isError || plans.isError || cities.isError) {
     return <div className="container-page py-16"><ErrorState onRetry={() => { void categories.refetch(); void plans.refetch(); void cities.refetch(); }} /></div>;
   }
   if (!categories.data || !plans.data || !cities.data || !serviceTypes.length || !socialPlatforms.length || payments.isLoading) return <WizardSkeleton />;
-  return <Wizard mode={mode} paymentsEnabled={!!payments.data?.enabled}
+  return <Wizard mode={mode} paymentsEnabled={!!payments.data?.enabled} imported={skipImport ? null : join.data ?? null}
     data={{ categories: categories.data, plans: plans.data, cities: cities.data, serviceTypes, socialPlatforms }} />;
 }
 
@@ -57,7 +73,10 @@ function loadDraft(mode: string): WizardForm | null {
   try {
     const raw = sessionStorage.getItem(DRAFT_KEY);
     const draft = raw ? (JSON.parse(raw) as WizardForm) : null;
-    return draft?.mode === mode ? { ...draft, phoneVerificationToken: '', verifiedPhone: '', acceptTerms: false } : null;
+    if (draft?.mode !== mode) return null;
+    // Fields added since the draft was saved get their defaults.
+    const base = defaultValues(mode);
+    return { ...base, ...draft, business: { ...base.business, ...draft.business }, phoneVerificationToken: '', verifiedPhone: '', acceptTerms: false };
   } catch { return null; }
 }
 
@@ -88,7 +107,9 @@ function withPrefill(form: WizardForm, params: URLSearchParams): WizardForm {
   };
 }
 
-function Wizard({ mode, data, paymentsEnabled }: { mode: 'register' | 'setup'; data: WizardData; paymentsEnabled: boolean }) {
+function Wizard({ mode, data, paymentsEnabled, imported }: {
+  mode: 'register' | 'setup'; data: WizardData; paymentsEnabled: boolean; imported: JoinCallingBellBusiness | null;
+}) {
   const user = useAuth((s) => s.user);
   const setSession = useAuth((s) => s.setSession);
   const selectBusiness = useSelectedBusiness((s) => s.set);
@@ -98,8 +119,15 @@ function Wizard({ mode, data, paymentsEnabled }: { mode: 'register' | 'setup'; d
   const [params] = useSearchParams();
   // "Join Calling Bell" on a Google Maps / OpenStreetMap result links here with what is known about the business; it only fills
   // fields that are still empty, so a saved draft is never overwritten.
-  const [restored] = useState(() => loadDraft(mode));
-  const [initial] = useState(() => withPrefill(restored ?? defaultValues(mode, user ?? undefined), params));
+  const [draft] = useState(() => loadDraft(mode));
+  // An imported place starts from a draft of that same place only; another place's draft is not mixed in.
+  const restored = imported ? (draft?.business.sourceId === imported.sourceBusinessId ? draft : null) : draft;
+  const [{ initial, filled }] = useState(() => {
+    const start = restored ?? defaultValues(mode, user ?? undefined);
+    if (imported) { const r = withImport(start, imported); return { initial: r.form, filled: r.filled }; }
+    return { initial: withPrefill(start, params), filled: [] as string[] };
+  });
+  const [duplicatesOpen, setDuplicatesOpen] = useState(() => !!imported?.existingBusinesses.length);
   const form = useForm<WizardForm>({
     resolver: zodResolver(makeWizardSchema(mode)),
     defaultValues: initial,
@@ -156,7 +184,27 @@ function Wizard({ mode, data, paymentsEnabled }: { mode: 'register' | 'setup'; d
     add: (kind, files) => { void addMedia(kind, files); },
     remove: (id) => setMedia((prev) => { const gone = prev.find((m) => m.id === id); if (gone) releasePending(gone); return prev.filter((m) => m.id !== id); }),
     rename: (id, title) => setMedia((prev) => prev.map((m) => (m.id === id ? { ...m, title } : m))),
+    // Photos keep their order through the upload; the first becomes the main photo.
+    move: (id, direction) => setMedia((prev) => {
+      const photos = prev.filter((m) => m.kind === 'photo');
+      const i = photos.findIndex((m) => m.id === id);
+      const j = i + direction;
+      if (i < 0 || j < 0 || j >= photos.length) return prev;
+      [photos[i], photos[j]] = [photos[j]!, photos[i]!];
+      return [...prev.filter((m) => m.kind !== 'photo'), ...photos];
+    }),
+    makeFirst: (id) => setMedia((prev) => {
+      const photo = prev.find((m) => m.id === id && m.kind === 'photo');
+      return photo ? [...prev.filter((m) => m.kind !== 'photo'), photo, ...prev.filter((m) => m.kind === 'photo' && m.id !== id)] : prev;
+    }),
   };
+
+  // ---- Photos of the imported place (added after creation, only when the server allows copying them) ----
+  const [importedSelected, setImportedSelected] = useState<string[]>([]);
+  const importedPhotos: ImportedPhotosState | null = imported && imported.images.length ? {
+    images: imported.images, sourceName: imported.sourceName, importable: imported.imagesImportable, selected: importedSelected,
+    toggle: (ref) => setImportedSelected((s) => (s.includes(ref) ? s.filter((x) => x !== ref) : [...s, ref])),
+  } : null;
 
   // ---- Draft persistence (per tab; never stores the phone verification token or files) ----
   useEffect(() => {
@@ -199,6 +247,11 @@ function Wizard({ mode, data, paymentsEnabled }: { mode: 'register' | 'setup'; d
     if (current.key === 'account') {
       if (ok && !isPhoneVerified()) { form.setError('phoneNumber', { message: 'Verify your mobile number to continue' }, { shouldFocus: true }); extra = false; }
       if (emailStatus === 'taken') { form.setError('email', { message: 'This email is already registered' }); extra = false; }
+      // Services are picked on this step; their prices and details are checked on "Services & plan".
+      if (!form.getValues('business.services').some((s) => s.name.trim().length >= 2)) {
+        form.setError('business.services', { message: 'Choose at least one service you offer' });
+        extra = false;
+      }
     }
     if (current.key === 'offer') {
       const count = form.getValues('business.services').length;
@@ -306,7 +359,13 @@ function Wizard({ mode, data, paymentsEnabled }: { mode: 'register' | 'setup'; d
       areaSlug: b.areaSlug || null, landmark: b.landmark || null,
       services: b.services.map((s) => ({ name: s.name, description: s.description || null, price: Number(s.price), priceUnit: s.priceUnit || null, durationMinutes: Number(s.durationMinutes), type: s.type })),
       socialLinks: b.socialLinks.filter((l) => l.url.trim()),
+      hours: b.hours.filter((h) => h.closed || (h.open && h.close))
+        .map((h) => ({ dayOfWeek: h.dayOfWeek, open: h.closed ? null : h.open, close: h.closed ? null : h.close, isClosed: h.closed })),
+      sourceId: b.sourceId || null,
+      latitude: b.sourceId ? b.latitude : null,
+      longitude: b.sourceId ? b.longitude : null,
     };
+    const importRefs = imported?.imagesImportable ? importedSelected : [];
     const order: MediaKind[] = ['logo', 'cover', 'photo', 'video'];
     const items = [...media].sort((a, b2) => order.indexOf(a.kind) - order.indexOf(b2.kind));
     const kindLabel: Record<MediaKind, string> = { logo: 'Uploading logo', cover: 'Uploading cover image', photo: 'Uploading photos', video: 'Uploading videos' };
@@ -318,6 +377,7 @@ function Wizard({ mode, data, paymentsEnabled }: { mode: 'register' | 'setup'; d
         key: `media-${k}`, label: kindLabel[k], status: 'pending' as const,
         detail: k === 'photo' || k === 'video' ? `${items.filter((m) => m.kind === k).length} file(s)` : undefined,
       })),
+      ...(importRefs.length ? [{ key: 'media-imported', label: `Adding photos from ${imported!.sourceName}`, status: 'pending' as const, detail: `${importRefs.length} photo(s)` }] : []),
     ]);
 
     let result: CreatedBusiness;
@@ -345,6 +405,16 @@ function Wizard({ mode, data, paymentsEnabled }: { mode: 'register' | 'setup'; d
     void queryClient.invalidateQueries({ queryKey: ['owner'] });
     if (result.requestedPlanCode && paymentsEnabled) await runPayment(result.businessId, result.requestedPlanCode, b.billingCycle, v.gstin);
     const failed = items.length ? await runUploads(result.businessId, items) : 0;
+    if (importRefs.length) {
+      patchTask('media-imported', { status: 'active' });
+      try {
+        const { data: added } = await api.post<number>(`/api/owner/businesses/${result.businessId}/media/import`, { references: importRefs });
+        patchTask('media-imported', { status: 'done', detail: `${added} of ${importRefs.length} added` });
+      } catch (e) {
+        // Not fatal: the business exists; photos can be added from the dashboard.
+        patchTask('media-imported', { status: 'failed', detail: errorMessage(e) });
+      }
+    }
     setSubmitting(false);
     if (failed === 0) {
       enqueueSnackbar('Your business profile has been created', { variant: 'success' });
@@ -353,6 +423,12 @@ function Wizard({ mode, data, paymentsEnabled }: { mode: 'register' | 'setup'; d
   };
 
   const handleServerError = (e: unknown) => {
+    if (e instanceof ApiError && e.status === 409 && !/email/i.test(e.message)) {
+      // The business is already on Calling Bell (same place, phone, website or location).
+      setFormError(e.message);
+      if (imported?.existingBusinesses.length) setDuplicatesOpen(true);
+      return;
+    }
     if (e instanceof ApiError && e.status === 409) {
       form.setError('email', { message: e.message });
       setEmailStatus('taken');
@@ -413,6 +489,11 @@ function Wizard({ mode, data, paymentsEnabled }: { mode: 'register' | 'setup'; d
             <h1 className="mt-1 text-2xl font-bold tracking-tight md:text-3xl">{mode === 'register' ? 'Create your business account' : 'Set up your business profile'}</h1>
             <p className="mt-1 text-muted">Takes about 5 minutes. Your progress is saved in this tab.</p>
           </div>
+          {imported && <ImportedBanner d={imported} filled={filled} />}
+          {imported && duplicatesOpen && (
+            <DuplicateDialog matches={imported.existingBusinesses} sourceId={imported.sourceBusinessId}
+              onContinue={() => setDuplicatesOpen(false)} onClose={() => setDuplicatesOpen(false)} />
+          )}
 
           <Stepper steps={steps.map((s) => s.label)} current={step} furthest={furthest} onSelect={(i) => { if (i <= furthest) goTo(i); }} />
 
@@ -426,11 +507,11 @@ function Wizard({ mode, data, paymentsEnabled }: { mode: 'register' | 'setup'; d
               <div className="px-5 py-6 md:px-7">
                 {formError && <Alert severity="error" sx={{ mb: 3 }}>{formError}</Alert>}
                 {restored && step === 0 && <Alert severity="info" sx={{ mb: 3 }}>We restored the details you entered earlier in this tab.{mode === 'register' ? ' Please verify your mobile number again.' : ''}</Alert>}
-                {current.key === 'account' && <AccountStep emailStatus={emailStatus} onEmailBlur={(e) => void checkEmail(e)} />}
+                {current.key === 'account' && <AccountStep data={data} emailStatus={emailStatus} onEmailBlur={(e) => void checkEmail(e)} />}
                 {current.key === 'business' && <BusinessStep data={data} />}
                 {current.key === 'contact' && <ContactStep data={data} />}
                 {current.key === 'offer' && <OfferStep data={data} />}
-                {current.key === 'media' && <MediaStep data={data} media={mediaState} />}
+                {current.key === 'media' && <MediaStep data={data} media={mediaState} imported={importedPhotos} />}
                 {current.key === 'payment' && <PaymentStep data={data} paymentsEnabled={paymentsEnabled} onChangePlan={() => goToKey('offer')} />}
                 {current.key === 'review' && <ReviewStep data={data} media={mediaState} onEdit={goToKey} paymentsEnabled={paymentsEnabled} />}
               </div>

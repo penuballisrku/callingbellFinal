@@ -40,6 +40,156 @@ internal sealed class OtpCodeConfiguration : IEntityTypeConfiguration<OtpCode>
     }
 }
 
+internal sealed class NotificationConfiguration :
+    IEntityTypeConfiguration<Notification>, IEntityTypeConfiguration<NotificationDevice>, IEntityTypeConfiguration<NotificationDelivery>,
+    IEntityTypeConfiguration<NotificationProvider>, IEntityTypeConfiguration<NotificationTemplate>, IEntityTypeConfiguration<NotificationRoutingRule>
+{
+    public void Configure(EntityTypeBuilder<Notification> b)
+    {
+        b.ToTable("Notifications");
+        b.Property(n => n.RouteCode).HasMaxLength(32);
+        b.Property(n => n.ReferenceType).HasMaxLength(32);
+        b.Property(n => n.IdempotencyKey).HasMaxLength(150);
+        b.Property(n => n.DispatchStatus).HasMaxLength(16);
+        b.HasIndex(n => n.IdempotencyKey).IsUnique().HasFilter("[IdempotencyKey] IS NOT NULL");
+    }
+
+    public void Configure(EntityTypeBuilder<NotificationDevice> b)
+    {
+        b.ToTable("NotificationDevices");
+        b.Property(d => d.Token).HasMaxLength(1024);
+        b.Property(d => d.TokenHash).HasMaxLength(64).IsFixedLength().IsUnicode(false);
+        b.Property(d => d.DeviceType).HasMaxLength(16);
+        b.Property(d => d.Browser).HasMaxLength(40);
+        b.Property(d => d.Platform).HasMaxLength(40);
+        b.Property(d => d.DeactivatedReason).HasMaxLength(40);
+        b.HasIndex(d => d.TokenHash).IsUnique();
+        b.HasIndex(d => new { d.UserId, d.IsActive });
+    }
+
+    public void Configure(EntityTypeBuilder<NotificationDelivery> b)
+    {
+        b.ToTable("NotificationDeliveries");
+        b.Property(d => d.RouteCode).HasMaxLength(32);
+        b.Property(d => d.Channel).HasMaxLength(32);
+        b.Property(d => d.Provider).HasMaxLength(40);
+        b.Property(d => d.Status).HasMaxLength(16);
+        b.Property(d => d.Recipient).HasMaxLength(40);
+        b.Property(d => d.ProviderMessageId).HasMaxLength(200);
+        b.Property(d => d.ErrorCode).HasMaxLength(60);
+        b.Property(d => d.ErrorMessage).HasMaxLength(500);
+        b.HasOne(d => d.Notification).WithMany().HasForeignKey(d => d.NotificationId);
+        b.HasIndex(d => d.NotificationId);
+        b.HasIndex(d => new { d.Provider, d.ProviderMessageId });
+    }
+
+    public void Configure(EntityTypeBuilder<NotificationProvider> b)
+    {
+        b.ToTable("NotificationProviders");
+        b.Property(p => p.ProviderName).HasMaxLength(40);
+        b.Property(p => p.Channel).HasMaxLength(32);
+        b.Property(p => p.CountryCode).HasMaxLength(2).IsFixedLength();
+        b.Property(p => p.ConfigurationKey).HasMaxLength(100);
+    }
+
+    public void Configure(EntityTypeBuilder<NotificationTemplate> b)
+    {
+        b.ToTable("NotificationTemplates");
+        b.Property(t => t.TemplateCode).HasMaxLength(32);
+        b.Property(t => t.Channel).HasMaxLength(32);
+        b.Property(t => t.LanguageCode).HasMaxLength(10);
+        b.Property(t => t.TemplateName).HasMaxLength(120);
+        b.Property(t => t.TemplateContent).HasMaxLength(1000);
+    }
+
+    public void Configure(EntityTypeBuilder<NotificationRoutingRule> b)
+    {
+        b.ToTable("NotificationRoutingRules");
+        b.Property(r => r.RouteCode).HasMaxLength(32);
+        b.Property(r => r.Channel).HasMaxLength(32);
+    }
+}
+
+internal sealed class BusinessClaimRequestConfiguration : IEntityTypeConfiguration<BusinessClaimRequest>
+{
+    public void Configure(EntityTypeBuilder<BusinessClaimRequest> b)
+    {
+        b.ToTable("BusinessClaimRequests");
+        b.Property(c => c.RequestNumber).HasMaxLength(30);
+        b.Property(c => c.ClaimantName).HasMaxLength(120);
+        b.Property(c => c.ClaimantPhone).HasMaxLength(20);
+        b.Property(c => c.ClaimantEmail).HasMaxLength(256);
+        b.Property(c => c.Message).HasMaxLength(1000);
+        b.Property(c => c.SourceProvider).HasMaxLength(20);
+        b.Property(c => c.SourceExternalId).HasMaxLength(300);
+        b.Property(c => c.Status).HasMaxLength(16);
+        b.Property(c => c.IpAddress).HasMaxLength(64);
+        b.HasOne(c => c.Business).WithMany().HasForeignKey(c => c.BusinessId);
+    }
+}
+
+internal sealed class CollaborationConfiguration :
+    IEntityTypeConfiguration<Conversation>, IEntityTypeConfiguration<ChatMessage>, IEntityTypeConfiguration<BusinessStaff>,
+    IEntityTypeConfiguration<BusinessStaffService>, IEntityTypeConfiguration<BusinessStaffHour>, IEntityTypeConfiguration<VideoRoom>
+{
+    public void Configure(EntityTypeBuilder<Conversation> b)
+    {
+        b.ToTable("Conversations");
+        b.Property(c => c.LastMessagePreview).HasMaxLength(200);
+        b.Property(c => c.LastSenderRole).HasMaxLength(16);
+        b.HasOne(c => c.Business).WithMany().HasForeignKey(c => c.BusinessId).OnDelete(DeleteBehavior.NoAction);
+        b.HasOne(c => c.Customer).WithMany().HasForeignKey(c => c.CustomerUserId).OnDelete(DeleteBehavior.NoAction);
+        b.HasIndex(c => new { c.BusinessId, c.CustomerUserId }).IsUnique().HasFilter("[IsDeleted] = 0");
+    }
+
+    public void Configure(EntityTypeBuilder<ChatMessage> b)
+    {
+        b.ToTable("ChatMessages");
+        b.Property(m => m.SenderRole).HasMaxLength(16);
+        b.Property(m => m.Body).HasMaxLength(2000);
+        b.Property(m => m.AttachmentName).HasMaxLength(200);
+        b.Property(m => m.AttachmentContentType).HasMaxLength(100);
+        b.HasQueryFilter(m => !m.IsDeleted);
+        b.HasOne(m => m.Conversation).WithMany().HasForeignKey(m => m.ConversationId);
+        b.HasIndex(m => new { m.ConversationId, m.SentAt });
+    }
+
+    public void Configure(EntityTypeBuilder<BusinessStaff> b)
+    {
+        b.ToTable("BusinessStaff");
+        b.Property(s => s.FullName).HasMaxLength(120);
+        b.Property(s => s.Title).HasMaxLength(80);
+        b.Property(s => s.Phone).HasMaxLength(20);
+        b.Property(s => s.Email).HasMaxLength(256);
+        b.Property(s => s.Bio).HasMaxLength(500);
+        b.Property(s => s.Languages).HasMaxLength(200);
+        b.HasOne(s => s.Business).WithMany().HasForeignKey(s => s.BusinessId).OnDelete(DeleteBehavior.NoAction);
+    }
+
+    public void Configure(EntityTypeBuilder<BusinessStaffService> b)
+    {
+        b.ToTable("BusinessStaffServices");
+        b.HasKey(x => new { x.StaffId, x.ServiceId });
+        b.HasOne(x => x.Staff).WithMany(s => s.Services).HasForeignKey(x => x.StaffId);
+        b.HasOne(x => x.Service).WithMany().HasForeignKey(x => x.ServiceId).OnDelete(DeleteBehavior.NoAction);
+    }
+
+    public void Configure(EntityTypeBuilder<BusinessStaffHour> b)
+    {
+        b.ToTable("BusinessStaffHours");
+        b.HasOne(h => h.Staff).WithMany(s => s.Hours).HasForeignKey(h => h.StaffId);
+        b.HasIndex(h => new { h.StaffId, h.DayOfWeek }).IsUnique();
+    }
+
+    public void Configure(EntityTypeBuilder<VideoRoom> b)
+    {
+        b.ToTable("VideoRooms");
+        b.Property(v => v.Status).HasMaxLength(16);
+        b.HasOne(v => v.Business).WithMany().HasForeignKey(v => v.BusinessId).OnDelete(DeleteBehavior.NoAction);
+        b.HasOne(v => v.Booking).WithMany().HasForeignKey(v => v.BookingId).OnDelete(DeleteBehavior.NoAction);
+    }
+}
+
 internal sealed class CountryPricingConfiguration : IEntityTypeConfiguration<CountryPricing>
 {
     public void Configure(EntityTypeBuilder<CountryPricing> b)
@@ -125,6 +275,11 @@ internal sealed class BusinessConfiguration : IEntityTypeConfiguration<Business>
 {
     public void Configure(EntityTypeBuilder<Business> b)
     {
+        // TR_Businesses_SlugHistory (27_Seo.sql) records old slugs. SQL Server rejects EF's OUTPUT clause on a table with a trigger,
+        // so EF must know about it to save Businesses another way.
+        b.ToTable(t => t.HasTrigger("TR_Businesses_SlugHistory"));
+        b.Property(x => x.SourceProvider).HasMaxLength(20);
+        b.Property(x => x.SourceExternalId).HasMaxLength(300);
         b.Property(x => x.Latitude).HasPrecision(9, 6);
         b.Property(x => x.Longitude).HasPrecision(9, 6);
         b.Property(x => x.AverageRating).HasPrecision(3, 2);
@@ -161,6 +316,7 @@ internal sealed class EngagementConfiguration :
     {
         b.HasOne(x => x.Service).WithMany().HasForeignKey(x => x.ServiceId);
         b.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerUserId);
+        b.HasOne(x => x.Staff).WithMany().HasForeignKey(x => x.StaffId).OnDelete(DeleteBehavior.NoAction);
     }
 
     public void Configure(EntityTypeBuilder<Favorite> b) =>

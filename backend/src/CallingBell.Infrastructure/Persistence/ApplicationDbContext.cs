@@ -53,6 +53,16 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<PaymentOrder> PaymentOrders => Set<PaymentOrder>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<Conversation> Conversations => Set<Conversation>();
+    public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
+    public DbSet<BusinessStaff> BusinessStaff => Set<BusinessStaff>();
+    public DbSet<VideoRoom> VideoRooms => Set<VideoRoom>();
+    public DbSet<BusinessClaimRequest> BusinessClaimRequests => Set<BusinessClaimRequest>();
+    public DbSet<NotificationDevice> NotificationDevices => Set<NotificationDevice>();
+    public DbSet<NotificationDelivery> NotificationDeliveries => Set<NotificationDelivery>();
+    public DbSet<NotificationProvider> NotificationProviders => Set<NotificationProvider>();
+    public DbSet<NotificationTemplate> NotificationTemplates => Set<NotificationTemplate>();
+    public DbSet<NotificationRoutingRule> NotificationRoutingRules => Set<NotificationRoutingRule>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<OtpCode> OtpCodes => Set<OtpCode>();

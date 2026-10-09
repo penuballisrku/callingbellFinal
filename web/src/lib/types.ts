@@ -164,6 +164,8 @@ export interface MyBooking {
   id: string; bookingNumber: string; businessName: string; businessSlug: string; businessLogoUrl?: string | null; serviceName: string;
   scheduledStart: string; scheduledEnd: string; status: string; amount: number; paymentStatus: string; serviceAddress?: string | null;
   businessPhone?: string | null; canCancel: boolean; canReview: boolean;
+  /** The team member doing it, and whether it happens over video. */
+  staffName?: string | null; isVideo?: boolean;
 }
 export interface MyEnquiry { id: string; enquiryNumber: string; businessName: string; businessSlug: string; serviceName?: string | null; enquiryType: string; message: string; status: string; quotedAmount?: number | null; createdOn: string; respondedOn?: string | null }
 export interface NotificationItem { id: string; title: string; message: string; notificationType: string; linkUrl?: string | null; isRead: boolean; createdOn: string }
@@ -172,7 +174,7 @@ export interface NotificationItem { id: string; title: string; message: string; 
 export interface Kpi { key: string; label: string; value: number; changePercent?: number | null; format: 'number' | 'currency' | 'percent' | 'rating' }
 export interface OwnerBusiness { id: string; name: string; slug: string; logoUrl?: string | null; city: string; area?: string | null; status: string; verificationStatus: string; availabilityStatus: string; planName?: string | null; averageRating: number; reviewCount: number; categoryName: string }
 export interface OwnerLead { id: string; enquiryNumber: string; customerName: string; customerPhone: string; customerEmail?: string | null; enquiryType: string; serviceName?: string | null; message: string; status: string; source: string; budget?: number | null; quotedAmount?: number | null; preferredDate?: string | null; createdOn: string; respondedOn?: string | null }
-export interface OwnerBooking { id: string; bookingNumber: string; customerName: string; customerPhone: string; serviceName: string; scheduledStart: string; scheduledEnd: string; status: string; amount: number; paymentStatus: string; serviceAddress?: string | null; notes?: string | null; cancellationReason?: string | null; createdOn: string }
+export interface OwnerBooking { id: string; bookingNumber: string; customerName: string; customerPhone: string; serviceName: string; scheduledStart: string; scheduledEnd: string; status: string; amount: number; paymentStatus: string; serviceAddress?: string | null; notes?: string | null; cancellationReason?: string | null; createdOn: string; serviceId?: string | null; staffId?: string | null; staffName?: string | null; isVideo?: boolean }
 export interface NameCount { name: string; count: number }
 export interface OwnerDashboard {
   business: OwnerBusiness; kpis: Kpi[];
@@ -329,6 +331,28 @@ export interface PopularSearch {
   code: string; label: string; searchText: string; categorySlug?: string | null; subCategorySlug?: string | null; group?: string | null;
   iconUrl?: string | null; colorHex?: string | null; searchCount: number;
 }
+/** "Join Calling Bell": a Google Maps / OpenStreetMap place prepared by GET /api/places/join-calling-bell for the business sign-up form. */
+export interface JoinCallingBellImage {
+  reference: string; imageUrl: string; thumbnailUrl: string; mobileImageUrl: string; desktopImageUrl: string; altText: string;
+  isPrimary: boolean; sortOrder: number; source: string; attribution?: string | null; attributionUrl?: string | null;
+  /** May be copied to the new listing (server setting, licence permitting); otherwise shown for reference only. */
+  importable: boolean;
+}
+export interface JoinCallingBellHours { dayOfWeek: number; open?: string | null; close?: string | null; isClosed: boolean }
+/** A Calling Bell business that may be the same place; isStrong = registering again is refused. */
+export interface ExistingBusinessMatch { id: string; slug: string; name: string; city?: string | null; status: string; matchedBy: string; isStrong: boolean }
+export interface JoinCallingBellBusiness {
+  sourceBusinessId: string; source: 'google' | 'osm'; sourceName: string; sourceUrl?: string | null; googlePlaceId?: string | null;
+  businessName: string; description?: string | null; sourceCategory?: string | null; tags: string[];
+  categorySlug?: string | null; subCategorySlug?: string | null; categoryName?: string | null; subCategoryName?: string | null;
+  address?: string | null; addressLine?: string | null; area?: string | null; city?: string | null; state?: string | null; country?: string | null;
+  countryCode?: string | null; postalCode?: string | null; pincode?: string | null; citySlug?: string | null; areaSlug?: string | null;
+  latitude?: number | null; longitude?: number | null;
+  phone?: string | null; alternatePhone?: string | null; whatsApp?: string | null; email?: string | null; website?: string | null;
+  socialLinks: { platform: string; url: string }[]; businessHours: JoinCallingBellHours[]; services: string[];
+  rating?: number | null; reviewCount?: number | null; businessStatus?: string | null;
+  images: JoinCallingBellImage[]; imagesImportable: boolean; existingBusinesses: ExistingBusinessMatch[];
+}
 export interface GooglePlacesLocation { lat: number; lon: number; source: 'coordinates' | 'area' | 'city'; areaName?: string | null; cityName?: string | null; citySlug?: string | null }
 export interface GooglePlacesPage { query: string; location: GooglePlacesLocation; places: GooglePlace[]; nextPageToken?: string | null }
 
@@ -355,4 +379,40 @@ export interface LandingPage {
 export interface SeoPage {
   kind: 'Home' | 'Business' | 'Category' | 'Location' | 'Static' | 'Search' | 'Private' | 'Redirect' | 'NotFound' | 'Gone';
   statusCode: number; redirectTo?: string | null; document: SeoDocument; content: SeoPageContent; landing?: LandingPage | null;
+}
+
+/* ---------- Chat ---------- */
+export type ChatRole = 'Customer' | 'Business';
+export interface ChatAttachment { url: string; name: string; contentType: string; size: number; isImage: boolean }
+export interface ChatMessage {
+  id: string; conversationId: string; senderRole: ChatRole; body?: string | null; attachment?: ChatAttachment | null; sentAt: string; readAt?: string | null;
+  /** A video call started from the chat. */
+  videoRoomId?: string | null;
+}
+export interface Conversation {
+  id: string; businessId: string; businessName: string; businessSlug: string; businessLogoUrl?: string | null; availabilityStatus?: string | null;
+  offersVideoConsultation: boolean; customerName: string; myRole: ChatRole; lastMessageAt?: string | null; lastMessagePreview?: string | null;
+  lastSenderRole?: ChatRole | null; unreadCount: number; otherLastReadAt?: string | null;
+}
+export interface ChatUnread { asCustomer: number; asBusiness: number }
+
+/* ---------- Team ---------- */
+/** Hours for one day (0 = Sunday); a day left out follows the business's hours. */
+export interface StaffHour { dayOfWeek: number; open?: string | null; close?: string | null; isClosed: boolean }
+export interface OwnerStaff {
+  id: string; fullName: string; title?: string | null; phone?: string | null; email?: string | null; bio?: string | null; yearsExperience?: number | null;
+  languages?: string | null; acceptsBookings: boolean; isActive: boolean; sortOrder: number; serviceIds: string[]; hours: StaffHour[];
+  upcomingBookings: number; completedThisMonth: number;
+}
+export interface TeamMember {
+  id: string; fullName: string; title?: string | null; bio?: string | null; yearsExperience?: number | null; languages?: string | null;
+  serviceIds: string[]; acceptsBookings: boolean;
+}
+
+/* ---------- Video ---------- */
+export interface IceServer { urls: string[]; username?: string | null; credential?: string | null }
+export interface VideoRoom {
+  id: string; status: 'Scheduled' | 'Live' | 'Ended'; opensAt?: string | null; closesAt?: string | null; myRole: ChatRole; businessId: string;
+  businessName: string; businessLogoUrl?: string | null; customerName: string; serviceName?: string | null; scheduledStart?: string | null;
+  staffName?: string | null; canJoinNow: boolean; conversationId?: string | null; iceServers: IceServer[];
 }

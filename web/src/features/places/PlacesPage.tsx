@@ -610,7 +610,7 @@ function PlaceRow({ place: p, onSelect }: { place: GooglePlace; onSelect: (p: Go
         </div>
       </div>
 
-      <PlaceActions place={{ ...p, mapsUrl: p.mapsUrl ?? p.directionsUrl }} compactMid
+      <PlaceActions place={{ ...p, mapsUrl: p.mapsUrl ?? p.directionsUrl, sourceId: p.id ? `google:${p.id}` : null }} compactMid
         className="border-t border-line pt-3 lg:shrink-0 lg:flex-nowrap lg:border-0 lg:pt-0" />
     </article>
   );

@@ -12,7 +12,7 @@ import { useSnackbar } from 'notistack';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { money } from '@/lib/format';
 import { useAuth } from '@/stores/auth';
-import type { BusinessDetail, CreatedReference, Review, Slot } from '@/lib/types';
+import type { BusinessDetail, CreatedReference, Review, Slot, TeamMember } from '@/lib/types';
 
 const phone = z.string().trim().regex(/^(\+91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}$/, 'Enter a valid 10-digit mobile number');
 
@@ -123,25 +123,38 @@ export function BookingDialog({ business, open, serviceId, onClose }: { business
   const [selectedService, setSelectedService] = useState(serviceId ?? business.services[0]?.id ?? '');
   const [day, setDay] = useState(days[0]!.format('YYYY-MM-DD'));
   const [slot, setSlot] = useState<string | null>(null);
+  // "" = any available professional (the business assigns one).
+  const [staffId, setStaffId] = useState('');
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
   const [done, setDone] = useState<string | null>(null);
 
   useEffect(() => { if (open) { setSelectedService(serviceId ?? business.services[0]?.id ?? ''); setDone(null); setSlot(null); } }, [open, serviceId, business.services]);
-  useEffect(() => setSlot(null), [day, selectedService]);
+  useEffect(() => setSlot(null), [day, selectedService, staffId]);
+
+  // The team members who do the chosen service and take bookings.
+  const team = useQuery({
+    queryKey: ['team', business.card.id],
+    queryFn: () => api.get<TeamMember[]>(`/api/businesses/${business.card.id}/team`),
+    enabled: open,
+    staleTime: 5 * 60_000,
+  });
+  const professionals = (team.data ?? []).filter((m) => m.acceptsBookings && m.serviceIds.includes(selectedService));
+  useEffect(() => { if (staffId && !professionals.some((m) => m.id === staffId)) setStaffId(''); }, [selectedService, staffId, professionals]);
 
   const service = business.services.find((s) => s.id === selectedService);
   const closedDays = new Set(business.hours.filter((h) => h.isClosed).map((h) => h.dayOfWeek));
 
   const slots = useQuery({
-    queryKey: ['slots', business.card.id, selectedService, day],
-    queryFn: () => api.get<Slot[]>(`/api/businesses/${business.card.id}/slots`, { serviceId: selectedService, date: day }),
+    queryKey: ['slots', business.card.id, selectedService, day, staffId],
+    queryFn: () => api.get<Slot[]>(`/api/businesses/${business.card.id}/slots`, { serviceId: selectedService, date: day, staffId: staffId || null }),
     enabled: open && !!selectedService,
   });
 
   const book = useMutation({
     mutationFn: () => api.post<CreatedReference>('/api/me/bookings', {
       businessId: business.card.id, serviceId: selectedService, scheduledStart: slot, serviceAddress: address || null, notes: notes || null,
+      staffId: staffId || null,
     }),
     onSuccess: ({ data }) => {
       setDone(data.reference);
@@ -174,6 +187,21 @@ export function BookingDialog({ business, open, serviceId, onClose }: { business
             <TextField select label="Service" value={selectedService} onChange={(e) => setSelectedService(e.target.value)}>
               {business.services.map((s) => <MenuItem key={s.id} value={s.id}>{s.name} · {money(s.price)} {s.priceUnit && s.price > 0 ? s.priceUnit : ''}</MenuItem>)}
             </TextField>
+
+            {professionals.length > 0 && (
+              <div>
+                <div className="mb-2 text-sm font-semibold">Professional</div>
+                <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Professional">
+                  {[{ id: '', fullName: 'Any available', title: 'Fastest confirmation' } as Pick<TeamMember, 'id' | 'fullName' | 'title'>, ...professionals].map((m) => (
+                    <button key={m.id || 'any'} type="button" role="radio" aria-checked={staffId === m.id} onClick={() => setStaffId(m.id)}
+                      className={`rounded-lg border px-3 py-1.5 text-left text-sm transition-colors ${staffId === m.id ? 'border-inverse bg-inverse text-on-inverse' : 'border-line bg-surface hover:border-line-strong'}`}>
+                      <span className="block font-medium">{m.fullName}</span>
+                      {m.title && <span className={`block text-xs ${staffId === m.id ? 'opacity-80' : 'text-muted'}`}>{m.title}</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div>
               <div className="mb-2 text-sm font-semibold">Choose a date</div>

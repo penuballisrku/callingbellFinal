@@ -67,7 +67,7 @@ public sealed class SeoMetadataService(ISender sender, IUnitOfWork uow, IOptions
                 // A Google Maps place: Google's data, not ours to index.
                 ["nearby", "place", _] => Plain(SeoPageKind.Search, "Business details", "Details of a business near you, from Google Maps.", path, NoIndexFollow),
                 ["nearby"] => Plain(SeoPageKind.Search, "Explore nearby businesses", "Businesses near your location on " + O.SiteName + ".", path, NoIndexFollow),
-                ["login" or "register" or "account" or "owner" or "admin", ..] => Plain(SeoPageKind.Private, "Your account", O.SiteName, path, NoIndexNoFollow),
+                ["login" or "register" or "account" or "owner" or "admin" or "video", ..] => Plain(SeoPageKind.Private, "Your account", O.SiteName, path, NoIndexNoFollow),
                 _ when StaticPages.ContainsKey(path) => await cache.GetOrCreateAsync("page|" + path, Lifetime, () => StaticAsync(path, ct)),
                 _ => Missing(path),
             };

@@ -46,6 +46,19 @@ public sealed class AuthController : ApiControllerBase
     public async Task<ActionResult<ApiResponse<bool>>> EmailAvailable([FromQuery] string email, CancellationToken ct) =>
         Success(await Sender.Send(new EmailAvailabilityQuery(email ?? string.Empty), ct));
 
+    /// <summary>
+    /// Sends a one-time code: on WhatsApp (authentication template) first, by SMS if WhatsApp can't deliver it. The answer is the same
+    /// whether or not the number has an account. Limits: a few codes per number and per IP address every 15 minutes.
+    /// </summary>
+    [HttpPost("request-otp"), EnableRateLimiting("auth")]
+    public async Task<ActionResult<ApiResponse<RequestOtpResultDto>>> RequestOtp(RequestOtpCommand command, CancellationToken ct) =>
+        Success(await Sender.Send(command, ct), "If the number can receive verification, an OTP has been sent.");
+
+    /// <summary>Checks the code (5 attempts per code): LOGIN signs in; SIGNUP returns the verification token for registration.</summary>
+    [HttpPost("verify-otp"), EnableRateLimiting("auth")]
+    public async Task<ActionResult<ApiResponse<VerifyOtpResultDto>>> VerifyOtpCode(VerifyOtpCommand command, CancellationToken ct) =>
+        Success(await Sender.Send(command, ct), "Code verified");
+
     /// <summary>Texts a one-time code to a mobile number. Purpose "SignIn" needs an existing account; "SignUp" needs an unused number.</summary>
     [HttpPost("otp/send"), EnableRateLimiting("auth")]
     public async Task<ActionResult<ApiResponse<OtpChallengeDto>>> SendOtp(SendOtpCommand command, CancellationToken ct) =>
@@ -89,6 +102,11 @@ public sealed class CatalogController : ApiControllerBase
     [HttpGet("categories/featured"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<SubCategoryDto>>>> FeaturedCategories(CancellationToken ct) =>
         Success(await Sender.Send(new GetFeaturedSubCategoriesQuery(), ct));
+
+    /// <summary>Services businesses in this sub-category commonly offer, with typical price and duration (to pre-fill business sign-up).</summary>
+    [HttpGet("subcategories/{slug}/service-suggestions"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<ServiceSuggestionDto>>>> ServiceSuggestions(string slug, CancellationToken ct) =>
+        Success(await Sender.Send(new GetServiceSuggestionsQuery(slug), ct));
 
     [HttpGet("categories/{slug}"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
     public async Task<ActionResult<ApiResponse<CategoryDto>>> Category(string slug, CancellationToken ct) =>
@@ -203,9 +221,25 @@ public sealed class BusinessesController : ApiControllerBase
         [FromQuery] int? rating = null, [FromQuery] string? sort = null, CancellationToken ct = default) =>
         Paged(await Sender.Send(new GetBusinessReviewsQuery { Slug = slug, Page = page, PageSize = pageSize, Rating = rating, Sort = sort }, ct));
 
+    /// <param name="staffId">Only times when this team member is free.</param>
     [HttpGet("{id:guid}/slots")]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<SlotDto>>>> Slots(Guid id, [FromQuery] Guid serviceId, [FromQuery] DateTime date, CancellationToken ct) =>
-        Success(await Sender.Send(new GetAvailableSlotsQuery(id, serviceId, date.Date), ct));
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<SlotDto>>>> Slots(Guid id, [FromQuery] Guid serviceId, [FromQuery] DateTime date,
+        [FromQuery] Guid? staffId, CancellationToken ct) =>
+        Success(await Sender.Send(new GetAvailableSlotsQuery(id, serviceId, date.Date, staffId), ct));
+
+    /// <summary>The business's team as customers see it (names, roles, experience and services; never contact details).</summary>
+    [HttpGet("{id:guid}/team")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<CallingBell.Application.Features.Staff.TeamMemberDto>>>> Team(Guid id, CancellationToken ct) =>
+        Success(await Sender.Send(new CallingBell.Application.Features.Staff.GetBusinessTeamQuery(id), ct));
+
+    /// <summary>
+    /// "Claim business": asks to take over an existing listing (e.g. one found while joining Calling Bell). An administrator verifies the
+    /// person before transferring it. Signed-in or not.
+    /// </summary>
+    [HttpPost("{id:guid}/claim-requests"), EnableRateLimiting("submissions")]
+    public async Task<ActionResult<ApiResponse<CallingBell.Application.Features.Onboarding.BusinessClaimResultDto>>> Claim(Guid id,
+        CallingBell.Application.Features.Onboarding.CreateBusinessClaimCommand command, CancellationToken ct) =>
+        Success(await Sender.Send(command with { BusinessId = id }, ct), "Claim request sent. Our team will verify it and get in touch.");
 
     [HttpPost("{id:guid}/enquiries"), EnableRateLimiting("submissions")]
     public async Task<ActionResult<ApiResponse<CreatedReferenceDto>>> Enquire(Guid id, CreateEnquiryCommand command, CancellationToken ct) =>
@@ -425,6 +459,22 @@ public sealed class PlacesController : ApiControllerBase
     {
         Response.Headers.CacheControl = "public, max-age=300";
         return Success(await Sender.Send(new GetPopularSearchesQuery(country, limit), ct));
+    }
+
+    /// <summary>
+    /// "Join Calling Bell": everything known about a Google Maps or OpenStreetMap place, read from the source on the server, cleaned and
+    /// matched to Calling Bell's categories, cities and areas, for the business sign-up form; its photos (shown with their credit); and
+    /// Calling Bell businesses that may already be this one (<c>existingBusinesses</c>; a strong match can't be registered again).
+    /// 404 when the place can't be found. Nothing is stored.
+    /// </summary>
+    /// <param name="sourceId">"google:{place id}" or "osm:node/123", as on the search and Explore nearby results.</param>
+    /// <param name="hint">What the person was browsing (a category slug or the search text); used only when the source's category doesn't match.</param>
+    [HttpGet("join-calling-bell"), EnableRateLimiting("public-search")]
+    public async Task<ActionResult<ApiResponse<CallingBell.Application.Features.Onboarding.JoinCallingBellBusinessDto>>> JoinCallingBell(
+        [FromQuery] string? sourceId, [FromQuery] string? hint, CancellationToken ct)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        return Success(await Sender.Send(new CallingBell.Application.Features.Onboarding.GetJoinCallingBellBusinessQuery(sourceId ?? "", hint), ct));
     }
 
     /// <summary>

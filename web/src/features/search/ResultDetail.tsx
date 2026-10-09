@@ -304,7 +304,7 @@ function PlaceDetailView({ source, place }: { source: 'google' | 'ai'; place: Ex
           <Field label="Details from" value={d.dataSources.join(' and ')} />
           {source === 'ai' && place.aiReason && <Field label="Why AI picked it" value={place.aiReason} />}
         </Section>
-        <ClaimBusinessBanner place={{ name: d.name, phone: d.phone ?? d.mobile, website: d.website, address: d.address }} />
+        <ClaimBusinessBanner place={{ name: d.name, phone: d.phone ?? d.mobile, website: d.website, address: d.address, sourceId: `${d.source}:${d.sourceId}` }} />
         <p className="text-xs text-muted">This business hasn't joined Calling Bell. Please confirm details with the business before you visit or pay.</p>
       </div>
     </div>

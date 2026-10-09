@@ -93,12 +93,12 @@ function OtpSignIn({ onSignedIn }: { onSignedIn: (result: AuthResult) => void })
   const [error, setError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
 
-  const sendCode = async () => {
+  const sendCode = async (channel?: 'SMS') => {
     setError(null);
     if (!MOBILE_PATTERN.test(phone.trim())) { setPhoneError('Enter a valid 10-digit mobile number'); return; }
     setPhoneError(undefined);
     try {
-      await send(phone.trim());
+      await send(phone.trim(), channel);
       setCode('');
       setCodeError(undefined);
     } catch (e) {
@@ -126,13 +126,13 @@ function OtpSignIn({ onSignedIn }: { onSignedIn: (result: AuthResult) => void })
       {error && <Alert severity="error">{error}</Alert>}
       <TextField label="Mobile number" type="tel" autoComplete="tel" autoFocus={!challenge} placeholder="98765 43210" value={phone}
         disabled={!!challenge} onChange={(e) => { setPhone(e.target.value); setPhoneError(undefined); }}
-        error={!!phoneError} helperText={phoneError ?? (challenge ? undefined : 'We will text you a one-time code')}
+        error={!!phoneError} helperText={phoneError ?? (challenge ? undefined : 'We will send a one-time code on WhatsApp or by SMS')}
         slotProps={{ input: { startAdornment: <InputAdornment position="start">+91</InputAdornment> } }} />
       {challenge && (
         <>
-          <OtpSentNote challenge={challenge} cooldown={cooldown} sending={sending} onResend={() => void sendCode()}
+          <OtpSentNote challenge={challenge} cooldown={cooldown} sending={sending} onResend={() => void sendCode()} onSendSms={() => void sendCode('SMS')}
             onChangeNumber={() => { reset(); setCode(''); setCodeError(undefined); }} />
-          <OtpCodeField value={code} onChange={(v) => { setCode(v); setCodeError(undefined); }} error={codeError} disabled={verifying} />
+          <OtpCodeField value={code} onChange={(v) => { setCode(v); setCodeError(undefined); }} error={codeError} disabled={verifying} channel={challenge.channel} />
         </>
       )}
       <Button type="submit" variant="contained" size="large" fullWidth disabled={sending || verifying}>

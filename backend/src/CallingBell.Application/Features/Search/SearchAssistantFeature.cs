@@ -386,6 +386,9 @@ public sealed partial class AskSearchAssistantHandler(ISender sender, IUnitOfWor
                 $"{(c.ReviewCount > 0 ? $"rated {c.AverageRating:0.0} from {c.ReviewCount} reviews" : "new, no reviews yet")}, from {Rupees(c.StartingPrice)}" +
                 (traits.Any() ? $"; {string.Join(", ", traits)}" : ""));
         }
+        // The panel tops a short list up with places from the map (Google Maps, then OpenStreetMap).
+        if (total is > 0 and < ResultCount && f is { Sub: not null } or { Category: not null } or { Q: not null })
+            facts.AppendLine("More places nearby from the map (not on Calling Bell) are shown below the reply.");
         if (total == 0 && elsewhere is not null)
         {
             if (!elsewhere.CityHasListings) facts.AppendLine("No businesses of any kind are listed in this city on Calling Bell yet.");

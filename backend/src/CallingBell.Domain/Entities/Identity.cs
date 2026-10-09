@@ -77,4 +77,23 @@ public class Notification : BaseEntity
     public string? LinkUrl { get; set; }
     public bool IsRead { get; set; }
     public DateTimeOffset CreatedOn { get; set; }
+
+    /// <summary>
+    /// The route (NEW_LEAD, BOOKING) whose channels deliver it beyond the app (web push, WhatsApp, …); null = in-app only. A background
+    /// dispatcher works through it, so the request that created the notification doesn't wait for providers.
+    /// </summary>
+    public string? RouteCode { get; set; }
+    /// <summary>What it's about, e.g. "Enquiry" / the enquiry's id, for message details and deep links.</summary>
+    public string? ReferenceType { get; set; }
+    public Guid? ReferenceId { get; set; }
+    /// <summary>Unique when set: the same event never notifies twice (e.g. "NEW_LEAD:{enquiryId}:{userId}").</summary>
+    public string? IdempotencyKey { get; set; }
+    public string? DispatchStatus { get; set; }
+    /// <summary>The route position to try next (0 = first channel).</summary>
+    public int DispatchStep { get; set; }
+    public int DispatchAttempts { get; set; }
+    public DateTimeOffset? NextDispatchAt { get; set; }
+    /// <summary>Claimed by a dispatcher until then (several app instances may run).</summary>
+    public DateTimeOffset? DispatchLockedUntil { get; set; }
+    public DateTimeOffset? DispatchedAt { get; set; }
 }

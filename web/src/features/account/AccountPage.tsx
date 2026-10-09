@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Pagination, Skeleton, Tab, Tabs } from '@mui/material';
 import { useSnackbar } from 'notistack';
@@ -11,21 +11,29 @@ import type { BusinessCard as Card, MyBooking, MyEnquiry } from '@/lib/types';
 import { BusinessCard } from '@/components/BusinessCard';
 import { ConfirmDialog, EmptyState, ErrorState, Img, PageHeader, StatusBadge } from '@/components/ui';
 import { ReviewDialog } from '@/features/business/Dialogs';
+import { ChatInbox } from '@/features/chat/Chat';
+import { JoinVideoButton } from '@/features/video/JoinVideoButton';
+
+/** Tabs by name in the address (?tab=messages), so notification links open the right one. */
+const TABS = ['upcoming', 'past', 'saved', 'requests', 'messages'] as const;
 
 export default function AccountPage() {
   useDocumentTitle('My account');
   const user = useAuth((s) => s.user);
-  const [tab, setTab] = useState(0);
+  const [params, setParams] = useSearchParams();
+  const tab = Math.max(0, TABS.indexOf((params.get('tab') ?? 'upcoming') as (typeof TABS)[number]));
+  const setTab = (i: number) => setParams((p) => { const n = new URLSearchParams(p); n.set('tab', TABS[i]!); n.delete('c'); return n; });
   return (
     <div className="container-page py-8">
       <PageHeader title={`Hi, ${user?.displayName.split(' ')[0]}`} subtitle="Your bookings, saved businesses and requests in one place." crumbs={[{ label: 'Home', to: '/' }, { label: 'My account' }]} />
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ borderBottom: '1px solid var(--cb-line)', mb: 3 }} variant="scrollable" allowScrollButtonsMobile>
-        <Tab label="Upcoming bookings" /><Tab label="Past bookings" /><Tab label="Saved" /><Tab label="My requests" />
+        <Tab label="Upcoming bookings" /><Tab label="Past bookings" /><Tab label="Saved" /><Tab label="My requests" /><Tab label="Messages" />
       </Tabs>
       {tab === 0 && <Bookings scope="upcoming" />}
       {tab === 1 && <Bookings scope="past" />}
       {tab === 2 && <Favorites />}
       {tab === 3 && <Enquiries />}
+      {tab === 4 && <ChatInbox role="Customer" />}
     </div>
   );
 }
@@ -65,12 +73,13 @@ function Bookings({ scope }: { scope: 'upcoming' | 'past' }) {
                 <Link to={`/business/${b.businessSlug}`} className="font-semibold hover:underline">{b.businessName}</Link>
                 <StatusBadge type="BookingStatus" code={b.status} />
               </div>
-              <p className="text-sm text-ink-2">{b.serviceName} · {dateTime(b.scheduledStart)}</p>
+              <p className="text-sm text-ink-2">{b.serviceName} · {dateTime(b.scheduledStart)}{b.staffName && ` · with ${b.staffName}`}</p>
               <p className="text-xs text-muted">{b.bookingNumber}{b.serviceAddress && ` · ${b.serviceAddress}`}</p>
             </div>
             <div className="flex items-center gap-3 sm:flex-col sm:items-end">
               <span className="font-bold">{money(b.amount)}</span>
               <div className="flex gap-2">
+                {b.isVideo && b.status === 'Confirmed' && scope === 'upcoming' && <JoinVideoButton bookingId={b.id} />}
                 {b.businessPhone && scope === 'upcoming' && <Button size="small" variant="outlined" href={`tel:${b.businessPhone.replace(/\s/g, '')}`}>Call</Button>}
                 {b.canCancel && <Button size="small" color="error" onClick={() => setCancel(b)}>Cancel</Button>}
                 {b.canReview && <Button size="small" variant="contained" onClick={() => setReview(b)}>Rate & review</Button>}
@@ -132,3 +141,4 @@ function Enquiries() {
     </>
   );
 }
+

@@ -26,6 +26,13 @@ public class Business : AuditableEntity
     // Contact
     public string? PhoneNumber { get; set; }
     public string? WhatsAppNumber { get; set; }
+
+    /// <summary>
+    /// Where the listing was created from with "Join Calling Bell": "google" (Google Maps) or "osm" (OpenStreetMap), and the place's id
+    /// there (a Google place id, or "node/123"). Only the id is kept; one place can become only one Calling Bell business.
+    /// </summary>
+    public string? SourceProvider { get; set; }
+    public string? SourceExternalId { get; set; }
     public string? Email { get; set; }
     public string? Website { get; set; }
 
@@ -175,6 +182,28 @@ public class BusinessSlugHistory
     public Guid BusinessId { get; set; }
     public string Slug { get; set; } = string.Empty;
     public DateTimeOffset CreatedOn { get; set; }
+
+    public Business Business { get; set; } = null!;
+}
+
+/// <summary>
+/// "This business is mine": someone asks to take over a listing that already exists (found as a duplicate while joining Calling Bell).
+/// An administrator verifies the person before transferring the listing.
+/// </summary>
+public class BusinessClaimRequest : AuditableEntity
+{
+    public string RequestNumber { get; set; } = string.Empty;
+    public Guid BusinessId { get; set; }
+    public string? UserId { get; set; }
+    public string ClaimantName { get; set; } = string.Empty;
+    public string ClaimantPhone { get; set; } = string.Empty;
+    public string? ClaimantEmail { get; set; }
+    public string? Message { get; set; }
+    public string? SourceProvider { get; set; }
+    public string? SourceExternalId { get; set; }
+    /// <summary>Pending, Approved or Rejected.</summary>
+    public string Status { get; set; } = "Pending";
+    public string? IpAddress { get; set; }
 
     public Business Business { get; set; } = null!;
 }

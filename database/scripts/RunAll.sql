@@ -41,3 +41,6 @@
 :r $(ScriptDir)\26_CountryImages.sql
 :r $(ScriptDir)\27_Seo.sql
 :r $(ScriptDir)\28_PopularSearches.sql
+:r $(ScriptDir)\29_Notifications.sql
+:r $(ScriptDir)\30_JoinCallingBell.sql
+:r $(ScriptDir)\31_ChatStaffVideo.sql

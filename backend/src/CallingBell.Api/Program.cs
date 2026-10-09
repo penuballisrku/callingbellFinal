@@ -24,6 +24,7 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddScoped<IRealtimeNotifier, SignalRNotifier>();
+builder.Services.AddScoped<CallingBell.Application.Features.Chat.IChatRealtime, ChatRealtime>();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddProblemDetails();
 
@@ -102,6 +103,10 @@ builder.Services.AddRateLimiter(options =>
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1) }));
     // The AI search assistant: one request per message, plus a few repeats while the local AI is still working on one.
+    // Chat messages and attachments: per signed-in user.
+    options.AddPolicy("chat", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 40, Window = TimeSpan.FromMinutes(1) }));
     options.AddPolicy("assistant", context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 40, Window = TimeSpan.FromMinutes(1) }));
@@ -161,6 +166,10 @@ builder.Services.AddSingleton<CallingBell.Api.Seo.SeoHtmlRenderer>();
 
 var app = builder.Build();
 
+// Simulated payments activate plans without money: never outside development.
+if (!app.Environment.IsDevelopment() && app.Configuration.GetValue<bool>("Payments:Test:Enabled"))
+    throw new InvalidOperationException("Payments:Test:Enabled is only allowed in the Development environment.");
+
 app.UseExceptionHandler();
 app.UseResponseCompression();
 if (app.Environment.IsDevelopment())
@@ -187,6 +196,8 @@ if (CallingBell.Api.Seo.SpaHosting.Root(app.Configuration, app.Environment) is {
 app.MapControllers();
 app.MapHub<PresenceHub>("/hubs/presence");
 app.MapHub<NotificationHub>("/hubs/notifications");
+app.MapHub<ChatHub>("/hubs/chat");
+app.MapHub<VideoHub>("/hubs/video");
 app.MapGet("/health", () => Results.Ok(new { status = "Healthy" })).AllowAnonymous();
 
 app.Run();

@@ -13,6 +13,8 @@ import CampaignOutlined from '@mui/icons-material/CampaignOutlined';
 import OpenInNewRounded from '@mui/icons-material/OpenInNewRounded';
 import PermMediaOutlined from '@mui/icons-material/PermMediaOutlined';
 import SettingsOutlined from '@mui/icons-material/SettingsOutlined';
+import ChatBubbleOutlineRounded from '@mui/icons-material/ChatBubbleOutlineRounded';
+import GroupsOutlined from '@mui/icons-material/GroupsOutlined';
 import RocketLaunchOutlined from '@mui/icons-material/RocketLaunchOutlined';
 import { useSelectedBusiness } from '@/stores/ownerBusiness';
 import { useSnackbar } from 'notistack';
@@ -26,6 +28,9 @@ import { OwnerBookings, OwnerLeads } from './OwnerPipeline';
 import { OwnerAds, OwnerProfile, OwnerReviews, OwnerServices, OwnerSubscription } from './OwnerManage';
 import OwnerMedia from './OwnerMedia';
 import OwnerSettings from './OwnerSettings';
+import { OwnerTeam } from './OwnerTeam';
+import { ChatInbox } from '@/features/chat/Chat';
+import type { ChatUnread } from '@/lib/types';
 import BusinessWizard from '@/features/onboarding/BusinessWizard';
 
 const useSelected = useSelectedBusiness;
@@ -52,10 +57,13 @@ export default function OwnerPortal() {
     refetchInterval: 60_000,
   });
 
+  const unread = useQuery({ queryKey: ['chat', 'unread'], queryFn: () => api.get<ChatUnread>('/api/chat/unread'), refetchInterval: 120_000 });
   const nav = [
     { to: '/owner', label: 'Dashboard', icon: <SpaceDashboardOutlined fontSize="small" />, end: true },
     { to: '/owner/leads', label: 'Leads', icon: <InboxOutlined fontSize="small" />, badge: counts.data?.leads },
     { to: '/owner/bookings', label: 'Bookings', icon: <EventNoteOutlined fontSize="small" />, badge: counts.data?.bookings },
+    { to: '/owner/messages', label: 'Messages', icon: <ChatBubbleOutlineRounded fontSize="small" />, badge: unread.data?.asBusiness || undefined },
+    { to: '/owner/team', label: 'Team', icon: <GroupsOutlined fontSize="small" /> },
     { to: '/owner/reviews', label: 'Reviews', icon: <RateReviewOutlined fontSize="small" /> },
     { to: '/owner/services', label: 'Services', icon: <HandymanOutlined fontSize="small" /> },
     { to: '/owner/profile', label: 'Business profile', icon: <StorefrontOutlined fontSize="small" /> },
@@ -97,6 +105,8 @@ export default function OwnerPortal() {
               <Route index element={<OwnerDashboard />} />
               <Route path="leads" element={<OwnerLeads />} />
               <Route path="bookings" element={<OwnerBookings />} />
+              <Route path="messages" element={<OwnerMessages />} />
+              <Route path="team" element={<OwnerTeam />} />
               <Route path="reviews" element={<OwnerReviews />} />
               <Route path="services" element={<OwnerServices />} />
               <Route path="profile" element={<OwnerProfile />} />
@@ -143,5 +153,16 @@ function AvailabilitySwitch({ business }: { business: OwnerBusiness }) {
         </MenuItem>
       ))}
     </Select>
+  );
+}
+
+/** Conversations with this business's customers. */
+function OwnerMessages() {
+  const business = useBusiness();
+  return (
+    <>
+      <div className="mb-4"><h1 className="text-2xl font-bold tracking-tight">Messages</h1><p className="text-sm text-muted">Chats with customers of {business.name}. Replies are sent instantly.</p></div>
+      <ChatInbox role="Business" businessId={business.id} />
+    </>
   );
 }

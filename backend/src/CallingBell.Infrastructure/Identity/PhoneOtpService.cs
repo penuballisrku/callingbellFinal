@@ -1,11 +1,15 @@
 using System.Security.Cryptography;
 using System.Text;
+using CallingBell.Application.Common;
 using CallingBell.Application.Common.Exceptions;
 using CallingBell.Application.Common.Interfaces;
 using CallingBell.Application.Features.Auth;
+using CallingBell.Application.Features.Notifications.Delivery;
+using CallingBell.Domain.Constants;
 using CallingBell.Domain.Entities;
 using CallingBell.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
@@ -21,23 +25,38 @@ public sealed class OtpOptions
     /// <summary>Wrong guesses allowed per code before a new one must be requested.</summary>
     public int MaxAttempts { get; set; } = 5;
     public int MaxSendsPerHour { get; set; } = 5;
+    /// <summary>Codes per number within <see cref="SendWindowMinutes"/>.</summary>
+    public int MaxSendsPerWindow { get; set; } = 3;
+    /// <summary>Codes requested from one IP address (any numbers) within <see cref="SendWindowMinutes"/>.</summary>
+    public int MaxSendsPerIpPerWindow { get; set; } = 10;
+    public int SendWindowMinutes { get; set; } = 15;
     /// <summary>How long a verified sign-up number stays usable for creating the account.</summary>
     public int VerificationMinutes { get; set; } = 60;
     /// <summary>Returns the code in the API response. Local development only - never enable in production.</summary>
     public bool ExposeCodeInResponse { get; set; }
 }
 
-internal sealed class PhoneOtpService(ApplicationDbContext db, ISmsSender sms, ICurrentUser currentUser, IOptions<OtpOptions> options) : IPhoneOtpService
+internal sealed class PhoneOtpService(ApplicationDbContext db, NotificationRouter router, OtpCodeVault vault, ICurrentUser currentUser,
+    IOptions<OtpOptions> options, ILogger<PhoneOtpService> logger) : IPhoneOtpService
 {
     private readonly OtpOptions _options = options.Value;
 
-    public async Task<OtpChallengeDto> SendAsync(string phoneNumber, OtpPurpose purpose, CancellationToken ct)
+    public int ExpirySeconds => _options.ExpiryMinutes * 60;
+    public int ResendSeconds => _options.ResendSeconds;
+
+    public async Task<OtpChallengeDto> SendAsync(string phoneNumber, OtpPurpose purpose, CancellationToken ct,
+        OtpChannelPreference channel = OtpChannelPreference.Auto)
     {
         var now = DateTimeOffset.UtcNow;
+        var e164 = Phones.ToE164(phoneNumber) ?? throw Invalid("phoneNumber", "Enter a valid mobile number.");
         var sentLastHour = await db.OtpCodes.Where(o => o.PhoneNumber == phoneNumber && o.CreatedAt > now.AddHours(-1))
             .OrderByDescending(o => o.CreatedAt).Select(o => o.CreatedAt).ToListAsync(ct);
-        if (sentLastHour.Count >= _options.MaxSendsPerHour)
-            throw new BadRequestException("Too many codes were requested for this number. Please try again in an hour.");
+        var window = now.AddMinutes(-_options.SendWindowMinutes);
+        if (sentLastHour.Count >= _options.MaxSendsPerHour || sentLastHour.Count(t => t > window) >= _options.MaxSendsPerWindow)
+            throw new BadRequestException($"Too many codes were requested for this number. Please try again in {_options.SendWindowMinutes} minutes.");
+        if (currentUser.IpAddress is { } ip
+            && await db.OtpCodes.CountAsync(o => o.IpAddress == ip && o.CreatedAt > window, ct) >= _options.MaxSendsPerIpPerWindow)
+            throw new BadRequestException($"Too many codes were requested. Please try again in {_options.SendWindowMinutes} minutes.");
         if (sentLastHour.Count > 0)
         {
             var wait = (int)Math.Ceiling((sentLastHour[0].AddSeconds(_options.ResendSeconds) - now).TotalSeconds);
@@ -46,6 +65,9 @@ internal sealed class PhoneOtpService(ApplicationDbContext db, ISmsSender sms, I
 
         // Only the newest code for a number and purpose is valid.
         var purposeName = purpose.ToString();
+        var skip = channel == OtpChannelPreference.Sms || await PreviousWhatsAppNotReceivedAsync(phoneNumber, purposeName, window, ct)
+            ? new HashSet<string> { NotificationChannels.WhatsAppAuthentication }
+            : null;
         await db.OtpCodes.Where(o => o.PhoneNumber == phoneNumber && o.Purpose == purposeName && o.ConsumedAt == null && o.ExpiresAt > now)
             .ExecuteUpdateAsync(s => s.SetProperty(o => o.ExpiresAt, now), ct);
 
@@ -59,12 +81,45 @@ internal sealed class PhoneOtpService(ApplicationDbContext db, ISmsSender sms, I
         db.OtpCodes.Add(otp);
         await db.SaveChangesAsync(ct);
 
-        await sms.SendAsync(phoneNumber,
-            $"{code} is your Calling Bell verification code. It expires in {_options.ExpiryMinutes} minutes. Do not share it with anyone.", ct);
+        // WhatsApp (authentication template) first, then SMS; one at a time, never both. The code itself is never stored or logged.
+        var message = OtpMessages.Create(e164, code, _options.ExpiryMinutes);
+        var result = await router.RouteAsync(message, new DeliveryOwner(null, otp.Id), maxAttemptsPerProvider: 2, skipChannels: skip, ct: ct);
+        if (!result.Success)
+        {
+            otp.ExpiresAt = now;
+            await db.SaveChangesAsync(CancellationToken.None);
+            logger.LogWarning("Verification code for {Phone} could not be sent on any channel", Phones.Mask(e164));
+            throw new ExternalServiceException(503, "We couldn't send a verification code right now. Please try again in a minute.");
+        }
+        // Kept in memory (never in the database) while valid, only so a WhatsApp failure reported later can resend it by SMS.
+        if (result.Channel == NotificationChannels.WhatsAppAuthentication) vault.Remember(otp.Id, e164, code, otp.ExpiresAt);
 
         return new OtpChallengeDto(Mask(phoneNumber), _options.ExpiryMinutes * 60, _options.ResendSeconds,
-            _options.ExposeCodeInResponse ? code : null);
+            _options.ExposeCodeInResponse ? code : null, ChannelName(result.Channel));
     }
+
+    /// <summary>
+    /// Asking again soon after a code went to WhatsApp, and WhatsApp never confirmed it arrived (or reported it failed): this time skip
+    /// WhatsApp and send it by SMS.
+    /// </summary>
+    private async Task<bool> PreviousWhatsAppNotReceivedAsync(string phone, string purpose, DateTimeOffset since, CancellationToken ct)
+    {
+        var previous = await db.OtpCodes.Where(o => o.PhoneNumber == phone && o.Purpose == purpose && o.CreatedAt > since)
+            .OrderByDescending(o => o.CreatedAt).Select(o => (Guid?)o.Id).FirstOrDefaultAsync(ct);
+        if (previous is null) return false;
+        var last = await db.NotificationDeliveries.Where(d => d.OtpCodeId == previous && d.Status != DeliveryStatuses.Unavailable)
+            .OrderByDescending(d => d.CreatedAt).Select(d => new { d.Channel, d.Status }).FirstOrDefaultAsync(ct);
+        return last is { Channel: NotificationChannels.WhatsAppAuthentication }
+               && last.Status is not (DeliveryStatuses.Delivered or DeliveryStatuses.Read);
+    }
+
+    private static string? ChannelName(string? channel) => channel switch
+    {
+        NotificationChannels.WhatsAppAuthentication or NotificationChannels.WhatsApp => "WhatsApp",
+        NotificationChannels.Sms => "SMS",
+        NotificationChannels.Rcs => "RCS",
+        _ => null,
+    };
 
     public async Task VerifyAsync(string phoneNumber, OtpPurpose purpose, string code, CancellationToken ct) =>
         await VerifyCodeAsync(phoneNumber, purpose, code, ct);

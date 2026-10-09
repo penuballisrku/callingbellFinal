@@ -83,20 +83,20 @@ public interface ISemanticCatalog
 /// <summary>One-time codes sent to a mobile number for sign-in and sign-up. Phone numbers are passed normalised.</summary>
 public interface IPhoneOtpService
 {
-    /// <summary>Generates and texts a new code (invalidating earlier ones for the same purpose), enforcing resend limits.</summary>
-    Task<OtpChallengeDto> SendAsync(string phoneNumber, OtpPurpose purpose, CancellationToken ct);
+    /// <summary>How long a code is valid, and the wait before another can be requested (configured).</summary>
+    int ExpirySeconds { get; }
+    int ResendSeconds { get; }
+    /// <summary>
+    /// Generates and sends a new code (invalidating earlier ones for the same purpose), enforcing resend limits: on WhatsApp first, by SMS
+    /// when WhatsApp can't deliver it (or when <paramref name="channel"/> asks for SMS).
+    /// </summary>
+    Task<OtpChallengeDto> SendAsync(string phoneNumber, OtpPurpose purpose, CancellationToken ct, OtpChannelPreference channel = OtpChannelPreference.Auto);
     /// <summary>Checks and consumes the latest code; throws a validation error on a wrong, expired or exhausted code.</summary>
     Task VerifyAsync(string phoneNumber, OtpPurpose purpose, string code, CancellationToken ct);
     /// <summary>Verifies a sign-up code and returns a short-lived token proving the number was verified.</summary>
     Task<PhoneVerificationDto> VerifyForSignUpAsync(string phoneNumber, string code, CancellationToken ct);
     /// <summary>Marks a sign-up verification token as used; throws if it is unknown, expired, used or for another number.</summary>
     Task ConsumeVerificationAsync(string phoneNumber, string verificationToken, CancellationToken ct);
-}
-
-/// <summary>Sends text messages (OTP codes). Implemented in Infrastructure.</summary>
-public interface ISmsSender
-{
-    Task SendAsync(string phoneNumber, string message, CancellationToken ct);
 }
 
 /// <summary>Pushes real-time events (SignalR). Implemented in the API layer.</summary>
