@@ -60,17 +60,17 @@ export default function OwnerPortal() {
   const unread = useQuery({ queryKey: ['chat', 'unread'], queryFn: () => api.get<ChatUnread>('/api/chat/unread'), refetchInterval: 120_000 });
   const nav = [
     { to: '/owner', label: 'Dashboard', icon: <SpaceDashboardOutlined fontSize="small" />, end: true },
-    { to: '/owner/leads', label: 'Leads', icon: <InboxOutlined fontSize="small" />, badge: counts.data?.leads },
-    { to: '/owner/bookings', label: 'Bookings', icon: <EventNoteOutlined fontSize="small" />, badge: counts.data?.bookings },
-    { to: '/owner/messages', label: 'Messages', icon: <ChatBubbleOutlineRounded fontSize="small" />, badge: unread.data?.asBusiness || undefined },
-    { to: '/owner/team', label: 'Team', icon: <GroupsOutlined fontSize="small" /> },
-    { to: '/owner/reviews', label: 'Reviews', icon: <RateReviewOutlined fontSize="small" /> },
-    { to: '/owner/services', label: 'Services', icon: <HandymanOutlined fontSize="small" /> },
-    { to: '/owner/profile', label: 'Business profile', icon: <StorefrontOutlined fontSize="small" /> },
-    { to: '/owner/media', label: 'Photos & videos', icon: <PermMediaOutlined fontSize="small" /> },
-    { to: '/owner/plan', label: 'Plan & billing', icon: <WorkspacePremiumOutlined fontSize="small" /> },
-    { to: '/owner/advertising', label: 'Advertising', icon: <CampaignOutlined fontSize="small" /> },
-    { to: '/owner/settings', label: 'Settings', icon: <SettingsOutlined fontSize="small" /> },
+    { section: 'Customers', to: '/owner/leads', label: 'Leads', icon: <InboxOutlined fontSize="small" />, badge: counts.data?.leads },
+    { section: 'Customers', to: '/owner/bookings', label: 'Bookings', icon: <EventNoteOutlined fontSize="small" />, badge: counts.data?.bookings },
+    { section: 'Customers', to: '/owner/messages', label: 'Messages', icon: <ChatBubbleOutlineRounded fontSize="small" />, badge: unread.data?.asBusiness || undefined },
+    { section: 'Customers', to: '/owner/reviews', label: 'Reviews', icon: <RateReviewOutlined fontSize="small" /> },
+    { section: 'Your business', to: '/owner/profile', label: 'Business profile', icon: <StorefrontOutlined fontSize="small" /> },
+    { section: 'Your business', to: '/owner/services', label: 'Services', icon: <HandymanOutlined fontSize="small" /> },
+    { section: 'Your business', to: '/owner/media', label: 'Photos & videos', icon: <PermMediaOutlined fontSize="small" /> },
+    { section: 'Your business', to: '/owner/team', label: 'Team', icon: <GroupsOutlined fontSize="small" /> },
+    { section: 'Growth', to: '/owner/plan', label: 'Plan & billing', icon: <WorkspacePremiumOutlined fontSize="small" /> },
+    { section: 'Growth', to: '/owner/advertising', label: 'Advertising', icon: <CampaignOutlined fontSize="small" /> },
+    { section: 'Account', to: '/owner/settings', label: 'Settings', icon: <SettingsOutlined fontSize="small" /> },
   ];
 
   const header = business ? (

@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { Button, IconButton, LinearProgress, Tooltip } from '@mui/material';
+import { Button, IconButton, LinearProgress, Skeleton } from '@mui/material';
 import CheckCircleRounded from '@mui/icons-material/CheckCircleRounded';
 import RadioButtonUncheckedRounded from '@mui/icons-material/RadioButtonUncheckedRounded';
 import ChevronRightRounded from '@mui/icons-material/ChevronRightRounded';
@@ -15,28 +15,11 @@ import PaymentsOutlined from '@mui/icons-material/PaymentsOutlined';
 import StorefrontOutlined from '@mui/icons-material/StorefrontOutlined';
 import EditOutlined from '@mui/icons-material/EditOutlined';
 import OpenInNewRounded from '@mui/icons-material/OpenInNewRounded';
-import PhoneOutlined from '@mui/icons-material/PhoneOutlined';
-import MailOutlineRounded from '@mui/icons-material/MailOutlineRounded';
-import LanguageRounded from '@mui/icons-material/LanguageRounded';
 import { ago, date, moneyExact, number, pluralize } from '@/lib/format';
 import type { Activity, ActivePlan, OwnerOverview } from '@/lib/types';
 import { MediaTile } from '@/components/media';
 import { EmptyState, Img, Panel, StatusBadge } from '@/components/ui';
-
-/** Circular progress ring (SVG) for profile completion. */
-function Ring({ value, size = 72 }: { value: number; size?: number }) {
-  const r = (size - 8) / 2;
-  const c = 2 * Math.PI * r;
-  const tone = value >= 80 ? 'var(--cb-success)' : 'var(--cb-accent)';
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`Profile ${value}% complete`}>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--cb-subtle)" strokeWidth={7} />
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={tone} strokeWidth={7} strokeLinecap="round"
-        strokeDasharray={c} strokeDashoffset={c * (1 - value / 100)} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
-      <text x="50%" y="50%" dominantBaseline="central" textAnchor="middle" fontSize={size / 4.2} fontWeight={700} fill="var(--cb-ink)">{value}%</text>
-    </svg>
-  );
-}
+import { useLookup } from '@/lib/hooks';
 
 export function WelcomeBanner({ name, onDismiss }: { name: string; onDismiss: () => void }) {
   return (
@@ -51,40 +34,91 @@ export function WelcomeBanner({ name, onDismiss }: { name: string; onDismiss: ()
   );
 }
 
-export function BusinessOverviewCard({ data }: { data: OwnerOverview }) {
-  const b = data.business;
+/** Lookup-backed status chip readable on the navy hero (StatusBadge assumes a light surface). */
+function HeroChip({ type, code }: { type: string; code: string }) {
+  const item = useLookup(type).find((l) => l.code === code);
   return (
-    <section className="card mb-6 overflow-hidden" aria-label="Business overview">
-      <div className="relative h-24 bg-subtle md:h-28">
-        {b.coverImageUrl && <Img src={b.coverImageUrl} alt="" className="h-full w-full" rounded="rounded-none" />}
-      </div>
-      <div className="flex flex-col gap-4 px-5 pb-5 md:flex-row md:items-start md:px-6">
-        <div className="-mt-10 shrink-0 self-start rounded-2xl border-4 border-surface bg-surface">
-          {b.logoUrl ? <Img src={b.logoUrl} alt={`${b.name} logo`} className="h-20 w-20" rounded="rounded-xl" fit="contain" fallbackText={b.name} />
-            : <div className="flex h-20 w-20 items-center justify-center rounded-xl bg-subtle text-faint"><StorefrontOutlined fontSize="large" /></div>}
-        </div>
-        <div className="min-w-0 flex-1 md:pt-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="truncate text-xl font-bold tracking-tight">{b.name}</h2>
-            <StatusBadge type="BusinessStatus" code={b.status} />
-            <StatusBadge type="VerificationStatus" code={b.verificationStatus} />
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/6 px-2.5 py-0.5 text-xs font-semibold text-on-navy" title={item?.description ?? undefined}>
+      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: item?.colorHex ?? 'var(--cb-on-navy-faint)' }} aria-hidden />
+      {item?.name ?? code}
+    </span>
+  );
+}
+
+export interface AttentionItem {
+  key: string; label: string; value?: number | string; hint: string; to: string; icon: React.ReactNode;
+  /** Highlights the tile in brand orange (something is waiting). */
+  urgent?: boolean;
+}
+
+/**
+ * The top of the dashboard, in the brand's navy and orange: who you are, how customers see you, and the things waiting on you.
+ * Navy surfaces stay dark in both themes, so text uses the on-navy tokens.
+ */
+export function BusinessHero({ data, greeting, attention }: { data?: OwnerOverview; greeting: string; attention: AttentionItem[] }) {
+  const b = data?.business;
+  return (
+    <section className="relative mb-6 overflow-hidden rounded-2xl bg-navy text-white ring-1 ring-inset ring-white/8" aria-label="Business overview">
+      {/* Signal rings from the Calling Bell mark, radiating behind the content. */}
+      <svg aria-hidden className="pointer-events-none absolute -right-24 -top-24 h-[420px] w-[420px] text-accent" viewBox="0 0 420 420" fill="none">
+        {[60, 110, 160, 210].map((r, i) => <circle key={r} cx="210" cy="210" r={r} stroke="currentColor" strokeWidth="1.5" opacity={0.28 - i * 0.06} />)}
+      </svg>
+      <div aria-hidden className="pointer-events-none absolute -left-32 -top-40 h-80 w-80 rounded-full bg-accent/15 blur-3xl" />
+
+      <div className="relative p-5 md:p-7">
+        <div className="flex flex-col gap-5 md:flex-row md:items-start">
+          <div className="flex min-w-0 flex-1 items-start gap-4">
+            <div className="shrink-0 rounded-2xl bg-white/6 p-1 ring-1 ring-white/10">
+              {b?.logoUrl ? <Img src={b.logoUrl} alt={`${b.name} logo`} className="h-16 w-16 md:h-[72px] md:w-[72px]" rounded="rounded-xl" fit="contain" fallbackText={b.name} />
+                : <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-accent text-on-accent md:h-[72px] md:w-[72px]"><StorefrontOutlined fontSize="large" /></div>}
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm text-on-navy-muted">{greeting}</p>
+              {b ? (
+                <>
+                  <h1 className="mt-0.5 truncate text-2xl font-bold tracking-tight md:text-3xl">{b.name}</h1>
+                  <p className="mt-1 text-sm text-on-navy-muted">{[b.subCategoryName ?? b.categoryName, b.area, b.city].filter(Boolean).join(' · ')}</p>
+                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                    <HeroChip type="BusinessStatus" code={b.status} />
+                    <HeroChip type="VerificationStatus" code={b.verificationStatus} />
+                    <span className="text-xs text-on-navy-faint">{pluralize(b.serviceCount, 'service')} · {pluralize(data!.photoCount, 'photo')} · {pluralize(data!.videos.length, 'video')} · listed {date(b.createdOn)}</span>
+                  </div>
+                </>
+              ) : <Skeleton width={260} height={44} sx={{ bgcolor: 'rgba(255,255,255,.1)' }} />}
+            </div>
           </div>
-          <p className="mt-0.5 text-sm text-muted">{[b.subCategoryName ?? b.categoryName, b.area, b.city].filter(Boolean).join(' · ')} · Listed {date(b.createdOn)}</p>
-          {b.tagline && <p className="mt-1 text-sm text-ink-2">{b.tagline}</p>}
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-muted">
-            {b.phoneNumber && <span className="inline-flex items-center gap-1"><PhoneOutlined sx={{ fontSize: 16 }} />{b.phoneNumber}</span>}
-            {b.email && <span className="inline-flex items-center gap-1"><MailOutlineRounded sx={{ fontSize: 16 }} />{b.email}</span>}
-            {b.website && <span className="inline-flex items-center gap-1"><LanguageRounded sx={{ fontSize: 16 }} />{b.website.replace(/^https?:\/\//, '')}</span>}
-            <span>{pluralize(b.serviceCount, 'service')} · {pluralize(data.photoCount, 'photo')} · {pluralize(data.videos.length, 'video')}</span>
-          </div>
+          {b && (
+            <div className="flex shrink-0 gap-2">
+              <Button size="small" variant="outlined" startIcon={<EditOutlined fontSize="small" />} component={Link} to="/owner/profile"
+                sx={{ color: 'var(--cb-on-navy)', borderColor: 'rgba(255,255,255,.22)', bgcolor: 'transparent', boxShadow: 'none',
+                  '&:hover': { borderColor: 'rgba(255,255,255,.4)', bgcolor: 'rgba(255,255,255,.06)' } }}>Edit profile</Button>
+              {b.status === 'Active' && (
+                <Button size="small" variant="contained" color="secondary" endIcon={<OpenInNewRounded fontSize="small" />} component={Link} to={`/business/${b.slug}`} target="_blank">Public page</Button>
+              )}
+            </div>
+          )}
         </div>
-        <div className="flex shrink-0 items-center gap-4 md:pt-3">
-          <Tooltip title={`${data.completion.completed} of ${data.completion.total} profile steps done`}><span><Ring value={data.completion.percent} /></span></Tooltip>
-          <div className="flex flex-col gap-2">
-            <Button size="small" variant="outlined" startIcon={<EditOutlined fontSize="small" />} component={Link} to="/owner/profile">Edit profile</Button>
-            {b.status === 'Active' && <Button size="small" endIcon={<OpenInNewRounded fontSize="small" />} component={Link} to={`/business/${b.slug}`} target="_blank">Public page</Button>}
-          </div>
-        </div>
+
+        <h2 className="mt-7 text-xs font-semibold uppercase tracking-[0.12em] text-accent">Needs your attention</h2>
+        <ul className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {attention.map((a) => (
+            <li key={a.key}>
+              <Link to={a.to}
+                className={`group flex h-full flex-col rounded-xl border p-3.5 outline-offset-2 transition-colors focus-visible:outline-2 focus-visible:outline-accent md:p-4 ${
+                  a.urgent ? 'border-accent/50 bg-accent/10 hover:bg-accent/15' : 'border-white/10 bg-white/4 hover:bg-white/8'}`}>
+                <span className="flex items-center justify-between">
+                  <span className={`grid h-9 w-9 place-items-center rounded-lg [&_svg]:text-[20px] ${a.urgent ? 'bg-accent text-on-accent' : 'bg-white/8 text-accent'}`}>{a.icon}</span>
+                  <ChevronRightRounded className="text-on-navy-faint transition-transform group-hover:translate-x-0.5 group-hover:text-white" />
+                </span>
+                <span className="tabular mt-3 text-2xl font-bold leading-none md:text-[28px]">
+                  {a.value === undefined ? <Skeleton width={40} sx={{ bgcolor: 'rgba(255,255,255,.12)' }} /> : a.value}
+                </span>
+                <span className="mt-1.5 text-sm font-semibold text-white">{a.label}</span>
+                <span className="mt-0.5 line-clamp-2 text-xs text-on-navy-muted">{a.hint}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
       </div>
     </section>
   );

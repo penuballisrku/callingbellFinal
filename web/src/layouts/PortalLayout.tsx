@@ -7,7 +7,22 @@ import { Logo, NotificationBell, ThemeMenu, UserMenu } from './Shared';
 import { MessagesButton } from '@/features/chat/Chat';
 import { CountryCode } from '@/components/VisitorCountry';
 
-export interface PortalNavItem { to: string; label: string; icon: ReactNode; end?: boolean; badge?: number }
+export interface PortalNavItem {
+  to: string; label: string; icon: ReactNode; end?: boolean; badge?: number;
+  /** Optional group heading. Consecutive items with the same section render under one heading. */
+  section?: string;
+}
+
+/** Splits the nav into runs of consecutive items sharing a section (items without one form an unlabelled group). */
+function groupNav(nav: PortalNavItem[]) {
+  const groups: { section?: string; items: PortalNavItem[] }[] = [];
+  nav.forEach((n) => {
+    const last = groups[groups.length - 1];
+    if (last && last.section === n.section) last.items.push(n);
+    else groups.push({ section: n.section, items: [n] });
+  });
+  return groups;
+}
 
 /** Shared shell for the business portal and the admin console. */
 export function PortalLayout({ title, nav, headerExtra, footer }: { title: string; nav: PortalNavItem[]; headerExtra?: ReactNode; footer?: ReactNode }) {
@@ -21,19 +36,26 @@ export function PortalLayout({ title, nav, headerExtra, footer }: { title: strin
     <div className="flex h-full w-[248px] flex-col border-r border-navy-line bg-navy text-on-navy-muted">
       <div className="flex h-16 items-center border-b border-navy-line px-5"><div className="flex items-start gap-1"><Logo light /><CountryCode onDark /></div></div>
       <div className="px-5 pb-2 pt-5 text-[11px] font-semibold uppercase tracking-[0.08em] text-on-navy-faint">{title}</div>
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-4" aria-label={title}>
-        {nav.map((n) => (
-          <NavLink key={n.to} to={n.to} end={n.end}
-            className={({ isActive }) => `relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${isActive ? 'bg-white/8 text-white' : 'hover:bg-white/4 hover:text-on-navy'}`}>
-            {({ isActive }) => (
-              <>
-                {isActive && <span className="absolute inset-y-2 -left-3 w-0.75 rounded-r-full bg-accent" aria-hidden />}
-                <span className={`flex [&_svg]:text-[20px] ${isActive ? 'text-accent' : 'text-on-navy-faint'}`}>{n.icon}</span>
-                <span className="flex-1 truncate">{n.label}</span>
-                {!!n.badge && <span className="tabular rounded-full bg-accent px-2 py-0.5 text-[11px] font-bold text-on-accent">{n.badge}</span>}
-              </>
-            )}
-          </NavLink>
+      <nav className="flex-1 overflow-y-auto px-3 pb-4" aria-label={title}>
+        {groupNav(nav).map((g, gi) => (
+          <div key={g.section ?? `group-${gi}`} className={gi > 0 ? 'mt-4' : ''}>
+            {g.section && <div className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-on-navy-faint">{g.section}</div>}
+            <div className="space-y-0.5">
+              {g.items.map((n) => (
+                <NavLink key={n.to} to={n.to} end={n.end}
+                  className={({ isActive }) => `relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${isActive ? 'bg-white/8 text-white' : 'hover:bg-white/4 hover:text-on-navy'}`}>
+                  {({ isActive }) => (
+                    <>
+                      {isActive && <span className="absolute inset-y-2 -left-3 w-0.75 rounded-r-full bg-accent" aria-hidden />}
+                      <span className={`flex [&_svg]:text-[20px] ${isActive ? 'text-accent' : 'text-on-navy-faint'}`}>{n.icon}</span>
+                      <span className="flex-1 truncate">{n.label}</span>
+                      {!!n.badge && <span className="tabular rounded-full bg-accent px-2 py-0.5 text-[11px] font-bold text-on-accent">{n.badge}</span>}
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
       {footer && <div className="border-t border-navy-line p-4">{footer}</div>}

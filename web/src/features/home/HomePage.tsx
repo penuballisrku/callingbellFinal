@@ -20,6 +20,11 @@ import NotificationsNoneRounded from '@mui/icons-material/NotificationsNoneRound
 import SignalCellularAltRounded from '@mui/icons-material/SignalCellularAltRounded';
 import WifiRounded from '@mui/icons-material/WifiRounded';
 import BatteryFullRounded from '@mui/icons-material/BatteryFullRounded';
+import TrendingUpRounded from '@mui/icons-material/TrendingUpRounded';
+import PhoneInTalkOutlined from '@mui/icons-material/PhoneInTalkOutlined';
+import StorefrontOutlined from '@mui/icons-material/StorefrontOutlined';
+import NotificationsActiveRounded from '@mui/icons-material/NotificationsActiveRounded';
+import ChatOutlined from '@mui/icons-material/ChatOutlined';
 import { LogoMark } from '@/components/Logo';
 import { api } from '@/lib/api';
 import { compactNumber, money, number, pluralize } from '@/lib/format';
@@ -94,6 +99,8 @@ export default function HomePage() {
           )}
         </section>
 
+        <PillarsSection />
+
         <ServicesSection items={data?.popularServices} loading={isLoading} />
 
         <NearbyServicesSection />
@@ -104,6 +111,7 @@ export default function HomePage() {
 
         <ReviewsSection />
 
+        <JoinBand />
 
         <AppDownload data={data} />
       </div>
@@ -144,12 +152,16 @@ function Hero({ data }: { data?: HomeData }) {
   };
 
   return (
-    <section className="bg-navy text-white">
-      <div className="container-page grid gap-10 py-12 md:py-16 lg:grid-cols-[1.15fr_1fr] lg:items-center">
+    <section className="relative overflow-hidden bg-navy text-white">
+      <SignalRings className="-left-40 -top-40 h-[560px] w-[560px]" />
+      <div aria-hidden className="pointer-events-none absolute -left-24 top-10 h-72 w-72 rounded-full bg-accent/15 blur-3xl" />
+      <div className="container-page relative grid gap-10 py-12 md:py-16 lg:grid-cols-[1.15fr_1fr] lg:items-center">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.12em] text-accent">Discover. Connect. Book. Grow.</p>
-          <h1 className="mt-3 text-3xl font-bold leading-[1.15] tracking-tight sm:text-4xl lg:text-5xl">Find trusted local pros who are available right now.</h1>
-          <p className="mt-4 max-w-xl text-base text-on-navy-muted md:text-lg">Compare verified businesses, see live availability, request quotes and book in minutes.</p>
+          <h1 className="mt-3 text-[34px] font-extrabold leading-[1.08] tracking-[-0.035em] sm:text-5xl lg:text-[56px]">
+            Looking for <span className="text-accent">trusted</span> local services?
+          </h1>
+          <p className="mt-4 max-w-xl text-base text-on-navy-muted md:text-lg">Find pros who are available right now. Compare verified businesses, see live availability, request quotes and book in minutes.</p>
 
           <form onSubmit={submit} className="mt-7 flex flex-col gap-2 rounded-xl bg-surface p-2 sm:flex-row sm:items-center" role="search">
             <div className="flex min-w-0 flex-1 items-center gap-2 px-2">
@@ -545,6 +557,98 @@ function PromoBanner({ banner }: { banner: Banner }) {
         {banner.ctaText && <span className="mt-5 inline-flex w-fit items-center gap-1 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-on-accent">{banner.ctaText} <ArrowForwardRounded sx={{ fontSize: 18 }} /></span>}
       </div>
     </Link>
+  );
+}
+
+/** The "signal" arcs from the Calling Bell mark, radiating behind navy sections. Decorative. */
+function SignalRings({ className }: { className: string }) {
+  return (
+    <svg aria-hidden className={`pointer-events-none absolute text-accent ${className}`} viewBox="0 0 560 560" fill="none">
+      {[80, 140, 200, 260].map((r, i) => <circle key={r} cx="280" cy="280" r={r} stroke="currentColor" strokeWidth="1.5" opacity={0.22 - i * 0.045} />)}
+    </svg>
+  );
+}
+
+const PILLARS = [
+  { word: 'Discover', icon: <SearchRounded />, text: 'Find trusted services near you, with live availability.', to: '/search', cta: 'Search services' },
+  { word: 'Connect', icon: <PhoneInTalkOutlined />, text: 'Call, chat or send an enquiry to a business directly.', to: '/nearby', cta: 'Explore nearby' },
+  { word: 'Book', icon: <EventAvailableRounded />, text: 'Schedule a visit or a consultation in a few taps.', to: '/categories', cta: 'Browse categories' },
+  { word: 'Grow', icon: <TrendingUpRounded />, text: 'Local businesses get discovered by customers nearby.', to: '/list-your-business', cta: 'List your business' },
+];
+
+/** How Calling Bell works, in the four steps of the tagline. The order is the customer's journey, so the steps are numbered. */
+function PillarsSection() {
+  return (
+    <section aria-labelledby="how-h">
+      <SectionHeader id="how-h" title="One platform for every local service" subtitle="Discover. Connect. Book. Grow." />
+      <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
+        {PILLARS.map((p, i) => (
+          <li key={p.word}>
+            <Link to={p.to}
+              className="group flex h-full flex-col rounded-2xl border border-line bg-surface p-5 shadow-[var(--cb-shadow-xs)] outline-offset-2 transition-[box-shadow,border-color] duration-200 hover:border-line-strong hover:shadow-[var(--cb-shadow-md)] focus-visible:outline-2 focus-visible:outline-accent">
+              <span className="flex items-center justify-between">
+                <span className="grid h-11 w-11 place-items-center rounded-xl bg-navy text-accent [&_svg]:text-[22px]">{p.icon}</span>
+                <span className="tabular text-xs font-semibold text-faint">0{i + 1}</span>
+              </span>
+              <span className="mt-4 text-[28px] font-extrabold leading-none tracking-[-0.04em] text-ink">{p.word}<span className="text-accent">.</span></span>
+              <span className="mt-2 flex-1 text-sm text-muted">{p.text}</span>
+              <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-ink-2 group-hover:text-accent-ink">
+                {p.cta} <ArrowForwardRounded sx={{ fontSize: 16 }} className="transition-transform group-hover:translate-x-0.5" />
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+/** Invitation for local businesses, in the navy and orange of the brand. */
+function JoinBand() {
+  return (
+    <section aria-labelledby="join-h" className="relative overflow-hidden rounded-2xl bg-navy text-white ring-1 ring-inset ring-white/8">
+      <SignalRings className="-right-48 -top-48 h-[600px] w-[600px]" />
+      <div className="relative grid items-center gap-10 p-6 md:p-10 lg:grid-cols-[1.2fr_1fr]">
+        <div>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent/10 px-3 py-1 text-xs font-semibold text-accent">
+            <StorefrontOutlined sx={{ fontSize: 16 }} />For local businesses
+          </span>
+          <h2 id="join-h" className="mt-4 text-3xl font-extrabold leading-[1.1] tracking-[-0.03em] md:text-[40px]">
+            Get your business <span className="text-accent">discovered</span>
+          </h2>
+          <p className="mt-3 max-w-lg text-base text-on-navy-muted md:text-lg">Join Calling Bell and reach customers searching near you. Receive enquiries and bookings in one place.</p>
+          <div className="mt-7 flex flex-wrap gap-3">
+            <Button variant="contained" color="secondary" size="large" component={Link} to="/list-your-business" endIcon={<ArrowForwardRounded />}>Join Calling Bell Today</Button>
+            <Button size="large" component={Link} to="/pricing"
+              sx={{ color: 'var(--cb-on-navy)', '&:hover': { bgcolor: 'rgba(255,255,255,.06)' } }}>See plans</Button>
+          </div>
+        </div>
+
+        {/* A sample listing, as the reel shows it. Decorative. */}
+        <div aria-hidden className="pointer-events-none relative mx-auto w-full max-w-sm select-none pb-10">
+          <div className="overflow-hidden rounded-2xl bg-surface text-ink shadow-[0_24px_48px_-16px_rgba(0,0,0,0.5)]">
+            <div className="h-16 bg-gradient-to-r from-[#0B1220] via-[#1D2A44] to-[#F4A62C]/70" />
+            <div className="-mt-8 px-5 pb-5">
+              <span className="grid h-16 w-16 place-items-center rounded-2xl border-4 border-surface bg-accent text-on-accent"><StorefrontOutlined fontSize="large" /></span>
+              <div className="mt-3 text-lg font-bold tracking-tight">Your Business</div>
+              <div className="mt-0.5 inline-flex items-center gap-1 text-sm font-semibold text-accent-ink"><CheckCircleRounded sx={{ fontSize: 16 }} />Listed on Calling Bell</div>
+              <div className="mt-4 grid grid-cols-3 gap-2 text-xs font-semibold">
+                <span className="flex items-center justify-center gap-1 rounded-full border border-line py-2"><PhoneInTalkOutlined sx={{ fontSize: 15 }} />Call</span>
+                <span className="flex items-center justify-center gap-1 rounded-full border border-line py-2"><ChatOutlined sx={{ fontSize: 15 }} />Enquire</span>
+                <span className="flex items-center justify-center gap-1 rounded-full bg-accent py-2 text-on-accent"><EventAvailableRounded sx={{ fontSize: 15 }} />Book</span>
+              </div>
+            </div>
+          </div>
+          <div className="absolute -right-2 bottom-0 flex items-center gap-3 rounded-xl border border-accent/40 bg-[#121B2E] px-3.5 py-3 shadow-[0_16px_32px_-8px_rgba(0,0,0,0.6)] sm:-right-6">
+            <span className="grid h-9 w-9 place-items-center rounded-lg bg-accent text-on-accent"><NotificationsActiveRounded sx={{ fontSize: 20 }} /></span>
+            <span>
+              <span className="block text-sm font-bold text-white">New enquiry</span>
+              <span className="block text-xs text-on-navy-muted">A customer nearby wants to connect</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
