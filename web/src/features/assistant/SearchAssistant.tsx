@@ -14,6 +14,7 @@ import { BusinessCard } from '@/components/BusinessCard';
 import { useCity } from '@/stores/city';
 import { CompactPlace, useExternalSearch } from '@/features/search/ExternalResults';
 import { useAssistant, type AssistantRequest, type Turn } from './store';
+import { VoiceSearchButton } from '@/components/VoiceSearch';
 
 /** While the local AI is still interpreting a request, the answer is refreshed this often, this many times. */
 const POLL_MS = 5000;
@@ -159,6 +160,7 @@ export function SearchAssistant() {
           <TextField inputRef={inputRef} value={text} onChange={(e) => setText(e.target.value.slice(0, 300))} placeholder="e.g. AC not cooling, need someone today" multiline maxRows={3}
             fullWidth size="small" slotProps={{ htmlInput: { 'aria-label': 'Message the AI search assistant', maxLength: 300 } }}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} />
+          <VoiceSearchButton onText={(t) => setText(t.slice(0, 300))} submit size="medium" label="Speak your request" />
           <IconButton type="submit" disabled={!text.trim() || busy} aria-label="Send" color="primary"
             sx={{ bgcolor: 'var(--cb-navy)', color: '#fff', '&:hover': { bgcolor: 'var(--cb-navy)' }, '&.Mui-disabled': { bgcolor: 'var(--cb-subtle)' }, height: 40, width: 40 }}>
             <SendRounded fontSize="small" />

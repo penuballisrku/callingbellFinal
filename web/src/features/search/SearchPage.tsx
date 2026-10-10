@@ -17,6 +17,7 @@ import { EmptyState, ErrorState, Img, PageHeader } from '@/components/ui';
 import { useVisitorDistrict } from '@/components/VisitorCountry';
 import { useCity } from '@/stores/city';
 import { SearchSuggest } from '@/components/SearchSuggest';
+import { VoiceSearchButton } from '@/components/VoiceSearch';
 import { PlaceholderTicker } from '@/components/PlaceholderTicker';
 import { ExternalResults, type ResultSource, sourcePanelId, sourceTabId, SourceTabs, useExternalSearch } from './ExternalResults';
 import { ResultDetailDrawer, type SelectedResult } from './ResultDetail';
@@ -290,7 +291,8 @@ export default function SearchPage() {
                 inputClassName="h-[40px] w-full rounded-lg border border-line bg-surface pl-9 pr-9 text-sm outline-none focus:border-line-strong">
                 {!text && <PlaceholderTicker names={tickerNames} prefix="e.g." className="pl-9 pr-9 text-sm" />}
               </SearchSuggest>
-              {parsing && <CircularProgress size={16} sx={{ position: 'absolute', right: 12, top: 12 }} aria-label="Finding the place" />}
+              {parsing ? <CircularProgress size={16} sx={{ position: 'absolute', right: 12, top: 12 }} aria-label="Finding the place" />
+                : <VoiceSearchButton onText={(t) => setText(t)} submit className="absolute right-1 top-1/2 -translate-y-1/2" />}
             </form>
             <div className="flex gap-2">
               <Button className="lg:!hidden" variant="outlined" startIcon={<TuneRounded />} onClick={() => setDrawer(true)}>Filters{activeChips.length ? ` (${activeChips.length})` : ''}</Button>

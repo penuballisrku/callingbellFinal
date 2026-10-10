@@ -15,6 +15,7 @@ import type { Category, SubCategory } from '@/lib/types';
 import { EmptyState, ErrorState, Img, PageHeader } from '@/components/ui';
 import { Marquee } from '@/components/Marquee';
 import { PlaceholderTicker } from '@/components/PlaceholderTicker';
+import { VoiceSearchButton } from '@/components/VoiceSearch';
 
 const chip = 'inline-flex shrink-0 items-center gap-1.5 rounded-full border border-line bg-surface py-1 pl-1.5 pr-3 text-[13px] font-medium '
   + 'text-ink-2 outline-offset-2 transition-colors hover:border-line-strong hover:text-ink focus-visible:outline-2 focus-visible:outline-accent';
@@ -130,6 +131,7 @@ function CategorySearch({ value, onChange, categories, subs, names }: {
               <CloseRounded fontSize="small" />
             </button>
           )}
+          <VoiceSearchButton onText={(t) => { onChange(t); setActive(-1); }} submit />
         </div>
 
         {showPanel && (

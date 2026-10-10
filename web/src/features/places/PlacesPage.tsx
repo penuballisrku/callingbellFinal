@@ -31,6 +31,7 @@ import { PlaceholderTicker } from '@/components/PlaceholderTicker';
 import { PlaceActions } from './PlaceParts';
 import { countryName, useBrowsingCountryCode, useVisitorCountry } from '@/components/VisitorCountry';
 import { ResultDetailDrawer } from '@/features/search/ResultDetail';
+import { VoiceSearchButton } from '@/components/VoiceSearch';
 
 interface Coords { lat: number; lon: number }
 
@@ -238,6 +239,7 @@ export default function PlacesPage() {
               {input && (
                 <IconButton size="small" aria-label="Clear text" onClick={() => setInput('')} sx={{ color: 'text.secondary' }}><CloseRounded fontSize="small" /></IconButton>
               )}
+              <VoiceSearchButton onText={(t) => setInput(t.slice(0, 200))} submit />
             </label>
             <span aria-hidden className="mx-1 hidden h-9 w-px bg-line md:block" />
             <div className="flex min-w-0 items-center gap-1 rounded-xl border border-line px-1 md:w-72 md:shrink-0 md:rounded-full md:border-0">

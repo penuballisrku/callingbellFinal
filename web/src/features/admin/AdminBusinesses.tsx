@@ -14,6 +14,7 @@ import { CityAutocomplete } from '@/components/CityAutocomplete';
 import type { AdminBusinessDetail as Detail, AdminBusinessRow, Plan } from '@/lib/types';
 import { AvailabilityBadge, ConfirmDialog, EmptyState, ErrorState, Img, PageHeader, Panel, Rating, StatusBadge, Stars } from '@/components/ui';
 import { useGridTheme, useResponsiveColumns } from '@/components/grid';
+import { VoiceSearchButton } from '@/components/VoiceSearch';
 
 
 
@@ -84,7 +85,8 @@ export function AdminBusinesses() {
       </Tabs>
       <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto]">
         <TextField placeholder="Search name, owner, phone or area" value={q} onChange={(e) => { setQ(e.target.value); set({}); }}
-          slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchRounded fontSize="small" /></InputAdornment> } }} />
+          slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchRounded fontSize="small" /></InputAdornment>,
+            endAdornment: <InputAdornment position="end"><VoiceSearchButton onText={(t) => { setQ(t); set({}); }} /></InputAdornment> } }} />
         <TextField select value={categories ? filters.category : ''} onChange={(e) => set({ category: e.target.value })} slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Category' } }}>
           <MenuItem value="">All categories</MenuItem>{categories?.map((c) => <MenuItem key={c.slug} value={c.slug}>{c.name}</MenuItem>)}
         </TextField>

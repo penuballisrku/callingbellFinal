@@ -12,10 +12,12 @@ import { useDebounced, useDocumentTitle, useLookup } from '@/lib/hooks';
 import type { AdminAd, AdminReview, AdminSubscriptions as Subs, AdminUser, OwnerList } from '@/lib/types';
 import { ConfirmDialog, EmptyState, ErrorState, PageHeader, Panel, StatusBadge, Stars } from '@/components/ui';
 import { useGridTheme, useResponsiveColumns } from '@/components/grid';
+import { VoiceSearchButton } from '@/components/VoiceSearch';
 
 function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
   return <TextField placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)}
-    slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchRounded fontSize="small" /></InputAdornment> } }} />;
+    slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchRounded fontSize="small" /></InputAdornment>,
+      endAdornment: <InputAdornment position="end"><VoiceSearchButton onText={(t) => onChange(t)} /></InputAdornment> } }} />;
 }
 
 /* ===================== Users ===================== */

@@ -35,6 +35,7 @@ import { ErrorState, Img, SectionHeader } from '@/components/ui';
 import { CitySelect } from '@/components/LocationPicker';
 import { useBrowsingCountryCode } from '@/components/VisitorCountry';
 import { resolveSearchHref, SearchSuggest } from '@/components/SearchSuggest';
+import { VoiceSearchButton } from '@/components/VoiceSearch';
 import { useAssistant } from '@/features/assistant/store';
 import { PlaceholderTicker } from '@/components/PlaceholderTicker';
 import { ReviewsSection } from './ReviewsSection';
@@ -172,6 +173,7 @@ function Hero({ data }: { data?: HomeData }) {
                 inputClassName="h-12 w-full truncate bg-transparent text-[15px] text-ink outline-none placeholder:text-faint">
                 {!q && categoryNames.length > 0 && <PlaceholderTicker names={categoryNames} />}
               </SearchSuggest>
+              <VoiceSearchButton onText={(t) => setQ(t)} submit size="medium" />
             </div>
             <div className="min-w-0 sm:w-56 sm:shrink-0"><CitySelect size="medium" fullWidth height={48} /></div>
             <Button type="submit" variant="contained" color="secondary" size="large" sx={{ height: 48, px: 3, flexShrink: 0 }}>Search</Button>

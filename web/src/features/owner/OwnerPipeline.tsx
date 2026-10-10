@@ -16,6 +16,7 @@ import { useDebounced, useDocumentTitle, useLookup } from '@/lib/hooks';
 import type { OwnerBooking, OwnerLead, OwnerList, OwnerStaff } from '@/lib/types';
 import { ConfirmDialog, EmptyState, ErrorState, PageHeader, StatusBadge } from '@/components/ui';
 import { useBusiness } from './OwnerPortal';
+import { VoiceSearchButton } from '@/components/VoiceSearch';
 
 
 export function OwnerLeads() {
@@ -58,7 +59,8 @@ export function OwnerLeads() {
       </Tabs>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row">
         <TextField placeholder="Search by name, phone, message or lead number" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }}
-          slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchRounded fontSize="small" /></InputAdornment> } }} />
+          slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchRounded fontSize="small" /></InputAdornment>,
+            endAdornment: <InputAdornment position="end"><VoiceSearchButton onText={(t) => { setQ(t); setPage(1); }} /></InputAdornment> } }} />
         <TextField select value={type} onChange={(e) => { setType(e.target.value); setPage(1); }} sx={{ minWidth: 200 }} slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Request type' } }}>
           <MenuItem value="">All request types</MenuItem>
           {types.map((t) => <MenuItem key={t.code} value={t.code}>{t.name}</MenuItem>)}
@@ -207,7 +209,8 @@ export function OwnerBookings() {
       </Tabs>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row">
         <TextField placeholder="Search customer, phone, service or booking number" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }}
-          slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchRounded fontSize="small" /></InputAdornment> } }} />
+          slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchRounded fontSize="small" /></InputAdornment>,
+            endAdornment: <InputAdornment position="end"><VoiceSearchButton onText={(t) => { setQ(t); setPage(1); }} /></InputAdornment> } }} />
         <TextField select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} sx={{ minWidth: 180 }} slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Status' } }}>
           <MenuItem value="">All statuses</MenuItem>
           {statuses.map((s) => <MenuItem key={s.code} value={s.code}>{s.name} ({data?.statusCounts[s.code] ?? 0})</MenuItem>)}
