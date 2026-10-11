@@ -158,13 +158,6 @@ public interface IIpLocationService
     Task<IpLocation?> LocateAsync(System.Net.IPAddress address, CancellationToken cancellationToken = default);
 }
 
-/// <summary>The server's cache of public, non-personalised responses (implemented with ASP.NET Core output caching in the API).</summary>
-public interface IPublicCache
-{
-    /// <summary>Drops every cached public response, so the next request reads fresh data.</summary>
-    Task InvalidateAsync(CancellationToken ct);
-}
-
 /// <summary>A service shown to the AI ranker. <see cref="Key"/> identifies it across requests (sub-category slug + service name).</summary>
 public sealed record AiServiceCandidate(string Key, string Name, string SubCategory, string Category, int RecentBookingsNearby,
     decimal Rating, double? NearestKm, decimal StartingPrice);

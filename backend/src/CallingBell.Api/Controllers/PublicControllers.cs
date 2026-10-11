@@ -17,7 +17,6 @@ using CallingBell.Infrastructure.Identity;
 using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.OutputCaching;
 using Microsoft.AspNetCore.RateLimiting;
 using CallingBell.Api.Infrastructure;
 using Microsoft.Extensions.Caching.Memory;
@@ -91,24 +90,24 @@ public sealed class AuthController : ApiControllerBase
 [Route("api")]
 public sealed class CatalogController : ApiControllerBase
 {
-    [HttpGet("home"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
+    [HttpGet("home")]
     public async Task<ActionResult<ApiResponse<HomeDto>>> Home([FromQuery] string? city, CancellationToken ct) =>
         Success(await Sender.Send(new GetHomeQuery(city), ct));
 
-    [HttpGet("categories"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
+    [HttpGet("categories")]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<CategoryDto>>>> Categories(CancellationToken ct) =>
         Success(await Sender.Send(new GetCategoriesQuery(), ct));
 
-    [HttpGet("categories/featured"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
+    [HttpGet("categories/featured")]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<SubCategoryDto>>>> FeaturedCategories(CancellationToken ct) =>
         Success(await Sender.Send(new GetFeaturedSubCategoriesQuery(), ct));
 
     /// <summary>Services businesses in this sub-category commonly offer, with typical price and duration (to pre-fill business sign-up).</summary>
-    [HttpGet("subcategories/{slug}/service-suggestions"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
+    [HttpGet("subcategories/{slug}/service-suggestions")]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<ServiceSuggestionDto>>>> ServiceSuggestions(string slug, CancellationToken ct) =>
         Success(await Sender.Send(new GetServiceSuggestionsQuery(slug), ct));
 
-    [HttpGet("categories/{slug}"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
+    [HttpGet("categories/{slug}")]
     public async Task<ActionResult<ApiResponse<CategoryDto>>> Category(string slug, CancellationToken ct) =>
         Success(await Sender.Send(new GetCategoryBySlugQuery(slug), ct));
 
@@ -117,55 +116,52 @@ public sealed class CatalogController : ApiControllerBase
     /// <c>GET /api/geo/country-catalog</c>; without it the default country is used (so responses can be cached per country).
     /// </summary>
     /// <param name="state">A state / province / region slug (GET /api/locations/states): only its cities.</param>
-    [HttpGet("locations/cities"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
+    [HttpGet("locations/cities")]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<CityDto>>>> Cities([FromQuery] string? country, [FromQuery] string? state, CancellationToken ct) =>
         Success(await Sender.Send(new GetCitiesQuery(country, state), ct));
 
     /// <summary>Countries a visitor can browse (every country plans are priced for), with how many cities each has listed so far.</summary>
-    [HttpGet("locations/countries"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
+    [HttpGet("locations/countries")]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<CountryDto>>>> Countries(CancellationToken ct) =>
         Success(await Sender.Send(new GetCountriesQuery(), ct));
 
     /// <summary>A country's states / provinces / regions that have listed cities.</summary>
     /// <param name="country">ISO 3166-1 alpha-2 code, e.g. "CA".</param>
-    [HttpGet("locations/states"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
+    [HttpGet("locations/states")]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<StateDto>>>> States([FromQuery] string country, CancellationToken ct) =>
         Success(await Sender.Send(new GetStatesQuery(country), ct));
 
     /// <summary>All areas of a city with alternate names and sub-localities; queues the area-discovery agent when the data is missing or stale.</summary>
-    [HttpGet("locations/cities/{slug}/areas"), OutputCache(PolicyName = CachePolicies.PublicListings)]
+    [HttpGet("locations/cities/{slug}/areas")]
     public async Task<ActionResult<ApiResponse<CityAreasDto>>> CityAreas(string slug, CancellationToken ct)
     {
         var areas = await Sender.Send(new GetCityAreasQuery(slug), ct);
-        // While the agent is still finding the city's areas the list changes every few seconds: callers poll, so don't cache it.
-        if ((areas.Discovering || areas.Areas.Count == 0) && HttpContext.Features.Get<IOutputCacheFeature>() is { } cacheFeature)
-            cacheFeature.Context.AllowCacheStorage = false;
         return Success(areas);
     }
 
-    [HttpGet("lookups"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
+    [HttpGet("lookups")]
     public async Task<ActionResult<ApiResponse<IReadOnlyDictionary<string, IReadOnlyList<LookupDto>>>>> Lookups(CancellationToken ct) =>
         Success(await Sender.Send(new GetLookupsQuery(), ct));
 
     /// <summary>Subscription plans, priced in a country's currency at fair local prices (CountryPricing).</summary>
     /// <param name="country">ISO country code, e.g. "US"; omit for rupees as set.</param>
     /// <param name="business">A business id: prices for the country it is in (the owner portal). Takes precedence over <paramref name="country"/>.</param>
-    [HttpGet("plans"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
+    [HttpGet("plans")]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<PlanDto>>>> Plans([FromQuery] string? country, [FromQuery] Guid? business, CancellationToken ct) =>
         Success(await Sender.Send(new GetPlansQuery(country, business), ct));
 
-    [HttpGet("banners"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
+    [HttpGet("banners")]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<BannerDto>>>> Banners([FromQuery] string placement = "HomeHero", CancellationToken ct = default) =>
         Success(await Sender.Send(new GetBannersQuery(placement), ct));
 
     /// <summary>Database-driven marketing page content, e.g. <c>/api/content/pages/ListYourBusiness</c>.</summary>
     /// <param name="country">ISO code of the country being browsed: its own photos replace the defaults where the page has them.</param>
-    [HttpGet("content/pages/{pageKey}"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
+    [HttpGet("content/pages/{pageKey}")]
     public async Task<ActionResult<ApiResponse<MarketingPageDto>>> MarketingPage(string pageKey, [FromQuery] string? country, CancellationToken ct) =>
         Success(await Sender.Send(new GetMarketingPageQuery(pageKey, country), ct));
 
     /// <summary>Search-box autocomplete: categories, services and businesses matching <paramref name="q"/> (empty below 3 characters).</summary>
-    [HttpGet("search/suggest"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
+    [HttpGet("search/suggest")]
     public async Task<ActionResult<ApiResponse<SearchSuggestionsDto>>> SearchSuggestions([FromQuery] string? q, [FromQuery] string? city, CancellationToken ct) =>
         Success(await Sender.Send(new GetSearchSuggestionsQuery(q, city), ct));
 
@@ -183,7 +179,7 @@ public sealed class CatalogController : ApiControllerBase
     /// </summary>
     /// <param name="text">The search as typed.</param>
     /// <param name="city">Selected city slug: an area name found in several cities resolves to this city first.</param>
-    [HttpGet("search/parse"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
+    [HttpGet("search/parse")]
     public async Task<ActionResult<ApiResponse<ParsedSearchDto>>> ParseSearch([FromQuery] string? text, [FromQuery] string? city, CancellationToken ct) =>
         Success(await Sender.Send(new ParseSearchQuery(text, city), ct));
 
@@ -193,7 +189,7 @@ public sealed class CatalogController : ApiControllerBase
     /// says <c>aiPending</c>, send the same request again in a few seconds for the AI's interpretation.
     /// </summary>
     /// <summary>Example requests for the assistant, built from the services listed in <paramref name="city"/> (or elsewhere when it has none).</summary>
-    [HttpGet("search/assistant/starters"), OutputCache(PolicyName = CachePolicies.PublicCatalog)]
+    [HttpGet("search/assistant/starters")]
     public async Task<ActionResult<ApiResponse<AssistantStartersDto>>> SearchAssistantStarters([FromQuery] string? city, CancellationToken ct) =>
         Success(await Sender.Send(new GetAssistantStartersQuery(city), ct));
 
@@ -205,18 +201,18 @@ public sealed class CatalogController : ApiControllerBase
 [Route("api/businesses")]
 public sealed class BusinessesController : ApiControllerBase
 {
-    [HttpGet, OutputCache(PolicyName = CachePolicies.PublicListings)]
+    [HttpGet]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<BusinessCardDto>>>> Search([FromQuery] SearchBusinessesQuery query, CancellationToken ct)
     {
         var result = await Sender.Send(query, ct);
         return Ok(new SearchResponse { Success = true, Data = result.Items, Pagination = result.Pagination, Applied = result.Applied });
     }
 
-    [HttpGet("{slug}"), OutputCache(PolicyName = CachePolicies.PublicListings)]
+    [HttpGet("{slug}")]
     public async Task<ActionResult<ApiResponse<BusinessDetailDto>>> Get(string slug, CancellationToken ct) =>
         Success(await Sender.Send(new GetBusinessBySlugQuery(slug), ct));
 
-    [HttpGet("{slug}/reviews"), OutputCache(PolicyName = CachePolicies.PublicListings)]
+    [HttpGet("{slug}/reviews")]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<ReviewDto>>>> Reviews(string slug, [FromQuery] int page = 1, [FromQuery] int pageSize = 10,
         [FromQuery] int? rating = null, [FromQuery] string? sort = null, CancellationToken ct = default) =>
         Paged(await Sender.Send(new GetBusinessReviewsQuery { Slug = slug, Page = page, PageSize = pageSize, Rating = rating, Sort = sort }, ct));
@@ -457,7 +453,6 @@ public sealed class PlacesController : ApiControllerBase
     public async Task<ActionResult<ApiResponse<IReadOnlyList<PopularSearchDto>>>> PopularSearches([FromQuery] string? country, [FromQuery] int limit = 32,
         CancellationToken ct = default)
     {
-        Response.Headers.CacheControl = "public, max-age=300";
         return Success(await Sender.Send(new GetPopularSearchesQuery(country, limit), ct));
     }
 

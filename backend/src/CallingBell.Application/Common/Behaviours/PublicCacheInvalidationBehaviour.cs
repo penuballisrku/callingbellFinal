@@ -1,14 +1,13 @@
-using CallingBell.Application.Common.Interfaces;
 using MediatR;
 
 namespace CallingBell.Application.Common.Behaviours;
 
 /// <summary>
-/// Clears the cached public pages (home, categories, listings, business pages) after a command that can change what they show succeeds:
-/// admin and business-owner edits, business sign-up, payments (plans) and customer engagement (reviews change ratings). This lets the
-/// public responses (and SEO output) be cached for minutes while edits still show at once. Sign-in, notifications and the search assistant don't.
+/// Clears the cached SEO output (titles, structured data, sitemaps) after a command that can change what public pages show succeeds:
+/// admin and business-owner edits, business sign-up, payments (plans) and customer engagement (reviews change ratings). API responses
+/// themselves are not cached on the server. Sign-in, notifications and the search assistant don't clear it.
 /// </summary>
-public sealed class PublicCacheInvalidationBehaviour<TRequest, TResponse>(IPublicCache cache, Features.Seo.SeoCache seo)
+public sealed class PublicCacheInvalidationBehaviour<TRequest, TResponse>(Features.Seo.SeoCache seo)
     : IPipelineBehavior<TRequest, TResponse>
     where TRequest : notnull
 {
@@ -22,9 +21,8 @@ public sealed class PublicCacheInvalidationBehaviour<TRequest, TResponse>(IPubli
     {
         var response = await next();
         if (!Invalidates) return response;
-        // SEO output (titles, structured data, sitemaps) too, so crawlers never get information the edit replaced.
+        // So crawlers never get information the edit replaced.
         seo.Reset();
-        await cache.InvalidateAsync(CancellationToken.None);
         return response;
     }
 }

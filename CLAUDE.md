@@ -62,9 +62,9 @@ python backend/tests/seo-smoke/seo_smoke.py   # needs the API running
   - `ExternalServiceException`: the provider's status.
 - **Validation:** FluentValidation through the MediatR `ValidationBehaviour`. Field keys like `business.services[0].name` map to form
   paths on the web.
-- **Public cache:**
-  - Public GET endpoints use output caching (`CachePolicies.PublicCatalog`).
-  - `PublicCacheInvalidationBehaviour` clears it, and the SEO cache, after any `*Command` in the Admin, Owner, Onboarding, Payments or
+- **Caching:**
+  - API responses are not cached on the server (no output caching), so every request shows current data.
+  - `PublicCacheInvalidationBehaviour` clears the SEO cache after any `*Command` in the Admin, Owner, Onboarding, Payments or
     Engagement features.
   - `ReferenceDataCache` caches cities, areas and the category tree; call `ReferenceDataCache.Invalidate` after changing them.
 - **Auth:** JWT plus rotating refresh tokens, roles and permission policies (`Permissions.*`), and rate-limit policies `auth`, `submissions`,

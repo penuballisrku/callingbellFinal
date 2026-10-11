@@ -316,7 +316,7 @@ export function useRequireLogin() {
   const navigate = useNavigate();
   const location = useLocation();
   return (action: () => void) => {
-    if (!user) navigate(`/login?returnUrl=${encodeURIComponent(location.pathname)}`);
+    if (!user) navigate(`/login?returnUrl=${encodeURIComponent(location.pathname + location.search)}`);
     else action();
   };
 }

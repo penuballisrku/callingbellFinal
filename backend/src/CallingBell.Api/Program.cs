@@ -141,7 +141,7 @@ builder.Services.AddSwaggerGen(options =>
     options.AddSecurityRequirement(new OpenApiSecurityRequirement { [scheme] = [] });
 });
 
-// Performance: compress JSON and SVG responses, and cache public catalogue responses briefly (see CachePolicies).
+// Performance: compress JSON and SVG responses. Responses are not cached on the server, so every request shows current data.
 builder.Services.AddResponseCompression(options =>
 {
     options.EnableForHttps = true;
@@ -151,14 +151,6 @@ builder.Services.AddResponseCompression(options =>
 });
 builder.Services.Configure<BrotliCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
 builder.Services.Configure<GzipCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
-builder.Services.AddOutputCache(options =>
-{
-    // Anonymous, non-personalised GET responses only (the default policy already skips requests with an Authorization header).
-    // Edits clear both at once (PublicCacheInvalidationBehaviour), so the expiry only bounds staleness from changes made outside the API.
-    options.AddPolicy(CachePolicies.PublicCatalog, b => b.Expire(TimeSpan.FromMinutes(10)).SetVaryByQuery("*").Tag(CachePolicies.PublicTag));
-    options.AddPolicy(CachePolicies.PublicListings, b => b.Expire(TimeSpan.FromSeconds(60)).SetVaryByQuery("*").Tag(CachePolicies.PublicTag));
-});
-builder.Services.AddSingleton<CallingBell.Application.Common.Interfaces.IPublicCache, OutputCachePublicCache>();
 builder.Services.AddHostedService<StartupWarmup>();
 
 // ---------- SEO ----------
@@ -188,7 +180,6 @@ app.UseCors();
 app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();
-app.UseOutputCache();
 
 // The built React app with each public page's SEO rendered in, when Seo:SpaRoot points at it (production). In development Vite serves
 // the app and proxies robots.txt and the sitemaps here.

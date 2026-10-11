@@ -78,6 +78,7 @@ export interface BusinessCard {
   id: string; slug: string; name: string; tagline?: string | null; logoUrl?: string | null; coverImageUrl?: string | null;
   categoryName: string; categorySlug: string; subCategoryName?: string | null; subCategorySlug?: string | null;
   city: string; area?: string | null; addressLine?: string | null; landmark?: string | null; pincode?: string | null;
+  phoneNumber?: string | null; whatsAppNumber?: string | null; latitude?: number | null; longitude?: number | null;
   averageRating: number; reviewCount: number; availabilityStatus: string; lastSeenOn?: string | null;
   isVerified: boolean; isFeatured: boolean; isSponsored: boolean; startingPrice?: number | null; acceptsOnlineBooking: boolean;
   offersVideoConsultation: boolean; offersHomeService: boolean; isOpenNow: boolean; responseTimeMinutes?: number | null;

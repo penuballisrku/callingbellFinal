@@ -18,7 +18,7 @@ import { api } from '@/lib/api';
 import { number } from '@/lib/format';
 import type { ExternalPlace, ExternalSearch, ExternalTier, PlaceContact } from '@/lib/types';
 import { Img } from '@/components/ui';
-import { joinHint, joinHref, telHref, whatsAppHref } from '@/lib/contact';
+import { joinHint, joinHref, telHref, whatsAppHref, whatsAppSx } from '@/lib/contact';
 
 const PAGE = 8;
 /** Polls of the external search while the AI works (every 8 s); after that the visitor can check again by hand. */
@@ -429,15 +429,15 @@ export function ClaimBusinessBanner({ place, className }: {
     <div className={`flex flex-col gap-3 rounded-xl border border-[color-mix(in_srgb,var(--cb-accent)_45%,transparent)] bg-accent-soft p-3 sm:flex-row sm:items-center ${className ?? ''}`}>
       <span aria-hidden className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-surface shadow-[var(--cb-shadow-xs)]"><LogoMark size={22} /></span>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-bold text-ink">Own {place.name}?</p>
-        <p className="text-xs text-ink-2">List it on Calling Bell and get enquiries, bookings and reviews from customers nearby.</p>
+        <p className="text-sm font-bold text-ink">Want more customers?</p>
+        <p className="text-xs text-ink-2">Own {place.name}? List it on Calling Bell and get enquiries, bookings and reviews from customers nearby.</p>
       </div>
       <Button size="small" variant="contained" disableElevation component={Link} to={joinHref(place, joinHint(search))}
         sx={{
           flexShrink: 0, bgcolor: 'var(--cb-accent)', color: 'var(--cb-on-accent)', fontWeight: 700, px: 2,
           '&:hover': { bgcolor: 'color-mix(in srgb, var(--cb-accent) 88%, #000)' },
         }}>
-        List your business
+        Join Calling Bell
       </Button>
     </div>
   );
@@ -508,8 +508,6 @@ function PlaceImage({ p, d, size }: { p: ExternalPlace; d: PlaceDetails; size: '
     </div>
   );
 }
-
-const whatsAppSx = { color: '#128C7E', borderColor: 'rgba(18,140,126,0.5)', '&:hover': { borderColor: '#128C7E', bgcolor: 'rgba(37,211,102,0.08)' } };
 
 /**
  * One clear primary action: Call when there is a number (the fastest way to reach a business), otherwise Directions. WhatsApp and

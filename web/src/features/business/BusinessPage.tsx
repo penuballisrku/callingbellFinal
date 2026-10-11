@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Chip, Dialog, IconButton, LinearProgress, MenuItem, Pagination, Skeleton, TextField, Tooltip } from '@mui/material';
 import CallRounded from '@mui/icons-material/CallRounded';
@@ -66,6 +66,17 @@ export default function BusinessPage() {
     },
     onError: (e) => enqueueSnackbar(errorMessage(e), { variant: 'error' }),
   });
+
+  // From a search result's "Book now" / "Get a quote" (?action=book|quote): open that form once the business has loaded. Booking needs
+  // sign-in, so a visitor signs in first and comes back here with the same action.
+  const [params, setParams] = useSearchParams();
+  const action = params.get('action');
+  useEffect(() => {
+    if (!b || (action !== 'book' && action !== 'quote')) return;
+    const done = () => setParams((p) => { const next = new URLSearchParams(p); next.delete('action'); return next; }, { replace: true });
+    if (action === 'book' && b.card.acceptsOnlineBooking) requireLogin(() => { done(); setBooking({}); });
+    else { done(); setEnquiry({ type: 'Quotation' }); }
+  }, [b?.card.id, action]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (seo?.kind === 'Gone' || seo?.kind === 'NotFound') {
     return (

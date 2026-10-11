@@ -1,3 +1,6 @@
+/** WhatsApp's green for outlined WhatsApp buttons. */
+export const whatsAppSx = { color: '#128C7E', borderColor: 'rgba(18,140,126,0.5)', '&:hover': { borderColor: '#128C7E', bgcolor: 'rgba(37,211,102,0.08)' } };
+
 /** tel: link for a phone number as written ("098480 12345", "+91 98480 12345"). */
 export const telHref = (phone: string) => `tel:${phone.replace(/[^\d+]/g, '')}`;
 

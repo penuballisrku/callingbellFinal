@@ -23,6 +23,11 @@ public sealed record BusinessCardDto
     public string? AddressLine { get; init; }
     public string? Landmark { get; init; }
     public string? Pincode { get; init; }
+    /// <summary>Public contact details and position, for the Call, WhatsApp and Directions buttons on results (as on the business page).</summary>
+    public string? PhoneNumber { get; init; }
+    public string? WhatsAppNumber { get; init; }
+    public double? Latitude { get; init; }
+    public double? Longitude { get; init; }
     public decimal AverageRating { get; init; }
     public int ReviewCount { get; init; }
     public string AvailabilityStatus { get; init; } = string.Empty;
@@ -87,6 +92,10 @@ public static class BusinessCards
             AddressLine = b.AddressLine,
             Landmark = b.Landmark,
             Pincode = b.Pincode,
+            PhoneNumber = b.PhoneNumber,
+            WhatsAppNumber = b.WhatsAppNumber,
+            Latitude = (double?)b.Latitude,
+            Longitude = (double?)b.Longitude,
             AverageRating = b.AverageRating,
             ReviewCount = b.ReviewCount,
             AvailabilityStatus = b.AvailabilityStatus,
