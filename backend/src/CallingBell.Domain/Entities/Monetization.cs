@@ -49,6 +49,19 @@ public class SubscriptionPlan : AuditableEntity
     public bool IsActive { get; set; } = true;
 }
 
+/// <summary>One cell of the plan comparison table: a plan's value for a feature ("Featured placement": "Limited").</summary>
+public class PlanFeatureValue : AuditableEntity
+{
+    public Guid PlanId { get; set; }
+    /// <summary>Groups the row across plans, e.g. "featured-placement".</summary>
+    public string FeatureKey { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+    /// <summary>"Yes", "No", "Basic", "Limited", "Enhanced"…</summary>
+    public string Value { get; set; } = string.Empty;
+    public int SortOrder { get; set; }
+    public SubscriptionPlan Plan { get; set; } = null!;
+}
+
 public class BusinessSubscription : AuditableEntity
 {
     public string SubscriptionNumber { get; set; } = string.Empty;

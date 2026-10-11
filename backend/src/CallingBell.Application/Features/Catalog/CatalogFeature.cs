@@ -22,7 +22,10 @@ public sealed record LookupDto(string Code, string Name, string? Description, st
 /// <param name="TaxRate">Fraction, e.g. 0.18.</param>
 public sealed record PlanDto(Guid Id, string Code, string Name, string? Tagline, decimal MonthlyPrice, decimal AnnualPrice, int LeadCredits,
     bool IncludesFeaturedListing, bool IncludesPrioritySupport, IReadOnlyList<string> Features, string? ImageUrl, string? BadgeColor, bool IsPopular,
-    int MaxServices, int MaxImages, string CurrencyCode = "INR", string Locale = "en-IN", string? TaxName = "GST", decimal TaxRate = 0.18m);
+    int MaxServices, int MaxImages, string CurrencyCode = "INR", string Locale = "en-IN", string? TaxName = "GST", decimal TaxRate = 0.18m,
+    IReadOnlyList<PlanFeatureValueDto>? Comparison = null);
+/// <summary>A plan's value in one row of the comparison table; rows line up across plans by <paramref name="Key"/>.</summary>
+public sealed record PlanFeatureValueDto(string Key, string Label, string Value, int SortOrder);
 public sealed record BannerDto(Guid Id, string Title, string? Subtitle, string? CtaText, string? LinkUrl, string ImageUrl,
     string? MobileImageUrl, string? DesktopImageUrl, string? AltText, string Placement);
 
@@ -200,7 +203,11 @@ public sealed class GetPlansHandler(IUnitOfWork uow, CountryPricingService prici
         var plans = await uow.Repository<SubscriptionPlan>().QueryNoTracking()
             .Where(p => p.IsActive).OrderBy(p => p.SortOrder).ToListAsync(ct);
         var country = request.BusinessId is { } id ? await pricing.ForBusinessAsync(id, ct) : await pricing.ForCountryAsync(request.Country, ct);
-        return plans.Select(p => ToDto(p, country)).ToList();
+        var ids = plans.Select(p => p.Id).ToList();
+        var comparison = (await uow.Repository<PlanFeatureValue>().QueryNoTracking().Where(v => ids.Contains(v.PlanId))
+                .OrderBy(v => v.SortOrder).ToListAsync(ct))
+            .ToLookup(v => v.PlanId, v => new PlanFeatureValueDto(v.FeatureKey, v.Label, v.Value, v.SortOrder));
+        return plans.Select(p => ToDto(p, country) with { Comparison = comparison[p.Id].ToList() }).ToList();
     }
 
     /// <summary>A plan priced for <paramref name="country"/> (India, as set, when null).</summary>
@@ -210,7 +217,7 @@ public sealed class GetPlansHandler(IUnitOfWork uow, CountryPricingService prici
         return new(p.Id, p.Code, p.Name, p.Tagline, c.Convert(p.MonthlyPrice), c.Convert(p.AnnualPrice), p.LeadCredits,
             p.IncludesFeaturedListing, p.IncludesPrioritySupport,
             p.Features.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), p.ImageUrl, p.BadgeColor, p.IsPopular,
-            p.MaxServices, p.MaxImages, c.CurrencyCode, c.Locale, c.TaxName, c.TaxRate);
+            p.MaxServices, p.MaxImages, c.CurrencyCode, c.Locale, c.TaxName, c.TaxRate, []);
     }
 }
 

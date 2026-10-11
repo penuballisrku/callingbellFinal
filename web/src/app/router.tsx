@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { createBrowserRouter, Link, redirect, useRouteError, type LoaderFunctionArgs } from 'react-router';
 import { Button } from '@mui/material';
 import CustomerLayout from '@/layouts/CustomerLayout';
@@ -27,15 +27,42 @@ const guarded = (role: string, loader: () => Promise<{ default: React.ComponentT
 /** Shown while a lazily-loaded route chunk downloads on first visit. */
 const Loading = () => <div className="min-h-screen bg-canvas" aria-busy="true" />;
 
+/**
+ * A page's code that no longer exists on the server: the tab was opened before a deploy (or before the dev server re-bundled its
+ * packages) and asks for the old files. Reloading fetches the current ones.
+ */
+const isStaleChunk = (error: unknown) => /dynamically imported module|Importing a module script failed|error loading dynamically imported module|Outdated Optimize Dep/i
+  .test(String((error as Error | undefined)?.message ?? error ?? ''));
+
+/** Reloads once to pick up the current files; a second failure within a minute shows the error instead of reloading in a loop. */
+export function reloadForStaleChunk(): boolean {
+  const key = 'cb-chunk-reload';
+  try {
+    const last = Number(sessionStorage.getItem(key) ?? 0);
+    if (Date.now() - last < 60_000) return false;
+    sessionStorage.setItem(key, String(Date.now()));
+  } catch { /* storage blocked: reload anyway */ }
+  window.location.reload();
+  return true;
+}
+
 function RouteError() {
   const error = useRouteError() as { status?: number } | undefined;
+  // Rendered as a route's own element (unknown addresses) there is no error: that is a missing page.
+  const notFound = !error || error.status === 404;
+  const stale = !notFound && isStaleChunk(error);
+  const [reloading] = useState(() => stale && reloadForStaleChunk());
   // Keep the cause visible to developers and error monitoring; visitors only see the friendly message below.
-  useEffect(() => { if (error && error.status !== 404) console.error("Route error:", error); }, [error]);
+  useEffect(() => { if (!notFound && !reloading) console.error('Route error:', error); }, [error, notFound, reloading]);
+  if (reloading) return <Loading />;
   return (
     <div className="container-page py-20">
-      <EmptyState title={error?.status === 404 ? 'Page not found' : 'Something went wrong'}
-        message={error?.status === 404 ? "The page you're looking for doesn't exist or has moved." : 'Please refresh the page or go back home.'}
-        action={<Button component={Link} to="/" variant="contained">Go to home</Button>} />
+      <EmptyState title={notFound ? 'Page not found' : stale ? 'A new version is available' : 'Something went wrong'}
+        message={notFound ? "The page you're looking for doesn't exist or has moved."
+          : stale ? 'Calling Bell was updated while this page was open. Refresh to load the latest version.' : 'Please refresh the page or go back home.'}
+        action={stale || !notFound
+          ? <Button variant="contained" onClick={() => window.location.reload()}>Refresh the page</Button>
+          : <Button component={Link} to="/" variant="contained">Go to home</Button>} />
     </div>
   );
 }

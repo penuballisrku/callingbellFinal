@@ -18,8 +18,11 @@ declare global { interface Window { SpeechRecognition?: RecognitionCtor; webkitS
 
 const Recognizer: RecognitionCtor | undefined = typeof window === 'undefined' ? undefined : window.SpeechRecognition ?? window.webkitSpeechRecognition;
 
-/** Voice input needs the API and the microphone, which browsers only allow on https:// and localhost. */
-export const voiceSearchSupported = !!Recognizer && typeof window !== 'undefined' && window.isSecureContext;
+/** The browser can do voice input (not Firefox). */
+export const voiceSearchSupported = !!Recognizer;
+
+/** Browsers only give the microphone to pages on https:// and localhost (on http://192.168.x.x the mic is shown but explains this). */
+const secure = typeof window !== 'undefined' && window.isSecureContext;
 
 /** Indian English understands Indian names and places best; the page language is used when it is another one. */
 const LANG = typeof document !== 'undefined' && document.documentElement.lang && !document.documentElement.lang.startsWith('en')
@@ -39,7 +42,7 @@ let active: Recognition | null = null;
 /**
  * Mic button for a search box: what the visitor says fills the box as they speak. With `submit`, the surrounding form is submitted
  * when they stop speaking (the main search boxes); without it, the text is only filled in (filter boxes). Renders nothing where
- * the browser can't do voice input, so the box looks as it always did.
+ * the browser can't do voice input (Firefox), so the box looks as it always did.
  *
  * @param onText Called with the words so far (`final` false) and once with the finished phrase (`final` true).
  */
@@ -60,6 +63,11 @@ export function VoiceSearchButton({ onText, submit = false, label = 'Search by v
 
   const toggle = () => {
     if (listening) { recognition.current?.stop(); return; }
+    if (!secure) {
+      enqueueSnackbar(`Voice search needs a secure address. Open this site with https:// (or localhost) instead of ${window.location.host}.`,
+        { variant: 'warning', autoHideDuration: 7000 });
+      return;
+    }
     active?.abort();
     const r = new Recognizer!();
     r.lang = LANG;

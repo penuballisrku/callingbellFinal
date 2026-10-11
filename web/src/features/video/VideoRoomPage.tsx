@@ -42,7 +42,7 @@ export default function VideoRoomPage() {
   if (!user) {
     return <Shell><Centered title="Sign in to join the call" action={<Button variant="contained" component={Link} to={`/login?returnUrl=${encodeURIComponent(`/video/${roomId}`)}`}>Sign in</Button>} /></Shell>;
   }
-  if (room.isLoading) return <Shell><div className="grid h-full place-items-center"><CircularProgress /></div></Shell>;
+  if (room.isPending) return <Shell><div className="grid h-full place-items-center"><CircularProgress /></div></Shell>;
   if (room.isError) {
     const status = room.error instanceof ApiError ? room.error.status : 0;
     return <Shell><Centered title={status === 403 ? 'This call isn’t yours' : status === 404 ? 'Call not found' : 'Couldn’t load the call'}

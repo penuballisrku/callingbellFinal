@@ -32,6 +32,7 @@ import { OwnerTeam } from './OwnerTeam';
 import { ChatInbox } from '@/features/chat/Chat';
 import type { ChatUnread } from '@/lib/types';
 import BusinessWizard from '@/features/onboarding/BusinessWizard';
+import { usePresence } from '@/lib/realtime';
 
 const useSelected = useSelectedBusiness;
 
@@ -137,6 +138,9 @@ function AvailabilitySwitch({ business }: { business: OwnerBusiness }) {
     },
     onError: (e) => enqueueSnackbar(errorMessage(e), { variant: 'error' }),
   });
+  // Opening or leaving Calling Bell changes the status automatically (OwnerPresenceTracker on the server): keep this control in step.
+  usePresence([business.id], (e) => queryClient.setQueryData<OwnerBusiness[]>(['owner', 'businesses'],
+    (old) => old?.map((b) => (b.id === e.businessId ? { ...b, availabilityStatus: e.status } : b))));
   const current = statuses.find((s) => s.code === business.availabilityStatus);
 
   return (

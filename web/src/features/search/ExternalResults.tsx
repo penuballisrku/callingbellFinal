@@ -430,14 +430,14 @@ export function ClaimBusinessBanner({ place, className }: {
       <span aria-hidden className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-surface shadow-[var(--cb-shadow-xs)]"><LogoMark size={22} /></span>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-bold text-ink">Own {place.name}?</p>
-        <p className="text-xs text-ink-2">List it free on Calling Bell and get enquiries, bookings and reviews from customers nearby.</p>
+        <p className="text-xs text-ink-2">List it on Calling Bell and get enquiries, bookings and reviews from customers nearby.</p>
       </div>
       <Button size="small" variant="contained" disableElevation component={Link} to={joinHref(place, joinHint(search))}
         sx={{
           flexShrink: 0, bgcolor: 'var(--cb-accent)', color: 'var(--cb-on-accent)', fontWeight: 700, px: 2,
           '&:hover': { bgcolor: 'color-mix(in srgb, var(--cb-accent) 88%, #000)' },
         }}>
-        List it free
+        List your business
       </Button>
     </div>
   );
@@ -529,8 +529,13 @@ function PlaceActions({ p, d, source, compact }: { p: ExternalPlace; d: PlaceDet
   );
 }
 
-/** A dense place row for narrow panels such as the AI search assistant. */
-export function CompactPlace({ p, source }: { p: ExternalPlace; source: 'ai' | 'google' }) {
+/**
+ * A dense place row for narrow panels such as the AI search assistant. With `join`, the place's owner is offered "Join Calling Bell"
+ * (`hint`: what was searched for, suggesting the category; `onOpen`: e.g. closes the panel as the sign-up form opens).
+ */
+export function CompactPlace({ p, source, join }: {
+  p: ExternalPlace; source: 'ai' | 'google'; join?: { hint?: string | null; onOpen?: () => void };
+}) {
   const d = usePlaceDetails(p);
   return (
     <article className="rounded-xl border border-line bg-surface p-3">
@@ -543,6 +548,7 @@ export function CompactPlace({ p, source }: { p: ExternalPlace; source: 'ai' | '
             <OpenBadge openNow={d.openNow} />
             <span className="inline-flex items-center gap-0.5 text-muted"><PlaceRounded sx={{ fontSize: 14 }} />{p.distanceKm.toFixed(1)} km</span>
           </div>
+          {p.address && <address className="mt-1 text-xs not-italic text-muted">{p.address}</address>}
         </div>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -551,6 +557,21 @@ export function CompactPlace({ p, source }: { p: ExternalPlace; source: 'ai' | '
         {d.loading && !d.phone && <Skeleton width={90} height={16} aria-label="Finding phone number" />}
       </div>
       <PlaceActions p={p} d={d} source={source} compact />
+      {join && (
+        <div className="mt-2.5 flex items-center gap-2 rounded-lg bg-accent-soft px-2.5 py-2">
+          <LogoMark size={16} />
+          <span className="min-w-0 flex-1 truncate text-xs text-ink-2">Want More Customers?</span>
+          <Button size="small" variant="contained" disableElevation component={Link} onClick={join.onOpen}
+            to={joinHref({ name: p.name, phone: d.phone, website: d.website, address: p.address, sourceId: p.id }, join.hint)}
+            aria-label={`Join Calling Bell as ${p.name}`}
+            sx={{
+              flexShrink: 0, bgcolor: 'var(--cb-accent)', color: 'var(--cb-on-accent)', fontWeight: 700, whiteSpace: 'nowrap',
+              '&:hover': { bgcolor: 'color-mix(in srgb, var(--cb-accent) 88%, #000)' },
+            }}>
+            Join Calling Bell
+          </Button>
+        </div>
+      )}
     </article>
   );
 }
@@ -580,7 +601,11 @@ function PlaceCard({ p, source, onSelect }: { p: ExternalPlace; source: 'ai' | '
             <span className="inline-flex items-center gap-0.5 text-muted"><PlaceRounded sx={{ fontSize: 15 }} />{p.distanceKm.toFixed(1)} km</span>
             {p.kind && <span className="text-muted">{p.kind}</span>}
           </div>
-          {p.address && <p className="mt-1 truncate text-[13px] text-ink-2" title={p.address}>{p.address}</p>}
+          {p.address && (
+            <address className="mt-1 flex items-start gap-1 text-[13px] not-italic text-ink-2">
+              <PlaceRounded sx={{ fontSize: 15, mt: '2px', flexShrink: 0 }} className="text-muted" aria-hidden /><span className="min-w-0">{p.address}</span>
+            </address>
+          )}
           {d.loading && !d.phone && <Skeleton width={140} height={20} aria-label="Finding phone number" />}
           {d.noPhone && <p className="mt-1 text-[13px] text-muted">No phone number listed</p>}
           {p.aiReason && <AiReason text={p.aiReason} />}

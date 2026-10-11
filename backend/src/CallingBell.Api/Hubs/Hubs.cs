@@ -1,5 +1,6 @@
 using CallingBell.Application.Common.Interfaces;
 using CallingBell.Application.Features.Notifications;
+using CallingBell.Domain.Constants;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
@@ -32,11 +33,28 @@ public sealed class PresenceHub : Hub
     }
 }
 
-/// <summary>Per-user alerts: new leads, bookings, review and listing updates.</summary>
+/// <summary>
+/// Per-user alerts: new leads, bookings, review and listing updates. Every signed-in tab keeps one connection, so it also tells
+/// <see cref="OwnerPresenceTracker"/> when a business owner has Calling Bell open (automatic Online / Offline and last seen).
+/// </summary>
 [Authorize]
-public sealed class NotificationHub : Hub
+public sealed class NotificationHub(OwnerPresenceTracker presence) : Hub
 {
     public const string NotificationReceived = "notification";
+
+    public override Task OnConnectedAsync()
+    {
+        if (OwnerId() is { } id) presence.Connected(id);
+        return base.OnConnectedAsync();
+    }
+
+    public override Task OnDisconnectedAsync(Exception? exception)
+    {
+        if (OwnerId() is { } id) presence.Disconnected(id);
+        return base.OnDisconnectedAsync(exception);
+    }
+
+    private string? OwnerId() => Context.User?.IsInRole(Roles.BusinessOwner) == true ? Context.UserIdentifier : null;
 }
 
 public sealed class SignalRNotifier(IHubContext<PresenceHub> presence, IHubContext<NotificationHub> notifications) : IRealtimeNotifier

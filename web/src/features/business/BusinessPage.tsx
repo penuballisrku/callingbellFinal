@@ -30,6 +30,7 @@ import { BookingDialog, EnquiryDialog, ReviewDialog, useRequireLogin } from './D
 import { ChatDrawer } from '@/features/chat/Chat';
 import type { TeamMember } from '@/lib/types';
 import { Breadcrumbs, FaqSection, LinkGroups, useSeoPage } from '@/features/seo/seo';
+import { fullAddress, nearLandmark } from '@/lib/address';
 
 export default function BusinessPage() {
   const platforms = useLookup('SocialPlatform');
@@ -86,12 +87,8 @@ export default function BusinessPage() {
   const today = b.hours.find((h) => h.isToday);
 
   const kind = c.subCategoryName ?? c.categoryName;
-  // Without repeating a part the street line already holds ("Gokhale Road, Dadar West" + "Dadar West").
-  const address = [b.addressLine, c.area, c.city, b.state, b.pincode].reduce<string[]>((parts, p) => {
-    const part = p?.trim();
-    return part && !parts.some((x) => x.toLowerCase().includes(part.toLowerCase())) ? [...parts, part] : parts;
-  }, []).join(', ');
-  const near = b.landmark && (/^near\s/i.test(b.landmark) ? b.landmark : `Near ${b.landmark}`);
+  const address = fullAddress({ addressLine: b.addressLine, area: c.area, city: c.city, state: b.state, pincode: b.pincode });
+  const near = nearLandmark(b.landmark);
 
   return (
     <div className="pb-24 md:pb-8">

@@ -72,7 +72,7 @@ export default function OwnerDashboard() {
           <div className="min-w-0 flex-1 text-sm">
             <div className="font-semibold text-ink">Complete your {pending.planName} payment</div>
             <div className="text-ink-2">{pending.status === 'Failed' && pending.failureReason ? `Your last attempt failed: ${pending.failureReason} ` : 'Your payment was not completed. '}
-              You are on the Free plan until you pay {moneyPrecise(pending.total, pending.currency)} ({pending.billingCycle.toLowerCase()}).</div>
+              Your {pending.planName} plan starts when you pay {moneyPrecise(pending.total, pending.currency)} ({pending.billingCycle.toLowerCase()}).</div>
           </div>
           <Button variant="contained" color="secondary" onClick={() => setPayOpen(true)}>Pay {moneyPrecise(pending.total, pending.currency)}</Button>
         </div>

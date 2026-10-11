@@ -15,7 +15,7 @@ import { ago, date, money, moneyExact, moneyPrecise, number } from '@/lib/format
 import { useDocumentTitle, useLookup } from '@/lib/hooks';
 import type { OwnerAd, OwnerProfile as Profile, OwnerReview, OwnerService, OwnerSubscription as Subscription } from '@/lib/types';
 import { EmptyState, ErrorState, PageHeader, Panel, StatusBadge, Stars } from '@/components/ui';
-import { PlanGrid } from '@/features/pricing/PricingPage';
+import { PlanComparisonTable, PlanGrid } from '@/features/pricing/PricingPage';
 import { useBusiness } from './OwnerPortal';
 import { SocialLinksPanel } from './SocialLinksPanel';
 import { PlanCheckoutDialog } from './PlanCheckoutDialog';
@@ -310,16 +310,18 @@ export function OwnerSubscription() {
   const [checkout, setCheckout] = useState<Plan | null>(null);
   const payments = usePaymentConfig();
   const { data, isLoading, isError, refetch } = useQuery({ queryKey: ['owner', 'subscription', business.id], queryFn: () => api.get<Subscription>(`/api/owner/businesses/${business.id}/subscription`) });
+  // From the basic listing or a cheaper plan it is an upgrade; from a plan no longer offered (or a dearer one), a switch.
+  const offeredCurrent = data?.plans.find((c) => c.code === data.currentPlanCode);
+  const isUpgrade = (p: Plan) => data?.currentPlanCode === 'FREE' || (!!offeredCurrent && p.monthlyPrice > offeredCurrent.monthlyPrice);
   const choose = (p: Plan) => {
-    if (p.monthlyPrice === 0) enqueueSnackbar('To move back to the Free plan, contact support and we will switch you at the end of your current period.', { variant: 'info' });
-    else if (!payments.data?.enabled) enqueueSnackbar(`Online payment is unavailable right now. Our team will call you to activate ${p.name}.`, { variant: 'info' });
+    if (!payments.data?.enabled) enqueueSnackbar(`Online payment is unavailable right now. Our team will call you to activate ${p.name}.`, { variant: 'info' });
     else setCheckout(p);
   };
   if (isError) return <ErrorState onRetry={() => refetch()} />;
 
   return (
     <>
-      <PageHeader title="Plan & billing" subtitle="Upgrade for more lead credits, priority placement and advanced analytics. Pay securely online by UPI, card or net banking." />
+      <PageHeader title="Plan & billing" subtitle="Upgrade for featured placement and full monthly performance reports. Pay securely online by UPI, card or net banking." />
       <PlanCheckoutDialog businessId={business.id} plan={checkout} cycle={cycle === 'annual' ? 'Annual' : 'Monthly'} open={!!checkout}
         onClose={() => { setCheckout(null); void refetch(); }} />
       {isLoading ? <Skeleton variant="rounded" height={500} /> : (
@@ -330,7 +332,7 @@ export function OwnerSubscription() {
                 <div>
                   <div className="text-sm text-muted">Current plan</div>
                   <div className="text-2xl font-bold">{data!.current.planName} <span className="text-base font-normal text-muted">· {data!.current.billingCycle}</span></div>
-                  <div className="text-sm text-muted">{data!.currentPlanCode === 'FREE' ? 'Free forever' : `${data!.current.status === 'Trial' ? 'Trial ends' : 'Renews'} on ${date(data!.current.endDate)} · ${moneyExact(data!.current.amount, data!.current.currency)}${data!.current.currency === 'INR' ? ' + GST' : ''}`}</div>
+                  <div className="text-sm text-muted">{data!.currentPlanCode === 'FREE' ? 'Basic listing · choose a plan below for more leads' : `${data!.current.status === 'Trial' ? 'Trial ends' : 'Renews'} on ${date(data!.current.endDate)} · ${moneyExact(data!.current.amount, data!.current.currency)}${data!.current.currency === 'INR' ? ' + GST' : ''}`}</div>
                 </div>
                 <StatusBadge type="SubscriptionStatus" code={data!.current.status} size="md" />
               </div>
@@ -345,9 +347,10 @@ export function OwnerSubscription() {
           <PlanGrid plans={data!.plans} cycle={cycle} currentCode={data!.currentPlanCode} action={(p) => (
             <Button fullWidth variant={p.code === data!.currentPlanCode ? 'outlined' : 'contained'} disabled={p.code === data!.currentPlanCode}
               onClick={() => choose(p)}>
-              {p.code === data!.currentPlanCode ? 'Current plan' : p.monthlyPrice === 0 ? 'Switch to Free' : `Upgrade to ${p.name}`}
+              {p.code === data!.currentPlanCode ? 'Current plan' : `${isUpgrade(p) ? 'Upgrade' : 'Switch'} to ${p.name}`}
             </Button>
           )} />
+          <PlanComparisonTable plans={data!.plans} cycle={cycle} />
           <Panel title="Invoices" subtitle="Subscriptions, advertising, booking commission and lead credits" noPad>
             {!data!.invoices.length ? <EmptyState title="No invoices yet" /> : (
               <TableContainer>

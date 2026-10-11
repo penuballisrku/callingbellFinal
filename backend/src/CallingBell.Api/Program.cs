@@ -24,6 +24,7 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddScoped<IRealtimeNotifier, SignalRNotifier>();
+builder.Services.AddSingleton<CallingBell.Api.Hubs.OwnerPresenceTracker>();
 builder.Services.AddScoped<CallingBell.Application.Features.Chat.IChatRealtime, ChatRealtime>();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddProblemDetails();

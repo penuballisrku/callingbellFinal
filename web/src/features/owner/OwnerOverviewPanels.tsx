@@ -162,7 +162,7 @@ export function PlanPanel({ plan }: { plan?: ActivePlan | null }) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-2xl font-bold tracking-tight">{plan.name}</div>
-          <div className="text-sm text-muted">{plan.billingCycle} · {plan.code === 'FREE' ? 'Free forever' : trial ? `Free trial until ${date(plan.endDate)}` : `Renews ${date(plan.endDate)} · ${moneyExact(plan.amount, plan.currency)}${plan.currency === 'INR' ? ' + GST' : ''}`}</div>
+          <div className="text-sm text-muted">{plan.billingCycle} · {plan.code === 'FREE' ? 'Basic listing · upgrade for more leads' : trial ? `Free trial until ${date(plan.endDate)}` : `Renews ${date(plan.endDate)} · ${moneyExact(plan.amount, plan.currency)}${plan.currency === 'INR' ? ' + GST' : ''}`}</div>
         </div>
         <StatusBadge type="SubscriptionStatus" code={plan.status} />
       </div>

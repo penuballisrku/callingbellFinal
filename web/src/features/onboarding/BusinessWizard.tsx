@@ -149,6 +149,10 @@ function Wizard({ mode, data, paymentsEnabled, imported }: {
   const billingCycle = useWatch({ control: form.control, name: 'business.billingCycle' });
   const plan = data.plans.find((p) => p.code === planCode);
   const isPaidPlan = !!plan && plan.monthlyPrice > 0;
+  // Only paid plans are offered: until one is chosen (or when a saved draft names one no longer offered), the most popular is selected.
+  useEffect(() => {
+    if (data.plans.length && !plan) form.setValue('business.planCode', (data.plans.find((p) => p.isPopular) ?? data.plans[0]!).code);
+  }, [data.plans, plan, form]);
   const orderTotal = plan ? priceBreakdown(billingCycle === 'Annual' ? plan.annualPrice : plan.monthlyPrice, plan).total : 0;
   // The payment step comes right after plan selection, and only for paid plans.
   const steps = useMemo(() => STEPS.filter((s) => (mode === 'register' || s.key !== 'account') && (isPaidPlan || s.key !== 'payment')), [mode, isPaidPlan]);
@@ -332,7 +336,7 @@ function Wizard({ mode, data, paymentsEnabled, imported }: {
         setPaymentPrompt({ reason: outcome.reason, onRetry: () => resolve('retry'), onSkip: () => resolve('skip') }));
       setPaymentPrompt(null);
       if (choice === 'skip') {
-        patchTask('payment', { status: 'failed', detail: 'Skipped · your business is on the Free plan. You can pay any time from your dashboard.' });
+        patchTask('payment', { status: 'failed', detail: 'Skipped · your business has a basic listing until you pay. You can pay any time from your dashboard.' });
         return false;
       }
     }
@@ -392,7 +396,7 @@ function Wizard({ mode, data, paymentsEnabled, imported }: {
       } else {
         result = (await api.post<CreatedBusiness>('/api/owner/businesses', { business })).data;
       }
-      patchTask('business', { status: 'done', detail: result.requestedPlanCode && !paymentsEnabled ? 'Started on the Free plan · upgrade any time from Plan & billing' : undefined });
+      patchTask('business', { status: 'done', detail: result.requestedPlanCode && !paymentsEnabled ? 'Basic listing for now · choose your plan any time from Plan & billing' : undefined });
     } catch (e) {
       setSubmitting(false);
       setTasks(null);
@@ -659,10 +663,10 @@ function SubmissionProgress({ tasks, uploadPct, media, created, submitting, paym
           <div className="mt-6 rounded-lg border border-warning-line bg-warning-soft p-4 text-sm text-warning-ink" role="alert">
             <p className="font-semibold">Payment not completed</p>
             <p className="mt-1">{paymentPrompt.reason}</p>
-            <p className="mt-2">Your business has been created on the Free plan. You have not been charged for this attempt.</p>
+            <p className="mt-2">Your business has been created with a basic listing. You have not been charged for this attempt.</p>
             <div className="mt-3 flex flex-wrap gap-2">
               <Button variant="contained" size="small" color="secondary" onClick={paymentPrompt.onRetry}>Try payment again</Button>
-              <Button size="small" color="inherit" onClick={paymentPrompt.onSkip}>Continue on the Free plan</Button>
+              <Button size="small" color="inherit" onClick={paymentPrompt.onSkip}>Pay later from my dashboard</Button>
             </div>
           </div>
         )}

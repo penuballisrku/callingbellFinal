@@ -44,6 +44,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<Booking> Bookings => Set<Booking>();
     public DbSet<Favorite> Favorites => Set<Favorite>();
     public DbSet<SubscriptionPlan> SubscriptionPlans => Set<SubscriptionPlan>();
+    public DbSet<PlanFeatureValue> PlanFeatureValues => Set<PlanFeatureValue>();
     public DbSet<CountryPricing> CountryPricing => Set<CountryPricing>();
     public DbSet<BusinessSubscription> BusinessSubscriptions => Set<BusinessSubscription>();
     public DbSet<Advertisement> Advertisements => Set<Advertisement>();

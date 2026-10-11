@@ -44,3 +44,4 @@
 :r $(ScriptDir)\29_Notifications.sql
 :r $(ScriptDir)\30_JoinCallingBell.sql
 :r $(ScriptDir)\31_ChatStaffVideo.sql
+:r $(ScriptDir)\32_PlanComparison.sql

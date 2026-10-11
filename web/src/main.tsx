@@ -7,7 +7,7 @@ import { SnackbarProvider } from 'notistack';
 import '@fontsource-variable/inter';
 import './index.css';
 import { buildTheme } from './app/theme';
-import { router } from './app/router';
+import { reloadForStaleChunk, router } from './app/router';
 import { persistOptions, preloadMainPages, queryClient } from './lib/queryCache';
 import { useApplyTheme } from './stores/theme';
 
@@ -16,6 +16,9 @@ function AppTheme({ children }: { children: ReactNode }) {
   const theme = useMemo(() => buildTheme(resolved, accent), [resolved, accent]);
   return <ThemeProvider theme={theme}><CssBaseline enableColorScheme />{children}</ThemeProvider>;
 }
+
+// A page's code from an older version failed to load (the site was updated while this tab was open): reload once for the current files.
+window.addEventListener('vite:preloadError', (e) => { if (reloadForStaleChunk()) e.preventDefault(); });
 
 preloadMainPages();
 

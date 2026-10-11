@@ -208,7 +208,11 @@ function NearbyPlaces({ filters, need, listed, onClose }: { filters: AssistantFi
       ) : (
         <>
           <ul className="space-y-2">
-            {places.map(({ p, source }) => <li key={`${source}-${p.id}`}><CompactPlace p={p} source={source} /></li>)}
+            {places.map(({ p, source }) => (
+              <li key={`${source}-${p.id}`}>
+                <CompactPlace p={p} source={source} join={{ hint: filters.sub ?? filters.category ?? filters.q, onOpen: onClose }} />
+              </li>
+            ))}
           </ul>
           <p className="text-[11px] text-faint">
             Not listed on Calling Bell. Details from {sources}

@@ -19,6 +19,10 @@ public sealed record BusinessCardDto
     public string? SubCategorySlug { get; init; }
     public string City { get; init; } = string.Empty;
     public string? Area { get; init; }
+    /// <summary>Street address, landmark and pincode, so results can show the full address (as the business page does).</summary>
+    public string? AddressLine { get; init; }
+    public string? Landmark { get; init; }
+    public string? Pincode { get; init; }
     public decimal AverageRating { get; init; }
     public int ReviewCount { get; init; }
     public string AvailabilityStatus { get; init; } = string.Empty;
@@ -80,6 +84,9 @@ public static class BusinessCards
             SubCategorySlug = b.SubCategory != null ? b.SubCategory.Slug : null,
             City = b.City,
             Area = b.Area,
+            AddressLine = b.AddressLine,
+            Landmark = b.Landmark,
+            Pincode = b.Pincode,
             AverageRating = b.AverageRating,
             ReviewCount = b.ReviewCount,
             AvailabilityStatus = b.AvailabilityStatus,

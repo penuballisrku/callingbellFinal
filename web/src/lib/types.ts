@@ -45,6 +45,8 @@ export interface Plan {
   currencyCode: string; locale: string;
   /** Tax added at checkout (e.g. GST 0.18 in India); 0 where none is charged. */
   taxName?: string | null; taxRate: number;
+  /** The plan's values in the comparison table (dbo.PlanFeatureValues); rows line up across plans by `key`. */
+  comparison?: { key: string; label: string; value: string; sortOrder: number }[];
 }
 export type SuggestionKind = 'Category' | 'SubCategory' | 'Service' | 'Business';
 export interface SearchSuggestion { kind: SuggestionKind; label: string; detail?: string | null; imageUrl?: string | null; slug: string; subCategorySlug?: string | null; rating?: number | null }
@@ -75,7 +77,8 @@ export interface MarketingPage { pageKey: string; blocks: ContentBlock[]; stats:
 export interface BusinessCard {
   id: string; slug: string; name: string; tagline?: string | null; logoUrl?: string | null; coverImageUrl?: string | null;
   categoryName: string; categorySlug: string; subCategoryName?: string | null; subCategorySlug?: string | null;
-  city: string; area?: string | null; averageRating: number; reviewCount: number; availabilityStatus: string; lastSeenOn?: string | null;
+  city: string; area?: string | null; addressLine?: string | null; landmark?: string | null; pincode?: string | null;
+  averageRating: number; reviewCount: number; availabilityStatus: string; lastSeenOn?: string | null;
   isVerified: boolean; isFeatured: boolean; isSponsored: boolean; startingPrice?: number | null; acceptsOnlineBooking: boolean;
   offersVideoConsultation: boolean; offersHomeService: boolean; isOpenNow: boolean; responseTimeMinutes?: number | null;
   planCode?: string | null; distanceKm?: number | null;

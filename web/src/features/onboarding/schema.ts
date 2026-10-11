@@ -123,7 +123,7 @@ export const defaultValues = (mode: 'register' | 'setup', user?: { displayName?:
     businessName: '', categorySlug: '', subCategorySlug: '', tagline: '', description: '', yearEstablished: '', teamSize: '', languages: '',
     acceptsOnlineBooking: true, offersHomeService: false, offersVideoConsultation: false,
     businessPhone: '', whatsAppNumber: '', businessEmail: '', website: '', citySlug: '', areaSlug: '', addressLine: '', landmark: '', pincode: '',
-    services: [emptyService()], planCode: 'FREE', billingCycle: 'Monthly', socialLinks: [],
+    services: [emptyService()], planCode: '', billingCycle: 'Monthly', socialLinks: [],
     hours: emptyHours(), sourceId: '', latitude: null, longitude: null,
   },
 });

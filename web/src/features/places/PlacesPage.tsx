@@ -592,7 +592,7 @@ function PlaceRow({ place: p, onSelect }: { place: GooglePlace; onSelect: (p: Go
           {p.address && (
             <p className="mt-1.5 flex items-start gap-1 text-[13px] text-ink-2">
               <PlaceOutlined sx={{ fontSize: 16, mt: '1px' }} className="shrink-0 text-muted" aria-hidden />
-              <span className="line-clamp-2 min-w-0 lg:line-clamp-1">{p.address}</span>
+              <span className="min-w-0">{p.address}</span>
               <Tooltip title="Copy name and address">
                 <IconButton size="small" aria-label={`Copy address of ${p.name}`} onClick={() => void copyAddress()} sx={{ p: '2px', mt: '-1px', color: 'text.secondary', position: 'relative', zIndex: 1 }}>
                   <ContentCopyRounded sx={{ fontSize: 14 }} />

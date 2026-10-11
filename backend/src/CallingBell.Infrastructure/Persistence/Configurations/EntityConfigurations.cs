@@ -190,6 +190,18 @@ internal sealed class CollaborationConfiguration :
     }
 }
 
+internal sealed class PlanFeatureValueConfiguration : IEntityTypeConfiguration<PlanFeatureValue>
+{
+    public void Configure(EntityTypeBuilder<PlanFeatureValue> b)
+    {
+        b.ToTable("PlanFeatureValues");
+        b.Property(x => x.FeatureKey).HasMaxLength(50);
+        b.Property(x => x.Label).HasMaxLength(100);
+        b.Property(x => x.Value).HasMaxLength(50);
+        b.HasOne(x => x.Plan).WithMany().HasForeignKey(x => x.PlanId);
+    }
+}
+
 internal sealed class CountryPricingConfiguration : IEntityTypeConfiguration<CountryPricing>
 {
     public void Configure(EntityTypeBuilder<CountryPricing> b)

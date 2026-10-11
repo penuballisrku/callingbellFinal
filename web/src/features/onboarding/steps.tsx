@@ -145,7 +145,8 @@ function ServicePicker({ data }: { data: WizardData }) {
     staleTime: 10 * 60_000,
   });
   const options = suggestions.data ?? [];
-  const maxServices = data.plans.find((p) => p.code === planCode)?.maxServices ?? 5;
+  const chosenPlan = data.plans.find((p) => p.code === planCode);
+  const maxServices = chosenPlan?.maxServices ?? 5;
   const selected = services.map((s) => s.name.trim()).filter(Boolean);
   const listError = errors.business?.services as { message?: string; root?: { message?: string } } | undefined;
   const error = listError?.message ?? listError?.root?.message;
@@ -197,7 +198,7 @@ function ServicePicker({ data }: { data: WizardData }) {
         <TextField {...params} label="Services" required={!selected.length} error={!!error}
           placeholder={selected.length ? '' : subCategorySlug ? 'Pick services or type your own' : ''}
           helperText={error ?? (!subCategorySlug ? 'Choose a business category first'
-            : options.length ? `Popular in this category first · up to ${maxServices >= 999 ? 'any number' : maxServices} on the free plan · type to add your own`
+            : options.length ? `Popular in this category first · up to ${maxServices >= 999 ? 'any number' : maxServices} on the ${chosenPlan?.name ?? 'chosen'} plan · type to add your own`
               : suggestions.isFetching ? 'Loading services…' : 'Type a service and press Enter to add it')} />
       )} />
   );
@@ -369,7 +370,7 @@ export function OfferStep({ data }: { data: WizardData }) {
         <span className="ml-3 text-xs text-muted">{fields.length} of {maxServices >= 999 ? 'unlimited' : maxServices} on {plan?.name ?? 'this'} plan</span>
       </Section>
 
-      <Section title="Choose your plan" hint="Free forever, or choose a paid plan for more leads and visibility. Paid plans are paid securely online in the next step.">
+      <Section title="Choose your plan" hint="Choose the plan that fits the leads and visibility you need. You pay securely online in the next step.">
         <Controller control={control} name="business.billingCycle" render={({ field }) => (
           <ToggleButtonGroup exclusive size="small" value={field.value} onChange={(_, v) => v && field.onChange(v)} aria-label="Billing cycle">
             <ToggleButton value="Monthly" sx={{ px: 2.5 }}>Monthly</ToggleButton>
@@ -461,7 +462,7 @@ export function PaymentStep({ data, paymentsEnabled, onChangePlan }: { data: Wiz
     <div className="space-y-6">
       {!paymentsEnabled && (
         <div className="rounded-lg border border-warning-line bg-warning-soft px-4 py-3 text-sm text-warning-ink" role="status">
-          Online payment is unavailable right now. Your business will start on the Free plan and you can upgrade from <strong>Plan & billing</strong> later.
+          Online payment is unavailable right now. Your business gets a basic listing, and you can pay for your plan from <strong>Plan & billing</strong> later.
         </div>
       )}
       <Section title="Order summary">
@@ -493,7 +494,7 @@ export function PaymentStep({ data, paymentsEnabled, onChangePlan }: { data: Wiz
         <div>
           <div className="font-semibold">Secure payment with Razorpay</div>
           <p className="mt-0.5 text-muted">Pay by UPI, debit or credit card, net banking or wallet. Calling Bell never sees your card or bank details.
-            If you close the payment window, your business stays on the Free plan and you can pay any time from your dashboard.</p>
+            If you close the payment window, your business keeps a basic listing and you can pay any time from your dashboard.</p>
         </div>
       </div>
     </div>
@@ -653,7 +654,7 @@ export function ReviewStep({ data, media, onEdit, paymentsEnabled }: { data: Wiz
         ['Plan', plan ? `${plan.name} · ${b.billingCycle}` : ''],
       ])}
       {plan && plan.monthlyPrice > 0 && block('Payment', paymentsEnabled ? 'payment' : 'offer', [
-        ['Amount', paymentsEnabled ? <OrderTotal plan={plan} cycle={b.billingCycle} /> : 'Online payment unavailable: you will start on the Free plan'],
+        ['Amount', paymentsEnabled ? <OrderTotal plan={plan} cycle={b.billingCycle} /> : 'Online payment unavailable: pay later from your dashboard'],
         ['GSTIN', v.gstin || 'Not provided'],
         ['Paid via', paymentsEnabled ? 'Razorpay · UPI, cards, net banking or wallets' : '-'],
       ])}

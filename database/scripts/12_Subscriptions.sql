@@ -1,6 +1,7 @@
 /* =====================================================================================
    Calling Bell - 12_Subscriptions.sql
-   Subscription plans (Free, Silver, Gold, Platinum, Enterprise) with badge artwork,
+   Subscription plans: Starter (SILVER) and Growth (GOLD) are offered; Basic (FREE), Platinum and Enterprise are not
+   (IsActive 0: existing subscriptions run until they end). With badge artwork,
    each business's subscription history (including upgrades) and subscription invoices.
    Prices are set for small local businesses (annual = 10 x monthly, two months free).
    Idempotent: MERGE on plan Code / SubscriptionNumber / InvoiceNumber; demo (seed) subscriptions and invoices
@@ -16,28 +17,30 @@ DECLARE @Today date = CAST(SWITCHOFFSET(SYSDATETIMEOFFSET(), '+05:30') AS date);
 
 MERGE dbo.SubscriptionPlans AS t
 USING (VALUES
-    (N'FREE',       N'Free',       N'Get listed and start receiving enquiries',          0.00,      0.00,    5,  5,   5, 0, 0, N'#667085', 0, 1,
-     N'Business profile with contact details' + CHAR(10) + N'Up to 5 services and 5 photos' + CHAR(10) + N'5 lead credits per month' + CHAR(10) + N'Customer reviews and ratings' + CHAR(10) + N'Basic profile analytics'),
-    (N'SILVER',     N'Silver',     N'For growing neighbourhood businesses',             199.00,   1990.00,   30, 15,  15, 0, 0, N'#98A2B3', 0, 2,
-     N'Everything in Free' + CHAR(10) + N'30 lead credits per month' + CHAR(10) + N'Real-time availability status' + CHAR(10) + N'Online booking calendar' + CHAR(10) + N'Call and WhatsApp buttons' + CHAR(10) + N'Monthly performance report'),
-    (N'GOLD',       N'Gold',       N'Stand out in your category',                       499.00,   4990.00,  100, 40,  40, 1, 0, N'#F4A62C', 1, 3,
-     N'Everything in Silver' + CHAR(10) + N'100 lead credits per month' + CHAR(10) + N'Priority verification badge' + CHAR(10) + N'Featured on category pages' + CHAR(10) + N'Video consultations' + CHAR(10) + N'Advanced analytics dashboard'),
-    (N'PLATINUM',   N'Platinum',   N'Maximum visibility across your city',              999.00,   9990.00,  250, 999, 999, 1, 1, N'#0B1220', 0, 4,
-     N'Everything in Gold' + CHAR(10) + N'250 lead credits per month' + CHAR(10) + N'Top placement in search results' + CHAR(10) + N'Quarterly homepage feature' + CHAR(10) + N'Staff management (up to 10)' + CHAR(10) + N'Priority support'),
-    (N'ENTERPRISE', N'Enterprise', N'For hospitals, chains and multi-location brands', 2499.00,  24990.00, 1000, 999, 999, 1, 1, N'#021223', 0, 5,
+    -- Only Starter and Growth are offered. FREE (shown as Basic) is what a business is on until it pays; Platinum and Enterprise
+    -- stay for existing subscribers. The Pricing page comparison table is in 32_PlanComparison.sql.
+    (N'FREE',       N'Basic',      N'Listed until you choose a plan',                    0.00,      0.00,    5,  5,   5, 0, 0, N'#667085', 0, 1, 0,
+     N'Business profile with contact details' + CHAR(10) + N'Up to 5 services and 5 photos' + CHAR(10) + N'Customer reviews and ratings' + CHAR(10) + N'Basic profile analytics'),
+    (N'SILVER',     N'Starter',    N'For growing neighbourhood businesses',             199.00,   1990.00,   30, 15,  15, 0, 0, N'#98A2B3', 0, 2, 1,
+     N'Business profile with a shareable URL' + CHAR(10) + N'Enhanced photos and services (up to 15 each)' + CHAR(10) + N'Limited featured placement' + CHAR(10) + N'Lead notifications' + CHAR(10) + N'Bookings and offers' + CHAR(10) + N'Basic monthly performance report'),
+    (N'GOLD',       N'Growth',     N'Stand out in your category',                       499.00,   4990.00,  100, 40,  40, 1, 0, N'#F4A62C', 1, 3, 1,
+     N'Everything in Starter' + CHAR(10) + N'Enhanced photos and services (up to 40 each)' + CHAR(10) + N'Featured placement' + CHAR(10) + N'Full monthly performance report'),
+    (N'PLATINUM',   N'Platinum',   N'Maximum visibility across your city',              999.00,   9990.00,  250, 999, 999, 1, 1, N'#0B1220', 0, 4, 0,
+     N'Everything in Growth' + CHAR(10) + N'Top placement in search results' + CHAR(10) + N'Quarterly homepage feature' + CHAR(10) + N'Staff management (up to 10)' + CHAR(10) + N'Priority support'),
+    (N'ENTERPRISE', N'Enterprise', N'For hospitals, chains and multi-location brands', 2499.00,  24990.00, 1000, 999, 999, 1, 1, N'#021223', 0, 5, 0,
      N'Everything in Platinum' + CHAR(10) + N'Multi-location management' + CHAR(10) + N'Dedicated account manager' + CHAR(10) + N'API access and custom integrations' + CHAR(10) + N'Unlimited staff accounts' + CHAR(10) + N'SLA-backed support')
-) AS s (Code, Name, Tagline, MonthlyPrice, AnnualPrice, LeadCredits, MaxServices, MaxImages, Featured, Priority, BadgeColor, IsPopular, SortOrder, Features)
+) AS s (Code, Name, Tagline, MonthlyPrice, AnnualPrice, LeadCredits, MaxServices, MaxImages, Featured, Priority, BadgeColor, IsPopular, SortOrder, IsActive, Features)
 ON t.Code = s.Code
-WHEN MATCHED AND (t.Name <> s.Name OR ISNULL(t.Tagline, N'') <> s.Tagline OR t.MonthlyPrice <> s.MonthlyPrice OR t.AnnualPrice <> s.AnnualPrice OR t.Features <> s.Features OR t.IsPopular <> s.IsPopular)
+WHEN MATCHED AND (t.Name <> s.Name OR ISNULL(t.Tagline, N'') <> s.Tagline OR t.MonthlyPrice <> s.MonthlyPrice OR t.AnnualPrice <> s.AnnualPrice OR t.Features <> s.Features OR t.IsPopular <> s.IsPopular OR t.IsActive <> s.IsActive)
     THEN UPDATE SET Name = s.Name, Tagline = s.Tagline, MonthlyPrice = s.MonthlyPrice, AnnualPrice = s.AnnualPrice, LeadCredits = s.LeadCredits,
                     MaxServices = s.MaxServices, MaxImages = s.MaxImages, IncludesFeaturedListing = s.Featured, IncludesPrioritySupport = s.Priority,
-                    BadgeColor = s.BadgeColor, IsPopular = s.IsPopular, SortOrder = s.SortOrder, Features = s.Features,
+                    BadgeColor = s.BadgeColor, IsPopular = s.IsPopular, SortOrder = s.SortOrder, IsActive = s.IsActive, Features = s.Features,
                     ModifiedBy = N'seed', ModifiedOn = SYSDATETIMEOFFSET()
 WHEN NOT MATCHED BY TARGET
     THEN INSERT (Code, Name, Tagline, MonthlyPrice, AnnualPrice, LeadCredits, MaxServices, MaxImages, IncludesFeaturedListing, IncludesPrioritySupport,
                  Features, BadgeColor, IsPopular, SortOrder, IsActive, CreatedBy, CreatedOn)
          VALUES (s.Code, s.Name, s.Tagline, s.MonthlyPrice, s.AnnualPrice, s.LeadCredits, s.MaxServices, s.MaxImages, s.Featured, s.Priority,
-                 s.Features, s.BadgeColor, s.IsPopular, s.SortOrder, 1, N'seed', DATEADD(DAY, -540, SYSDATETIMEOFFSET()));
+                 s.Features, s.BadgeColor, s.IsPopular, s.SortOrder, s.IsActive, N'seed', DATEADD(DAY, -540, SYSDATETIMEOFFSET()));
 
 /* ---------- Plan badge artwork ---------- */
 MERGE dbo.Media AS t

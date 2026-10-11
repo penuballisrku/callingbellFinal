@@ -6,6 +6,7 @@ import VideocamOutlined from '@mui/icons-material/VideocamOutlined';
 import EventAvailableOutlined from '@mui/icons-material/EventAvailableOutlined';
 import { AvailabilityBadge, CallingBellBadge, Img, Rating, VerifiedMark } from './ui';
 import { money } from '@/lib/format';
+import { fullAddress, nearLandmark } from '@/lib/address';
 import type { BusinessCard as Card } from '@/lib/types';
 import { prefetchBusiness } from '@/lib/queryCache';
 
@@ -39,7 +40,8 @@ export function BusinessCard({ b, layout = 'grid', onOpen, onSelect }: { b: Card
           <h3 className="truncate text-[15px] font-semibold group-hover:underline">{b.name}</h3>
           {b.isVerified && <VerifiedMark />}
         </div>
-        <p className="mt-0.5 truncate text-[13px] text-muted">{b.subCategoryName ?? b.categoryName} · {b.area ? `${b.area}, ` : ''}{b.city}</p>
+        <p className="mt-0.5 truncate text-[13px] text-muted">{b.subCategoryName ?? b.categoryName}</p>
+        <CardAddress b={b} className="mt-1 text-[13px]" />
         <div className="mt-2.5 flex items-center justify-between gap-2">
           <Rating value={b.averageRating} count={b.reviewCount} />
           <AvailabilityBadge status={b.availabilityStatus} lastSeenOn={b.lastSeenOn} compact />
@@ -67,10 +69,8 @@ function BusinessCompact({ b, onOpen }: { b: Card; onOpen?: () => void }) {
           <Rating value={b.averageRating} count={b.reviewCount} />
           <AvailabilityBadge status={b.availabilityStatus} lastSeenOn={b.lastSeenOn} compact />
         </div>
-        <p className="mt-1 truncate text-xs text-muted">
-          {b.area ? `${b.area}, ` : ''}{b.city}{b.distanceKm != null && ` · ${b.distanceKm.toFixed(1)} km`}
-          {b.startingPrice ? ` · From ${money(b.startingPrice)}` : ''}
-        </p>
+        <CardAddress b={b} className="mt-1 text-xs" />
+        {b.startingPrice ? <p className="mt-0.5 text-xs text-muted">From {money(b.startingPrice)}</p> : null}
       </div>
     </Link>
   );
@@ -91,9 +91,9 @@ function BusinessRow({ b, onSelect }: { b: Card; onSelect?: (b: Card) => void })
         {b.tagline && <p className="truncate text-sm text-muted">{b.tagline}</p>}
         <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
           <Rating value={b.averageRating} count={b.reviewCount} />
-          <span className="inline-flex items-center gap-0.5 text-muted"><PlaceRounded sx={{ fontSize: 16 }} />{b.area ? `${b.area}, ` : ''}{b.city}{b.distanceKm != null && ` · ${b.distanceKm.toFixed(1)} km`}</span>
           <AvailabilityBadge status={b.availabilityStatus} lastSeenOn={b.lastSeenOn} compact />
         </div>
+        <CardAddress b={b} className="mt-1.5 text-[13px]" />
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
           <span className="rounded-md border border-line px-2 py-0.5">{b.subCategoryName ?? b.categoryName}</span>
           {b.offersHomeService && <span className="inline-flex items-center gap-1"><HomeWorkOutlined sx={{ fontSize: 15 }} />Home visits</span>}
@@ -110,8 +110,23 @@ function BusinessRow({ b, onSelect }: { b: Card; onSelect?: (b: Card) => void })
   );
 }
 
+/** The full address (street, area, city, pincode), the landmark and the distance, wrapping onto more lines when needed. */
+function CardAddress({ b, className }: { b: Card; className?: string }) {
+  const near = nearLandmark(b.landmark);
+  return (
+    <address className={`flex items-start gap-1 not-italic text-muted ${className ?? ''}`}>
+      <PlaceRounded sx={{ fontSize: 15, mt: '2px', flexShrink: 0 }} aria-hidden />
+      <span className="min-w-0">
+        {fullAddress(b)}
+        {near && <span className="text-faint"> · {near}</span>}
+        {b.distanceKm != null && <span className="whitespace-nowrap"> · {b.distanceKm.toFixed(1)} km</span>}
+      </span>
+    </address>
+  );
+}
+
 export function BusinessCardSkeleton({ layout = 'grid' }: { layout?: 'grid' | 'row' }) {
-  if (layout === 'row') return <Skeleton variant="rounded" height={124} />;
+  if (layout === 'row') return <Skeleton variant="rounded" height={156} />;
   return (
     <div className="card overflow-hidden">
       <Skeleton variant="rectangular" sx={{ aspectRatio: '16/7', height: 'auto' }} />

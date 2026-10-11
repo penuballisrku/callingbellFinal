@@ -82,7 +82,7 @@ export default function ListBusinessPage() {
         <Videos items={section('Video')} />
         <NumberedSteps items={section('Step')} id="steps-h" title="How it works" subtitle="Go from sign-up to your first customer enquiry in four simple steps." />
         <Testimonials items={section('Testimonial')} />
-        <PlansTeaser plans={plans.data} loading={plans.isLoading} />
+        <PlansTeaser plans={plans.data} loading={plans.isPending} />
         <Roadmap items={section('Roadmap')} />
         <FaqList items={section('Faq')} subtitle="Everything you need to know before you list your business." />
         {cta && <ClosingCta block={cta} />}
@@ -121,7 +121,7 @@ function Hero({ block, stats }: { block: ContentBlock; stats: MarketingPage['sta
             </Button>
           </div>
           <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-on-navy-muted">
-            <li className="inline-flex items-center gap-1.5"><CheckCircleRounded sx={{ fontSize: 18 }} className="text-accent" />Free plan, no time limit</li>
+            <li className="inline-flex items-center gap-1.5"><CheckCircleRounded sx={{ fontSize: 18 }} className="text-accent" />Monthly or yearly plans</li>
             <li className="inline-flex items-center gap-1.5"><CheckCircleRounded sx={{ fontSize: 18 }} className="text-accent" />{number(stats.verifiedBusinesses)} verified businesses</li>
             <li className="inline-flex items-center gap-1.5"><CheckCircleRounded sx={{ fontSize: 18 }} className="text-accent" />Live in {number(stats.cities)} cities</li>
           </ul>
@@ -369,17 +369,16 @@ function PlansTeaser({ plans, loading }: { plans?: Plan[]; loading: boolean }) {
   if (!loading && !plans?.length) return null;
   return (
     <section aria-labelledby="plans-h">
-      <SectionHeader title="Plans that grow with you" subtitle={`Start free and upgrade only when you need more leads and visibility.${plans?.[0]?.taxRate ? ` Prices exclude ${Number((plans[0].taxRate * 100).toFixed(2))}% ${plans[0].taxName ?? 'tax'}.` : ''}`}
+      <SectionHeader title="Plans that grow with you" subtitle={`Pick the plan that fits, and change it any time as you grow.${plans?.[0]?.taxRate ? ` Prices exclude ${Number((plans[0].taxRate * 100).toFixed(2))}% ${plans[0].taxName ?? 'tax'}.` : ''}`}
         action={<Link to="/pricing" className="hidden items-center gap-1 text-sm font-semibold sm:inline-flex">Compare all features <ArrowForwardRounded sx={{ fontSize: 18 }} /></Link>} />
       <h2 id="plans-h" className="sr-only">Plans</h2>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
-        {loading ? Array.from({ length: 5 }, (_, i) => <Skeleton key={i} variant="rounded" height={150} />) : plans!.map((p) => (
+      <div className={`grid gap-3 ${(plans?.length ?? 2) <= 2 ? 'max-w-3xl sm:grid-cols-2' : 'grid-cols-2 md:grid-cols-3 lg:grid-cols-5'}`}>
+        {loading ? Array.from({ length: 2 }, (_, i) => <Skeleton key={i} variant="rounded" height={150} />) : plans!.map((p) => (
           <Link key={p.code} to="/pricing" className={`card relative flex flex-col p-4 ${p.isPopular ? '!border-accent' : ''}`}>
             {p.isPopular && <span className="absolute -top-2.5 left-4 rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold text-on-accent">Most popular</span>}
             <span className="font-semibold">{p.name}</span>
             <span className="mt-2 text-xl font-bold tracking-tight">{p.monthlyPrice === 0 ? 'Free' : moneyExact(p.monthlyPrice, p)}
               {p.monthlyPrice > 0 && <span className="text-xs font-normal text-muted"> /month</span>}</span>
-            <span className="mt-1 text-xs text-muted">{number(p.leadCredits)} lead credits a month</span>
             {p.tagline && <span className="mt-2 line-clamp-2 text-xs text-ink-2">{p.tagline}</span>}
           </Link>
         ))}

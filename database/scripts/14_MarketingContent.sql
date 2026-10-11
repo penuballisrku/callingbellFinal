@@ -30,7 +30,7 @@ INSERT INTO #Mc (Code, SectionKey, SortOrder, Eyebrow, Title, Subtitle, Body, Ic
  N'Put your business on {country''s} real-time local network',
  N'Customers nearby can see when you''re available, message or call you instantly, request a quote and book in minutes. You get the leads, bookings and insights to grow.',
  NULL, NULL, N'Lit OPEN sign in a shop window', NULL,
- N'Photo: Aaron Pruzaniec, CC BY 2.0, via Wikimedia Commons', N'https://commons.wikimedia.org/wiki/File:Neon_Open_Sign.jpg', N'List your business free', N'/register?type=business', NULL),
+ N'Photo: Aaron Pruzaniec, CC BY 2.0, via Wikimedia Commons', N'https://commons.wikimedia.org/wiki/File:Neon_Open_Sign.jpg', N'List your business', N'/register?type=business', NULL),
 
 /* ---------- Company overview ---------- */
 (N'LYB-OVERVIEW', N'Overview', 1, N'About Calling Bell',
@@ -57,26 +57,26 @@ INSERT INTO #Mc (Code, SectionKey, SortOrder, Eyebrow, Title, Subtitle, Body, Ic
  N'Every enquiry, callback request and quotation request lands in one inbox with the customer''s need, budget and preferred date.', NULL, N'inbox', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 (N'LYB-OFF-REVIEWS', N'Offering', 3, N'All plans', N'Reviews & reputation',
  N'Collect ratings from real customers, reply publicly and report abuse. Moderation keeps every review genuine.', NULL, N'star', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-(N'LYB-OFF-AVAILABILITY', N'Offering', 4, N'Silver and above', N'Real-time availability',
+(N'LYB-OFF-AVAILABILITY', N'Offering', 4, N'Starter and Growth', N'Real-time availability',
  N'Show customers when you''re online, busy or available for a call, chat, video consultation or booking. "Available now" searches surface you first.', NULL, N'bolt', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-(N'LYB-OFF-BOOKINGS', N'Offering', 5, N'Silver and above', N'Online booking calendar',
+(N'LYB-OFF-BOOKINGS', N'Offering', 5, N'Starter and Growth', N'Online booking calendar',
  N'Accept instant bookings, reschedule or cancel in a click, and send automatic reminders so customers turn up on time.', NULL, N'calendar', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-(N'LYB-OFF-CHAT', N'Offering', 6, N'Silver and above', N'Chat, call & WhatsApp',
+(N'LYB-OFF-CHAT', N'Offering', 6, N'Starter and Growth', N'Chat, call & WhatsApp',
  N'Customers reach you with one tap. Chat with file and image sharing, read receipts and instant notifications.', NULL, N'chat', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-(N'LYB-OFF-VIDEO', N'Offering', 7, N'Gold and above', N'Video consultations',
+(N'LYB-OFF-VIDEO', N'Offering', 7, N'Growth plan', N'Video consultations',
  N'Consult, advise or quote remotely. Ideal for doctors, lawyers, tutors, designers and consultants.', NULL, N'videocam', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-(N'LYB-OFF-ADS', N'Offering', 8, N'Gold and above', N'Featured listings & advertising',
+(N'LYB-OFF-ADS', N'Offering', 8, N'Limited on Starter, full on Growth', N'Featured listings & advertising',
  N'Reach more customers with featured placement on category pages, sponsored search results and homepage banners.', NULL, N'campaign', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-(N'LYB-OFF-ANALYTICS', N'Offering', 9, N'Advanced on Gold', N'Analytics dashboard',
+(N'LYB-OFF-ANALYTICS', N'Offering', 9, N'Full report on Growth', N'Analytics dashboard',
  N'Profile views, lead count, bookings, revenue and conversion rate, with trends that show where your growth comes from.', NULL, N'analytics', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-(N'LYB-OFF-STAFF', N'Offering', 10, N'Platinum and above', N'Staff & multi-location',
+(N'LYB-OFF-STAFF', N'Offering', 10, N'Ask our team', N'Staff & multi-location',
  N'Assign bookings to team members, manage their schedules and run multiple branches from a single account.', NULL, N'groups', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 
 /* ---------- Unique selling points ---------- */
 (N'LYB-USP-REALTIME', N'Highlight', 1, N'Our difference', N'The real-time availability network',
  N'Customers see who is free right now, not just who exists. Being available becomes your competitive advantage.', NULL, N'bolt', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-(N'LYB-USP-FREE', N'Highlight', 2, NULL, N'Free to start, pay only to grow',
- N'List free with no time limit. Upgrade to Silver, Gold, Platinum or Enterprise when you want more leads and better placement.', NULL, N'wallet', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+(N'LYB-USP-FREE', N'Highlight', 2, NULL, N'Pay only for the plan you need',
+ N'Choose Starter or Growth for the leads and placement you need. Change your plan any time from your dashboard.', NULL, N'wallet', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 (N'LYB-USP-ALERTS', N'Highlight', 3, NULL, N'Instant lead alerts',
  N'Get notified the moment a customer enquires or books, so you can respond in minutes and win the job.', NULL, N'notifications', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 (N'LYB-USP-TRUST', N'Highlight', 4, NULL, N'A verified, trusted marketplace',
@@ -115,7 +115,7 @@ INSERT INTO #Mc (Code, SectionKey, SortOrder, Eyebrow, Title, Subtitle, Body, Ic
  N'Video: Mixkit', N'https://mixkit.co/free-stock-video/woman-doing-accounts-on-a-calculator-4533/', NULL, NULL, NULL),
 
 /* ---------- How it works ---------- */
-(N'LYB-STEP-1', N'Step', 1, NULL, N'Create your free account',
+(N'LYB-STEP-1', N'Step', 1, NULL, N'Create your account',
  N'Sign up with your mobile number, email or Google in about two minutes.', NULL, N'person_add', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 (N'LYB-STEP-2', N'Step', 2, NULL, N'Build your profile',
  N'Add services, prices, photos, working hours and service areas, then upload documents for verification.', NULL, N'storefront', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
@@ -135,7 +135,7 @@ INSERT INTO #Mc (Code, SectionKey, SortOrder, Eyebrow, Title, Subtitle, Body, Ic
  N'Quotation requests arrive with the customer''s budget and timeline already filled in, so our site visits go to serious projects.',
  NULL, NULL, NULL, NULL, NULL, NULL, NULL, N'anandam-interiors'),
 (N'LYB-TST-GLOWGRACE', N'Testimonial', 4, NULL, N'Swathi Kandukuri', N'Owner',
- N'We started on the free plan just to try it. The profile, reviews and booking requests brought us new regular clients within the first month.',
+ N'We started on Starter just to try it. The profile, reviews and booking requests brought us new regular clients within the first month.',
  NULL, NULL, NULL, NULL, NULL, NULL, NULL, N'glow-and-grace-salon'),
 
 /* ---------- Roadmap (from the business plan) ---------- */
@@ -149,14 +149,14 @@ INSERT INTO #Mc (Code, SectionKey, SortOrder, Eyebrow, Title, Subtitle, Body, Ic
  N'Android and iOS apps, multi-country support and enterprise programmes.', NULL, N'planned', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 
 /* ---------- FAQs (Title = question, Body = answer) ---------- */
-(N'LYB-FAQ-FREE', N'Faq', 1, NULL, N'Is it really free to list my business?', NULL,
- N'Yes. The Free plan includes a business profile with contact details, up to 5 services and 5 photos, 5 lead credits a month, customer reviews and basic analytics, with no time limit. Paid plans add more lead credits, real-time availability, online bookings, featured placement and advanced analytics.',
+(N'LYB-FAQ-FREE', N'Faq', 1, NULL, N'How much does it cost to list my business?', NULL,
+ N'There are two plans, billed monthly or yearly (two months free on yearly). Starter gives you a business profile with a shareable URL, enhanced photos and services, limited featured placement, lead notifications, bookings and offers and a basic monthly report. Growth adds full featured placement and the full monthly performance report. See Pricing for prices in your currency.',
  NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 (N'LYB-FAQ-FIND', N'Faq', 2, NULL, N'How will customers find my business?', NULL,
  N'Customers search by category, service, city, area and availability, for example "electricians near me" or "salons open now". Your rating, distance, responsiveness and plan all affect where you appear, and featured or sponsored placements put you in front of even more customers.',
  NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 (N'LYB-FAQ-LEADS', N'Faq', 3, NULL, N'What is a lead credit?', NULL,
- N'A lead credit is used when you receive a customer''s enquiry, quotation or callback request with their contact details. Each plan includes a monthly allowance, from 5 on Free to 1,000 on Enterprise.',
+ N'A lead credit is used when you receive a customer''s enquiry, quotation or callback request with their contact details. Each plan includes a monthly allowance, 30 on Starter and 100 on Growth.',
  NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 (N'LYB-FAQ-VERIFY', N'Faq', 4, NULL, N'How does verification work?', NULL,
  N'Upload your business documents from the business dashboard. Our team reviews them, and once they are approved a Verified badge appears on your profile and in search results.',
@@ -170,11 +170,14 @@ INSERT INTO #Mc (Code, SectionKey, SortOrder, Eyebrow, Title, Subtitle, Body, Ic
 
 /* ---------- Closing call to action ---------- */
 (N'LYB-CTA', N'Cta', 1, NULL, N'Ready to grow with Calling Bell?',
- N'Create your free business profile today. It takes a few minutes, and customers in your city are searching right now.',
- NULL, NULL, NULL, NULL, NULL, NULL, N'List your business free', N'/register?type=business', NULL);
+ N'Create your business profile today. It takes a few minutes, and customers in your city are searching right now.',
+ NULL, NULL, NULL, NULL, NULL, NULL, N'List your business', N'/register?type=business', NULL);
 
 IF EXISTS (SELECT 1 FROM #Mc s WHERE s.BusinessSlug IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dbo.Businesses b WHERE b.Slug = s.BusinessSlug))
     THROW 50014, 'A testimonial references a business slug that does not exist. Run 04_Businesses.sql first.', 1;
+
+-- Plans no longer advertise a monthly lead-credit allowance, so its FAQ is hidden.
+UPDATE #Mc SET IsActive = 0 WHERE Code = N'LYB-FAQ-LEADS';
 
 MERGE dbo.MarketingContent AS t
 USING (
