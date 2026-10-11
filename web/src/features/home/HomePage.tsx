@@ -39,6 +39,7 @@ import { VoiceSearchButton } from '@/components/VoiceSearch';
 import { useAssistant } from '@/features/assistant/store';
 import { PlaceholderTicker } from '@/components/PlaceholderTicker';
 import { ReviewsSection } from './ReviewsSection';
+import { InstallAppButton } from '@/components/InstallApp';
 
 /** Orders featured sub-categories round-robin by parent category, so every category is represented before any repeats. */
 function interleaveByCategory(subs: SubCategory[]): SubCategory[] {
@@ -666,7 +667,9 @@ function AppDownload({ data }: { data?: HomeData }) {
             <li key={t} className="flex items-start gap-2"><CheckCircleRounded sx={{ fontSize: 18 }} className="mt-px shrink-0 text-success" />{t}</li>
           ))}
         </ul>
-        <div className="mt-6 flex flex-wrap gap-3">
+        {/* Installable now from the browser; the store apps are on their way. */}
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <InstallAppButton variant="button" />
           {['Get it on Google Play', 'Download on the App Store'].map((s) => (
             <span key={s} className="rounded-lg bg-inverse px-4 py-2.5 text-sm font-semibold text-on-inverse">{s}</span>
           ))}

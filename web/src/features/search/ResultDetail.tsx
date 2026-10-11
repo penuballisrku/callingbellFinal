@@ -20,6 +20,7 @@ import type { BusinessDetail, ExternalPlace, PlaceDetails } from '@/lib/types';
 import { AvailabilityBadge, CallingBellBadge, ErrorState, Img, Rating } from '@/components/ui';
 import { ClaimBusinessBanner } from './ExternalResults';
 import { coordinates, ExternalLink, Field, PhotoCredit, prettyUrl, Section, SocialLinks } from '@/features/places/PlaceParts';
+import { GoogleMapsAttribution, GoogleMapsDataCredit } from '@/components/GoogleMapsAttribution';
 
 /** The search result whose details are shown: a Calling Bell business (by slug) or a Google Maps / AI recommended place. */
 export type SelectedResult =
@@ -43,7 +44,7 @@ export function ResultDetailDrawer({ selected, onClose }: { selected: SelectedRe
             <div className="min-w-0 flex-1">
               <h2 className="truncate text-base font-semibold">{title}</h2>
               <p className="truncate text-xs text-muted">
-                {selected.kind === 'business' ? 'Registered on Calling Bell' : selected.source === 'google' ? 'From Google Maps · not on Calling Bell' : 'AI recommended · not on Calling Bell'}
+                {selected.kind === 'business' ? 'Registered on Calling Bell' : selected.source === 'google' ? <>From <GoogleMapsAttribution /> · not on Calling Bell</> : 'AI recommended · not on Calling Bell'}
               </p>
             </div>
             <Tooltip title="Close"><IconButton onClick={onClose} aria-label="Close details" edge="end"><CloseRounded /></IconButton></Tooltip>
@@ -306,6 +307,7 @@ function PlaceDetailView({ source, place }: { source: 'google' | 'ai'; place: Ex
         </Section>
         <ClaimBusinessBanner place={{ name: d.name, phone: d.phone ?? d.mobile, website: d.website, address: d.address, sourceId: `${d.source}:${d.sourceId}` }} />
         <p className="text-xs text-muted">This business hasn't joined Calling Bell. Please confirm details with the business before you visit or pay.</p>
+        {d.dataSources.includes('Google Maps') && <GoogleMapsDataCredit className="-mt-3 text-xs text-muted" />}
       </div>
     </div>
   );

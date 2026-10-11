@@ -250,3 +250,21 @@
 .notistack-MuiContent-error { background: #b42318 !important; }
 .notistack-MuiContent-warning { background: #b54708 !important; }
 .notistack-MuiContent-info { background: #175cd3 !important; }
+
+/*
+ * Google's required attribution for Places data shown without a Google map (Places API policies): the text "Google Maps", never
+ * changed, wrapped or translated, in Roboto (or a sans-serif fallback) at weight 400, 12-16px, grey #5E5E5E (light) or white (dark).
+ * Unlayered and !important so no surrounding text style (uppercase labels, bold headings, Inter) can alter it.
+ */
+.google-maps-attribution {
+  font-family: Roboto, Arial, sans-serif !important;
+  font-weight: 400 !important;
+  font-size: 12px !important;
+  font-style: normal !important;
+  line-height: 1.25 !important;
+  letter-spacing: normal !important;
+  text-transform: none !important;
+  white-space: nowrap !important;
+  color: #5e5e5e !important;
+}
+:root[data-theme='dark'] .google-maps-attribution { color: #ffffff !important; }

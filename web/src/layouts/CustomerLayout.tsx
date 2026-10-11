@@ -13,6 +13,7 @@ import { SeoHead } from '@/features/seo/seo';
 import { MessagesButton } from '@/features/chat/Chat';
 import { AskAiButton, SearchAssistant } from '@/features/assistant/SearchAssistant';
 import { useAssistant } from '@/features/assistant/store';
+import { InstallAppButton, InstallPrompt } from '@/components/InstallApp';
 
 const nav = [
   { to: '/categories', label: 'Categories' },
@@ -79,6 +80,7 @@ export default function CustomerLayout() {
             className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left font-medium hover:bg-subtle">
             <AutoAwesomeRounded className="text-accent-ink" sx={{ fontSize: 20 }} /> Ask the AI assistant
           </button>
+          <InstallAppButton onStart={() => setOpen(false)} />
         </nav>
         {!user && <div className="mt-6 flex flex-col gap-2">
           <Button component={Link} to="/register" variant="contained" size="large">Join free</Button>
@@ -87,6 +89,7 @@ export default function CustomerLayout() {
       </Drawer>
       <SeoHead />
       <SearchAssistant />
+      <InstallPrompt />
 
       {/* At least a screen tall, so the footer starts below the fold and content arriving doesn't move it in view (no layout shift). */}
       <main className="min-h-[calc(100svh-72px)] flex-1"><Outlet /></main>

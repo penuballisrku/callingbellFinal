@@ -15,6 +15,7 @@ import { useCity } from '@/stores/city';
 import { CompactPlace, useExternalSearch } from '@/features/search/ExternalResults';
 import { useAssistant, type AssistantRequest, type Turn } from './store';
 import { VoiceSearchButton } from '@/components/VoiceSearch';
+import { GoogleMapsDataCredit } from '@/components/GoogleMapsAttribution';
 
 /** While the local AI is still interpreting a request, the answer is refreshed this often, this many times. */
 const POLL_MS = 5000;
@@ -188,7 +189,8 @@ function NearbyPlaces({ filters, need, listed, onClose }: { filters: AssistantFi
   const places = [...google, ...osm].slice(0, need);
   const available = google.length + osm.length;
   const stillSearching = google.length < need && (!!data?.ai.searching || data?.ai.aiStatus === 'pending');
-  const sources = [google.length > 0 && 'Google Maps', places.some((x) => x.source === 'ai') && 'OpenStreetMap'].filter(Boolean).join(' and ');
+  const fromGoogle = google.length > 0;
+  const fromOsm = places.some((x) => x.source === 'ai');
 
   // Below Calling Bell's own results, nothing is shown when the map has nothing to add.
   if (listed > 0 && !isLoading && places.length === 0 && !stillSearching) return null;
@@ -214,9 +216,10 @@ function NearbyPlaces({ filters, need, listed, onClose }: { filters: AssistantFi
               </li>
             ))}
           </ul>
-          <p className="text-[11px] text-faint">
-            Not listed on Calling Bell. Details from {sources}
-            {sources.includes('OpenStreetMap') && <> (© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline">OpenStreetMap contributors</a>)</>}.
+          <p className="flex flex-wrap items-center gap-x-1 text-[11px] text-faint">
+            <span>Not listed on Calling Bell.</span>
+            {fromGoogle && <GoogleMapsDataCredit />}
+            {fromOsm && <span>Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline">OpenStreetMap contributors</a></span>}
           </p>
         </>
       )}

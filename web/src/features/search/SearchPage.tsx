@@ -19,7 +19,7 @@ import { useCity } from '@/stores/city';
 import { SearchSuggest } from '@/components/SearchSuggest';
 import { VoiceSearchButton } from '@/components/VoiceSearch';
 import { PlaceholderTicker } from '@/components/PlaceholderTicker';
-import { ExternalResults, type ResultSource, sourcePanelId, sourceTabId, SourceTabs, useExternalSearch } from './ExternalResults';
+import { ExternalResults, useExternalSearch } from './ExternalResults';
 import { ResultDetailDrawer, type SelectedResult } from './ResultDetail';
 import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import VerifiedRounded from '@mui/icons-material/VerifiedRounded';
@@ -188,19 +188,8 @@ export default function SearchPage() {
     ? { q: query.q, category: query.category, sub: query.sub, place }
     : parsePending ? {}
     : { q: query.q, category: query.category, sub: query.sub, city: query.city, areaId: query.areaId });
+  // One list in priority order: Calling Bell businesses, then Google Maps, then AI recommended (each source leaves out places above it).
   const searchesExternal = !!(query.q?.trim() || query.category || query.sub);
-  // Results tab (?tab=google|ai). Without a choice: Calling Bell first, or Google Maps (else AI) when there are no registered businesses.
-  const tabParam = params.get('tab');
-  const dbEmpty = !!place || (!!data && data.pagination.totalCount === 0);
-  const googleUsable = external.data ? !['off', 'skipped'].includes(external.data.google.status) : true;
-  const tab: ResultSource = !searchesExternal ? 'db'
-    : tabParam === 'google' || tabParam === 'ai' || tabParam === 'db' ? tabParam
-      : dbEmpty ? (googleUsable ? 'google' : 'ai') : 'db';
-  const setTab = (next: ResultSource) => {
-    const p = new URLSearchParams(params);
-    p.set('tab', next);
-    setParams(p, { replace: true });
-  };
   const { data: categoryTree } = useCategories();
   // Rotating "e.g. …" placeholder: categories alternating with the most-listed sub-categories, from the catalogue.
   const tickerNames = useMemo(() => {
@@ -265,9 +254,9 @@ export default function SearchPage() {
   ].filter(Boolean) as { key: string; label: string }[];
 
   const filters = <Filters params={params} update={update} />;
-  const filtersNote = tab !== 'db' && (
+  const filtersNote = searchesExternal && (
     <p className="mb-3 flex items-start gap-1.5 rounded-lg bg-subtle px-3 py-2 text-xs text-muted">
-      <InfoOutlined sx={{ fontSize: 14, mt: '1px' }} />Category and location apply to every tab; the other filters apply to Calling Bell businesses.
+      <InfoOutlined sx={{ fontSize: 14, mt: '1px' }} />Category and location apply to all results; the other filters apply to Calling Bell businesses.
     </p>
   );
 
@@ -297,7 +286,7 @@ export default function SearchPage() {
             <div className="flex gap-2">
               <Button className="lg:!hidden" variant="outlined" startIcon={<TuneRounded />} onClick={() => setDrawer(true)}>Filters{activeChips.length ? ` (${activeChips.length})` : ''}</Button>
               {/* Sorting applies to Calling Bell results; Google Maps and AI results are listed nearest first. */}
-              {tab === 'db' && (
+              {!place && (
                 <TextField select size="small" value={query.sort} onChange={(e) => update({ sort: e.target.value === 'relevance' ? null : e.target.value })}
                   sx={{ minWidth: 170 }} slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Sort by' } }}>
                   {sorts.map((s) => <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>)}
@@ -313,20 +302,7 @@ export default function SearchPage() {
             </div>
           )}
 
-          {searchesExternal && (
-            <SourceTabs value={tab} onChange={setTab} dbCount={place ? 0 : data?.pagination.totalCount} dbLoading={!place && (isLoading || parsePending)}
-              ext={external.data} loading={external.isLoading} />
-          )}
-
-          {tab !== 'db' ? (
-            <div role="tabpanel" id={sourcePanelId(tab)} aria-labelledby={sourceTabId(tab)}>
-              <ExternalResults only={tab} ext={external.data} loading={external.isLoading} isError={external.isError}
-                polling={external.polling} onRefresh={() => void external.refetch()}
-                moreGoogle={external.moreGoogle} loadingMoreGoogle={external.loadingMoreGoogle}
-                onSelect={(place, source) => setSelected({ kind: 'place', source, place })} />
-            </div>
-          ) : (
-          <div role={searchesExternal ? 'tabpanel' : undefined} id={sourcePanelId('db')} aria-labelledby={searchesExternal ? sourceTabId('db') : undefined}>
+          <div>
           {banner && query.page === 1 && (
             <Link to={banner.linkUrl ?? '/search'} className="card mb-4 flex items-center gap-4 overflow-hidden p-0 hover:border-line-strong">
               <Img src={banner.mobileImageUrl ?? banner.imageUrl} alt={banner.altText ?? ''} className="h-20 w-20 shrink-0 sm:h-24 sm:w-24" rounded="rounded-none" />
@@ -350,11 +326,7 @@ export default function SearchPage() {
                   <InfoOutlined fontSize="small" className="mt-0.5 shrink-0 text-accent-ink" />
                   <div className="min-w-0 flex-1">
                     <p className="font-medium text-ink">No registered businesses found in our database for {applied?.areaName ?? applied?.cityName ?? 'this area'}.</p>
-                    <p className="mt-0.5 text-muted">See what Google Maps and our AI assistant found nearby. Filters such as rating and availability apply to registered businesses only.</p>
-                  </div>
-                  <div className="flex shrink-0 flex-wrap gap-2">
-                    <Button size="small" variant="contained" onClick={() => setTab('google')}>Google Maps</Button>
-                    <Button size="small" variant="outlined" onClick={() => setTab('ai')}>AI recommended</Button>
+                    <p className="mt-0.5 text-muted">Businesses found on Google Maps and recommended by our AI are listed below. Filters such as rating and availability apply to registered businesses only.</p>
                   </div>
                 </div>
               ) : data!.data.length === 0 ? (
@@ -392,6 +364,17 @@ export default function SearchPage() {
             </div>
           )}
           </div>
+
+          {/* Then places beyond the platform: Google Maps, then AI recommended. */}
+          {searchesExternal && (
+            <div className="mt-10 space-y-10">
+              {(['google', 'ai'] as const).map((source) => (
+                <ExternalResults key={source} only={source} ext={external.data} loading={external.isLoading} isError={external.isError}
+                  polling={external.polling} onRefresh={() => void external.refetch()}
+                  moreGoogle={external.moreGoogle} loadingMoreGoogle={external.loadingMoreGoogle}
+                  onSelect={(place, src) => setSelected({ kind: 'place', source: src, place })} />
+              ))}
+            </div>
           )}
         </div>
       </div>

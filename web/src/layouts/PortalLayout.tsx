@@ -6,6 +6,7 @@ import { useNotificationStream } from '@/lib/realtime';
 import { Logo, NotificationBell, ThemeMenu, UserMenu } from './Shared';
 import { MessagesButton } from '@/features/chat/Chat';
 import { CountryCode } from '@/components/VisitorCountry';
+import { InstallPrompt } from '@/components/InstallApp';
 
 export interface PortalNavItem {
   to: string; label: string; icon: ReactNode; end?: boolean; badge?: number;
@@ -78,6 +79,7 @@ export function PortalLayout({ title, nav, headerExtra, footer }: { title: strin
         </header>
         <main className="mx-auto w-full min-w-0 max-w-[1600px] flex-1 px-4 py-6 md:px-8 md:py-8"><Outlet /></main>
       </div>
+      <InstallPrompt />
     </div>
   );
 }

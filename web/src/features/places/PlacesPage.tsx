@@ -32,6 +32,7 @@ import { PlaceActions } from './PlaceParts';
 import { countryName, useBrowsingCountryCode, useVisitorCountry } from '@/components/VisitorCountry';
 import { ResultDetailDrawer } from '@/features/search/ResultDetail';
 import { VoiceSearchButton } from '@/components/VoiceSearch';
+import { GoogleMapsDataCredit } from '@/components/GoogleMapsAttribution';
 
 interface Coords { lat: number; lon: number }
 
@@ -218,8 +219,8 @@ export default function PlacesPage() {
               <h1 className="text-[26px] font-bold leading-tight tracking-[-0.02em] md:text-[32px]">Explore businesses near you</h1>
               <p className="mt-1.5 max-w-2xl text-[15px] text-muted">Photos, ratings and directions for local businesses and services, from Google Maps.</p>
             </div>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-subtle px-3 py-1 text-xs font-medium text-muted">
-              <MapOutlined sx={{ fontSize: 15 }} className="text-info" />Powered by Google Maps
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-subtle pl-3 text-xs font-medium text-muted">
+              <MapOutlined sx={{ fontSize: 15 }} className="text-info" /><GoogleMapsDataCredit />
             </span>
           </div>
 
@@ -329,9 +330,10 @@ export default function PlacesPage() {
                     <span className="text-xs text-muted">Showing {number(places.length)} so far</span>
                   </div>
                 )}
-                <p className="mt-8 flex items-start gap-1.5 border-t border-line pt-4 text-xs text-faint">
-                  <InfoOutlined sx={{ fontSize: 14, mt: '1px' }} />
-                  Results, ratings and photos from Google Maps. These businesses are not registered on Calling Bell, so details may be out of date.
+                <p className="mt-8 flex flex-wrap items-center gap-x-1.5 border-t border-line pt-2 text-xs text-faint">
+                  <InfoOutlined sx={{ fontSize: 14 }} />
+                  <span>These businesses are not registered on Calling Bell, so details may be out of date.</span>
+                  <GoogleMapsDataCredit />
                 </p>
               </>
             )}

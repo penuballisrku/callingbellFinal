@@ -10,6 +10,7 @@ import { buildTheme } from './app/theme';
 import { reloadForStaleChunk, router } from './app/router';
 import { persistOptions, preloadMainPages, queryClient } from './lib/queryCache';
 import { useApplyTheme } from './stores/theme';
+import { setupPwa } from './lib/pwa';
 
 function AppTheme({ children }: { children: ReactNode }) {
   const { resolved, accent } = useApplyTheme();
@@ -19,6 +20,9 @@ function AppTheme({ children }: { children: ReactNode }) {
 
 // A page's code from an older version failed to load (the site was updated while this tab was open): reload once for the current files.
 window.addEventListener('vite:preloadError', (e) => { if (reloadForStaleChunk()) e.preventDefault(); });
+
+// Installable app ("Add to Home Screen"): service worker and install prompt, set up before the browser can offer it.
+setupPwa();
 
 preloadMainPages();
 

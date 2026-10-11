@@ -22,6 +22,7 @@ import { useSeoPage } from '@/features/seo/seo';
 import { EmptyState, ErrorState, Img } from '@/components/ui';
 import { ClaimBusinessBanner } from '@/features/search/ExternalResults';
 import { coordinates, ExternalLink, Field, PhotoCredit, PlaceActions, prettyUrl, Section, SocialLinks } from './PlaceParts';
+import { GoogleMapsAttribution, GoogleMapsDataCredit } from '@/components/GoogleMapsAttribution';
 
 /** What the Explore nearby list passes along: the result itself (shown while the details load) and the list's address. */
 interface FromList { place?: GooglePlace; from?: string }
@@ -122,7 +123,7 @@ function Details({ d, seed }: { d: PlaceDetails; seed?: GooglePlace }) {
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-bold tracking-tight md:text-[28px]">{d.name}</h1>
             <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-line-strong px-2 py-0.5 text-[11px] font-medium text-muted">
-              <MapRounded sx={{ fontSize: 12 }} className="text-info" />From Google Maps · not on Calling Bell
+              <MapRounded sx={{ fontSize: 12 }} className="text-info" />From <GoogleMapsAttribution /> · not on Calling Bell
             </span>
           </div>
           {d.category && <p className="mt-1 text-sm text-muted">{d.category}</p>}
@@ -250,8 +251,9 @@ function Details({ d, seed }: { d: PlaceDetails; seed?: GooglePlace }) {
 
           <p className="flex items-start gap-1.5 px-1 text-xs text-muted">
             <InfoOutlined sx={{ fontSize: 14, mt: '1px' }} />
-            Details, ratings and photos from {d.dataSources.join(' and ')}. This business hasn’t joined Calling Bell, so please confirm details with it before you visit or pay.
+            This business hasn’t joined Calling Bell, so please confirm details with it before you visit or pay.
           </p>
+          {d.dataSources.includes('Google Maps') && <GoogleMapsDataCredit className="px-1 text-xs text-muted" />}
         </aside>
       </div>
     </article>
