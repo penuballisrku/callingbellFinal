@@ -174,10 +174,17 @@ public sealed class CatalogController : ApiControllerBase
     public async Task<ActionResult<ApiResponse<MarketingPageDto>>> MarketingPage(string pageKey, [FromQuery] string? country, CancellationToken ct) =>
         Success(await Sender.Send(new GetMarketingPageQuery(pageKey, country), ct));
 
-    /// <summary>Search-box autocomplete: categories, services and businesses matching <paramref name="q"/> (empty below 3 characters).</summary>
+    /// <summary>
+    /// Search-box autocomplete for <paramref name="q"/> (empty below 2 characters): categories, services, businesses, places (cities,
+    /// areas, PIN codes), popular searches, and the best match in the selected area and city with real business counts.
+    /// </summary>
+    /// <param name="city">Selected city slug: its businesses and places come first.</param>
+    /// <param name="area">Selected area id within <paramref name="city"/>.</param>
+    /// <param name="country">The visitor's country (ISO code).</param>
     [HttpGet("search/suggest")]
-    public async Task<ActionResult<ApiResponse<SearchSuggestionsDto>>> SearchSuggestions([FromQuery] string? q, [FromQuery] string? city, CancellationToken ct) =>
-        Success(await Sender.Send(new GetSearchSuggestionsQuery(q, city), ct));
+    public async Task<ActionResult<ApiResponse<SearchSuggestionsDto>>> SearchSuggestions([FromQuery] string? q, [FromQuery] string? city,
+        [FromQuery] Guid? area, [FromQuery] string? country, CancellationToken ct) =>
+        Success(await Sender.Send(new GetSearchSuggestionsQuery(q, city, area, country), ct));
 
     /// <summary>
     /// "Suggested by AI": sub-categories a phrase means ("water dripping from ceiling" gives Plumbers), from the local embedding model.
@@ -320,6 +327,23 @@ public sealed class GeoController(IOptions<GeoIpOptions> options, IHostEnvironme
         // IP service's answer per address, so asking again is cheap.
         Response.Headers.CacheControl = "private, no-store";
         return Success(await Sender.Send(new GetVisitorDistrictQuery(clientIp, options.Value.DistrictRadiusKm, cdn), ct));
+    }
+
+    /// <summary>
+    /// The listed state, city and area at the device's position (from the browser's Geolocation API, with the visitor's permission), so
+    /// the location picker can select them. Resolved against our own places in memory: no outside service, and the coordinates are
+    /// neither stored nor logged. Data is null when the position isn't near any listed city.
+    /// </summary>
+    /// <param name="lat">Latitude (the browser rounds nothing; the client sends ~100 m precision).</param>
+    /// <param name="lon">Longitude.</param>
+    /// <param name="country">The visitor's country (ISO code); defaults to the IP's.</param>
+    [HttpGet("locate"), EnableRateLimiting("public-search")]
+    public async Task<ActionResult<ApiResponse<DeviceLocationDto?>>> Locate([FromQuery] double lat, [FromQuery] double lon, [FromQuery] string? country,
+        CancellationToken ct)
+    {
+        var cdn = Request.Headers["CF-IPCountry"].FirstOrDefault() ?? Request.Headers["CloudFront-Viewer-Country"].FirstOrDefault();
+        Response.Headers.CacheControl = "private, no-store";
+        return Success(await Sender.Send(new LocateDeviceQuery(lat, lon, country, await ClientIpAsync(), cdn, options.Value.DistrictRadiusKm), ct));
     }
 
     /// <summary>

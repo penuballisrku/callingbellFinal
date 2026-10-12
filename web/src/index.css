@@ -271,3 +271,34 @@
   color: #5e5e5e !important;
 }
 :root[data-theme='dark'] .google-maps-attribution { color: #ffffff !important; }
+
+/*
+ * "Ask AI": a gentle glow ring and a sparkle twinkle every few seconds so the AI entry point is recognisable, not distracting. Both
+ * pause on hover/focus (the hover tilt takes over) and stop entirely for prefers-reduced-motion. While an answer is being worked on the
+ * sparkle turns. Transform/opacity/box-shadow only: no layout shift.
+ */
+@keyframes cb-ai-glow {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--cb-accent) 38%, transparent); }
+  45% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--cb-accent) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@keyframes cb-ai-twinkle {
+  0%, 78%, 100% { transform: rotate(0deg) scale(1); }
+  86% { transform: rotate(18deg) scale(1.16); }
+  93% { transform: rotate(-6deg) scale(1.04); }
+}
+@keyframes cb-ai-spin { to { transform: rotate(360deg); } }
+@keyframes cb-ai-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+.cb-ai-btn { animation: cb-ai-glow 4.5s ease-out 1.5s infinite; transition: transform 140ms ease, border-color 150ms ease, background-color 150ms ease; }
+.cb-ai-btn:hover, .cb-ai-btn:focus-visible { animation-play-state: paused; }
+.cb-ai-btn:active { transform: scale(0.96); }
+.cb-ai-spark { display: inline-grid; place-items: center; animation: cb-ai-twinkle 4.5s ease-in-out 1.5s infinite; }
+.cb-ai-btn:hover .cb-ai-spark, .cb-ai-btn:focus-visible .cb-ai-spark { animation: none; transform: rotate(14deg) scale(1.08); transition: transform 180ms ease; }
+.cb-ai-btn[data-busy='true'] { animation: none; }
+.cb-ai-btn[data-busy='true'] .cb-ai-spark, .cb-ai-spinning { animation: cb-ai-spin 1.1s linear infinite; }
+.cb-ai-enter { animation: cb-ai-enter 260ms ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cb-ai-btn, .cb-ai-spark, .cb-ai-spinning, .cb-ai-enter, .cb-ai-btn[data-busy='true'] .cb-ai-spark { animation: none !important; }
+}

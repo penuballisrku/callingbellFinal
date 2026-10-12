@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     1. Database: Phase 2 tables present (or -ApplyDatabase runs database\scripts\RunAll.sql first).
-    2. Unit tests: CallingBell.Seo.Tests and CallingBell.Onboarding.Tests.
+    2. Unit tests: CallingBell.Seo.Tests, CallingBell.Onboarding.Tests and CallingBell.Search.Tests.
     3. Web build: tsc type check + Vite build.
     4. API checks: chat, team, video (tests\api\phase2_api.py).
     5. Phone checks: OTP sign-in and booking notifications for -Phone (tests\api\phone_flow.py).
@@ -82,7 +82,7 @@ Invoke-Step 'Database: Phase 2 tables' {
 if (-not $SkipUnit) {
     # --artifacts-path keeps the build away from bin\Debug, which a running API locks.
     $artifacts = Join-Path $env:TEMP 'cb-test-artifacts'
-    foreach ($project in 'CallingBell.Seo.Tests', 'CallingBell.Onboarding.Tests') {
+    foreach ($project in 'CallingBell.Seo.Tests', 'CallingBell.Onboarding.Tests', 'CallingBell.Search.Tests') {
         Invoke-Step "Unit tests: $project" { dotnet test (Join-Path $root "backend\tests\$project") --artifacts-path $artifacts -v q --nologo }
     }
 }

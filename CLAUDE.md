@@ -37,6 +37,7 @@ npm run build        # tsc -b + vite build (the type check is the lint step: the
 # Tests
 dotnet test backend/tests/CallingBell.Seo.Tests
 dotnet test backend/tests/CallingBell.Onboarding.Tests
+dotnet test backend/tests/CallingBell.Search.Tests          # suggestions wording, web push (VAPID) encryption and signing
 python backend/tests/seo-smoke/seo_smoke.py   # needs the API running
 .\tests\RunAllTests.ps1 -Phone 98XXXXXXXX           # everything: unit, build, API, phone OTP, browser (tests/README.md)
 ```

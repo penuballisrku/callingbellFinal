@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router';
-import { Alert, Button, Chip, Drawer, IconButton, LinearProgress, Skeleton, TextField, Tooltip } from '@mui/material';
+import { Link, useNavigate } from 'react-router';
+import { useShallow } from 'zustand/react/shallow';
+import { Alert, Button, Chip, CircularProgress, Drawer, IconButton, LinearProgress, Skeleton, Tooltip } from '@mui/material';
+import MyLocationRounded from '@mui/icons-material/MyLocationRounded';
+import PlaceOutlined from '@mui/icons-material/PlaceOutlined';
 import AutoAwesomeRounded from '@mui/icons-material/AutoAwesomeRounded';
 import CloseRounded from '@mui/icons-material/CloseRounded';
 import SendRounded from '@mui/icons-material/SendRounded';
@@ -9,7 +12,10 @@ import RestartAltRounded from '@mui/icons-material/RestartAltRounded';
 import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 import MapOutlined from '@mui/icons-material/MapOutlined';
 import { api, errorMessage } from '@/lib/api';
-import type { AssistantFilters, AssistantReply, AssistantStarters } from '@/lib/types';
+import type { AssistantFilters, AssistantReply, AssistantStarters, SearchSuggestion } from '@/lib/types';
+import { useDeviceLocation } from '@/lib/deviceLocation';
+import { SearchSuggest, selectSuggestedPlace } from '@/components/SearchSuggest';
+import { CitySelect } from '@/components/LocationPicker';
 import { BusinessCard } from '@/components/BusinessCard';
 import { useCity } from '@/stores/city';
 import { CompactPlace, useExternalSearch } from '@/features/search/ExternalResults';
@@ -48,38 +54,86 @@ const askAiTint = {
   '&:hover': { bgcolor: 'var(--cb-accent-soft)', borderColor: 'var(--cb-accent)' },
 };
 
-/** "Ask AI" button for headers and toolbars. */
+/**
+ * "Ask AI" button for headers and toolbars. Animated (index.css, .cb-ai-*): a gentle glow and sparkle twinkle every few seconds, a tilt
+ * on hover and focus, a press, and a turning sparkle while the assistant is working on an answer; still for prefers-reduced-motion.
+ */
 export function AskAiButton({ compact }: { compact?: boolean }) {
   const openAssistant = useAssistant((s) => s.openAssistant);
+  const busy = useAssistant((s) => s.turns.some((t) => t.loading));
+  const label = busy ? 'Open AI search assistant (searching…)' : 'Open AI search assistant';
   if (compact) {
     return (
       <Tooltip title="AI search assistant">
-        <IconButton onClick={() => openAssistant()} aria-label="Open AI search assistant"
+        <IconButton onClick={() => openAssistant()} aria-label={label} aria-busy={busy} data-busy={busy} className="cb-ai-btn"
           sx={{ ...askAiTint, height: 40, width: 40, border: '1px solid' }}>
-          <AutoAwesomeRounded sx={{ fontSize: 19 }} />
+          <span className="cb-ai-spark"><AutoAwesomeRounded sx={{ fontSize: 19 }} /></span>
         </IconButton>
       </Tooltip>
     );
   }
   return (
-    <button type="button" onClick={() => openAssistant()} aria-label="Open AI search assistant"
-      className="group inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-full border border-[color-mix(in_srgb,var(--cb-accent)_45%,transparent)] bg-accent-soft py-1 pl-1 pr-3.5 text-sm font-semibold text-accent-ink transition-colors hover:border-accent focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--cb-ring)]">
-      <span className="grid h-7 w-7 place-items-center rounded-full bg-accent text-on-accent transition-transform group-hover:rotate-12">
-        <AutoAwesomeRounded sx={{ fontSize: 16 }} />
+    <button type="button" onClick={() => openAssistant()} aria-label={label} aria-busy={busy} data-busy={busy}
+      className="cb-ai-btn inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-full border border-[color-mix(in_srgb,var(--cb-accent)_45%,transparent)] bg-accent-soft py-1 pl-1 pr-3.5 text-sm font-semibold text-accent-ink hover:border-accent focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--cb-ring)]">
+      <span className="grid h-7 w-7 place-items-center rounded-full bg-accent text-on-accent">
+        <span className="cb-ai-spark"><AutoAwesomeRounded sx={{ fontSize: 16 }} /></span>
       </span>
       Ask AI
     </button>
   );
 }
 
+const placeSource: Record<string, string> = {
+  device: 'from your device', ip: 'approximate, from your internet connection', user: 'chosen by you',
+};
+
+/**
+ * Where the assistant searches, and how that was found. When the assistant opens, the device location is used straight away if the
+ * browser already allows it; otherwise the visitor can share it with one click (the browser asks), with a note on why. Until then, or
+ * if they decline, the existing location (their choice, else the IP's) is used, and it can always be changed here.
+ */
+function AssistantLocation({ open }: { open: boolean }) {
+  const { citySlug, source } = useCity(useShallow((s) => ({ citySlug: s.citySlug, source: s.source })));
+  const device = useDeviceLocation({ auto: open });
+  const canAsk = (device.status === 'prompt' || device.status === 'unavailable') && source !== 'device';
+  const note = device.status === 'locating' ? 'Finding your location…'
+    : device.status === 'denied' && source !== 'user' ? 'Location access is off, so this is approximate. Change it any time.'
+      : device.status === 'unavailable' && source !== 'device' ? "We couldn't get your device's location (location services may be off), so this is approximate."
+        : device.status === 'outside' ? "You seem to be outside the cities we list. Choose where to search."
+          : canAsk && source === 'ip' ? 'Approximate, from your internet connection. Share your location to find businesses in your area; it only picks your area and isn’t stored.'
+            : citySlug && source && placeSource[source] ? `Location ${placeSource[source]}.` : 'Choose where to search.';
+
+  return (
+    <div className="cb-ai-enter border-b border-line bg-surface px-4 py-2.5">
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1"><CitySelect fullWidth /></div>
+        {device.status === 'locating' ? <CircularProgress size={18} aria-label="Finding your location" sx={{ flexShrink: 0, mx: 1 }} />
+          : canAsk && (
+            <Tooltip title="Use your device's location for results near you" describeChild>
+              <Button size="small" variant="outlined" onClick={() => void device.locate()} startIcon={<MyLocationRounded sx={{ fontSize: 16 }} />}
+                sx={{ flexShrink: 0, minHeight: 36, whiteSpace: 'nowrap' }}>
+                Near me
+              </Button>
+            </Tooltip>
+          )}
+      </div>
+      <p className="mt-1 flex items-start gap-1 text-[11px] leading-4 text-faint" role="status">
+        <PlaceOutlined sx={{ fontSize: 13, mt: '1px' }} aria-hidden />{note}
+      </p>
+    </div>
+  );
+}
+
 /** The AI search assistant: a side panel (full screen on phones) where visitors describe what they need in their own words. */
 export function SearchAssistant() {
   const { open, turns, close, reset, add, update, takeQueued } = useAssistant();
+  const navigate = useNavigate();
   const citySlug = useCity((s) => s.citySlug);
   const areaId = useCity((s) => s.areaId);
+  const countryCode = useCity((s) => s.countryCode);
   const [text, setText] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const busy = turns.some((t) => t.loading);
   // The filters of the latest answer: follow-up messages refine them.
   const context = [...turns].reverse().find((t) => t.reply)?.reply?.filters ?? null;
@@ -109,6 +163,17 @@ export function SearchAssistant() {
     ask(message, context);
   };
 
+  /**
+   * A suggestion from the box: a business opens; a place becomes where to search (the box is then ready for what); anything else is
+   * asked as the next message, so the assistant answers it with live results as if typed. Choosing never also submits the form.
+   */
+  const pickSuggestion = (s: SearchSuggestion) => {
+    if (s.kind === 'Business') { close(); navigate(`/business/${s.slug}`); return; }
+    if (s.kind === 'Location') { selectSuggestedPlace(s); setText(''); inputRef.current?.focus(); return; }
+    // "AC Repair in Kukatpally" names its place, which the assistant reads from the message.
+    send(s.kind === 'Popular' ? s.query ?? s.label : s.label);
+  };
+
   // A prompt handed over when opening (e.g. from the home page) is sent right away.
   useEffect(() => {
     if (!open) return;
@@ -134,7 +199,9 @@ export function SearchAssistant() {
     <Drawer anchor="right" open={open} onClose={close} aria-labelledby="assistant-title"
       slotProps={{ paper: { sx: { width: { xs: '100%', sm: 440 }, display: 'flex', flexDirection: 'column', bgcolor: 'var(--cb-canvas)' } } }}>
       <header className="flex items-center gap-3 border-b border-line bg-surface px-4 py-3">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-accent-soft"><AutoAwesomeRounded className="text-accent-ink" sx={{ fontSize: 20 }} /></span>
+        <span className="cb-ai-enter grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-accent-soft">
+          <span className={busy ? 'cb-ai-spinning inline-grid' : 'inline-grid'}><AutoAwesomeRounded className="text-accent-ink" sx={{ fontSize: 20 }} /></span>
+        </span>
         <div className="min-w-0 flex-1">
           <h2 id="assistant-title" className="text-[15px] font-semibold leading-tight">AI search assistant</h2>
           <p className="truncate text-xs text-muted">Describe what you need in your own words</p>
@@ -144,6 +211,7 @@ export function SearchAssistant() {
         )}
         <IconButton onClick={close} aria-label="Close assistant" edge="end"><CloseRounded /></IconButton>
       </header>
+      <AssistantLocation open={open} />
 
       <div ref={listRef} className="flex-1 space-y-4 overflow-y-auto px-4 py-4" aria-live="polite">
         {turns.length === 0 ? <Welcome onPick={(p) => send(p)} /> : turns.map((t) => (
@@ -158,9 +226,11 @@ export function SearchAssistant() {
 
       <form className="border-t border-line bg-surface p-3" onSubmit={(e) => { e.preventDefault(); send(); }}>
         <div className="flex items-end gap-2">
-          <TextField inputRef={inputRef} value={text} onChange={(e) => setText(e.target.value.slice(0, 300))} placeholder="e.g. AC not cooling, need someone today" multiline maxRows={3}
-            fullWidth size="small" slotProps={{ htmlInput: { 'aria-label': 'Message the AI search assistant', maxLength: 300 } }}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} />
+          {/* Suggestions open upwards (the box is at the bottom of the panel). Enter on a highlighted suggestion picks it; otherwise it sends. */}
+          <SearchSuggest value={text} onChange={(v) => setText(v.slice(0, 300))} citySlug={citySlug} areaId={areaId} country={countryCode}
+            onSelect={pickSuggestion} placement="above" clearable maxLength={300} inputRef={inputRef} className="min-w-0 flex-1"
+            placeholder="e.g. AC not cooling, need someone today" ariaLabel="Message the AI search assistant"
+            inputClassName="h-10 w-full rounded-lg border border-line bg-surface pl-3 pr-9 text-sm text-ink outline-none transition-colors placeholder:text-faint focus:border-accent" />
           <VoiceSearchButton onText={(t) => setText(t.slice(0, 300))} submit size="medium" label="Speak your request" />
           <IconButton type="submit" disabled={!text.trim() || busy} aria-label="Send" color="primary"
             sx={{ bgcolor: 'var(--cb-navy)', color: '#fff', '&:hover': { bgcolor: 'var(--cb-navy)' }, '&.Mui-disabled': { bgcolor: 'var(--cb-subtle)' }, height: 40, width: 40 }}>
@@ -273,7 +343,7 @@ function AnswerView({ turn, disabled, onSuggest, onRemoveChip, onRetry, onClose 
   if (turn.loading && !r) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted" role="status">
-        <AutoAwesomeRounded className="animate-pulse text-accent-ink" sx={{ fontSize: 18 }} /> Searching…
+        <span className="cb-ai-spinning inline-grid"><AutoAwesomeRounded className="text-accent-ink" sx={{ fontSize: 18 }} /></span> Searching…
       </div>
     );
   }

@@ -177,7 +177,7 @@ export function CitySelect({ size = 'small', fullWidth = false, height, bare = f
             </span>
           )}
         </div>
-        {!detected.isPending && (!located || (located && !detected.data?.district && !importing)) && place.source !== 'user' && (
+        {!detected.isPending && (!located || (located && !detected.data?.district && !importing)) && place.source !== 'user' && place.source !== 'device' && (
           <p className="mb-3 flex gap-2 text-xs leading-5 text-muted" role="status">
             <InfoOutlined sx={{ fontSize: 16, mt: '2px' }} />
             We couldn’t automatically detect your city. Please select your location below.
@@ -231,7 +231,8 @@ export function CitySelect({ size = 'small', fullWidth = false, height, bare = f
             )}
             renderInput={(params) => (
               <TextField {...params} label="City" placeholder={view.stateSlug ? 'All cities' : 'Choose a state first'}
-                helperText={!draft && place.source === 'ip' && place.citySlug ? 'Detected from your location' : undefined} />
+                helperText={!draft && place.citySlug && place.source === 'ip' ? 'Detected from your location'
+                  : !draft && place.citySlug && place.source === 'device' ? 'From your device’s location' : undefined} />
             )}
           />
 

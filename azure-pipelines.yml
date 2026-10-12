@@ -69,6 +69,7 @@ stages:
               projects: |
                 backend/tests/CallingBell.Seo.Tests/CallingBell.Seo.Tests.csproj
                 backend/tests/CallingBell.Onboarding.Tests/CallingBell.Onboarding.Tests.csproj
+                backend/tests/CallingBell.Search.Tests/CallingBell.Search.Tests.csproj
               arguments: --configuration $(buildConfiguration)
 
           - task: DotNetCoreCLI@2

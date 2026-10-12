@@ -62,6 +62,7 @@ export default function SearchPage() {
   // made here (filters, chips) is reflected back in the dropdown, so the two always agree.
   const storeCity = useCity((s) => s.citySlug);
   const storeArea = useCity((s) => s.areaId);
+  const countryCode = useCity((s) => s.countryCode);
   const setLocation = useCity((s) => s.setCity);
   const city = params.get('city') ?? storeCity;
   const areaId = params.get('area') ?? (city && city === storeCity ? storeArea : null);
@@ -154,6 +155,15 @@ export default function SearchPage() {
   // On this page suggestions refine the current results instead of navigating away (businesses still open their profile).
   const applySuggestion = (s: SearchSuggestion) => {
     if (s.kind === 'Business') { navigate(`/business/${s.slug}`); return; }
+    // A place refines where (the location dropdown follows); the box is then ready for what.
+    if (s.kind === 'Location') { setText(''); update({ city: s.citySlug ?? null, area: s.areaId ?? null }); return; }
+    // A service in a place: both at once.
+    if (s.kind === 'Combined') {
+      setText('');
+      update({ category: null, sub: s.subCategorySlug ?? s.slug, q: null, city: s.citySlug ?? null, area: s.areaId ?? null });
+      return;
+    }
+    if (s.kind === 'Popular' && !s.subCategorySlug) { setText(s.query ?? s.label); update({ category: null, sub: null, q: s.query ?? s.label }); return; }
     const q = s.kind === 'Service' ? s.label : '';
     setText(q);
     if (s.kind === 'Category') update({ category: s.slug, sub: null, q: null });
@@ -277,7 +287,7 @@ export default function SearchPage() {
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
             <form role="search" className="relative flex-1" onSubmit={(e) => { e.preventDefault(); submitText(); }}>
               <SearchRounded sx={{ position: 'absolute', left: 10, top: 9, fontSize: 20, color: 'var(--cb-faint)', zIndex: 1, pointerEvents: 'none' }} />
-              <SearchSuggest value={text} onChange={setText} citySlug={query.city} onSelect={applySuggestion}
+              <SearchSuggest value={text} onChange={setText} citySlug={query.city} areaId={areaId} country={countryCode} onSelect={applySuggestion}
                 placeholder={tickerNames.length ? '' : 'Search a service and place, e.g. lawyers in Madhapur'} ariaLabel="Search"
                 inputClassName="h-[40px] w-full rounded-lg border border-line bg-surface pl-9 pr-9 text-sm outline-none focus:border-line-strong">
                 {!text && <PlaceholderTicker names={tickerNames} prefix="e.g." className="pl-9 pr-9 text-sm" />}

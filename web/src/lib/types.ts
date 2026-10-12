@@ -48,9 +48,23 @@ export interface Plan {
   /** The plan's values in the comparison table (dbo.PlanFeatureValues); rows line up across plans by `key`. */
   comparison?: { key: string; label: string; value: string; sortOrder: number }[];
 }
-export type SuggestionKind = 'Category' | 'SubCategory' | 'Service' | 'Business';
-export interface SearchSuggestion { kind: SuggestionKind; label: string; detail?: string | null; imageUrl?: string | null; slug: string; subCategorySlug?: string | null; rating?: number | null }
-export interface SearchSuggestions { query: string; categories: SearchSuggestion[]; services: SearchSuggestion[]; businesses: SearchSuggestion[] }
+/** Location: a city or area. Popular: a popular search (runs `query`). Combined: a service in the selected area or city. */
+export type SuggestionKind = 'Category' | 'SubCategory' | 'Service' | 'Business' | 'Location' | 'Popular' | 'Combined';
+export interface SearchSuggestion {
+  kind: SuggestionKind; label: string; detail?: string | null; imageUrl?: string | null; slug: string; subCategorySlug?: string | null; rating?: number | null;
+  citySlug?: string | null; areaId?: string | null; query?: string | null;
+}
+export interface SearchSuggestions {
+  query: string; categories: SearchSuggestion[]; services: SearchSuggestion[]; businesses: SearchSuggestion[];
+  combined?: SearchSuggestion[] | null; locations?: SearchSuggestion[] | null; popular?: SearchSuggestion[] | null;
+}
+
+/** GET /api/geo/locate: the listed places at the device's position. */
+export interface DeviceLocation {
+  countryCode: string; stateSlug?: string | null; stateName?: string | null; citySlug: string; cityName: string;
+  areaId?: string | null; areaSlug?: string | null; areaName?: string | null; locality?: string | null; postcode?: string | null;
+  matchedBy: 'area' | 'city'; distanceKm: number;
+}
 
 export interface Banner {
   id: string; title: string; subtitle?: string | null; ctaText?: string | null; linkUrl?: string | null; imageUrl: string;

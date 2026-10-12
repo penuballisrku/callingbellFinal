@@ -34,7 +34,7 @@ import type { Banner, BusinessCard, HomeData, MarketingPage, NearbyService, Sear
 import { ErrorState, Img, SectionHeader } from '@/components/ui';
 import { CitySelect } from '@/components/LocationPicker';
 import { useBrowsingCountryCode } from '@/components/VisitorCountry';
-import { resolveSearchHref, SearchSuggest } from '@/components/SearchSuggest';
+import { resolveSearchHref, SearchSuggest, selectSuggestedPlace, suggestionHref } from '@/components/SearchSuggest';
 import { VoiceSearchButton } from '@/components/VoiceSearch';
 import { useAssistant } from '@/features/assistant/store';
 import { PlaceholderTicker } from '@/components/PlaceholderTicker';
@@ -125,6 +125,7 @@ function Hero({ data }: { data?: HomeData }) {
   const navigate = useNavigate();
   const citySlug = useCity((s) => s.citySlug);
   const areaId = useCity((s) => s.areaId);
+  const countryCode = useCity((s) => s.countryCode);
   const [q, setQ] = useState('');
   const openAssistant = useAssistant((s) => s.openAssistant);
   // Category / sub-category / service picked from the suggestions; searched (with the chosen location) when Search is pressed.
@@ -150,7 +151,10 @@ function Hero({ data }: { data?: HomeData }) {
     void resolveSearchHref(q, picked, citySlug, areaId).then((href) => navigate(href));
   };
   const pick = (s: SearchSuggestion) => {
-    if (s.kind === 'Business') { navigate(`/business/${s.slug}`); return; }
+    // A business, a service in a place, or a popular search is a complete search: open it.
+    if (s.kind === 'Business' || s.kind === 'Combined' || s.kind === 'Popular') { navigate(suggestionHref(s, citySlug)); return; }
+    // A place changes where to search (the location dropdown follows); the box is then ready for what.
+    if (s.kind === 'Location') { selectSuggestedPlace(s); setQ(''); setPicked(null); return; }
     setQ(s.label);
     setPicked(s);
   };
@@ -170,7 +174,7 @@ function Hero({ data }: { data?: HomeData }) {
           <form onSubmit={submit} className="mt-7 flex flex-col gap-2 rounded-xl bg-surface p-2 sm:flex-row sm:items-center" role="search">
             <div className="flex min-w-0 flex-1 items-center gap-2 px-2">
               <SearchRounded sx={{ color: 'var(--cb-faint)', flexShrink: 0 }} />
-              <SearchSuggest value={q} onChange={setQ} citySlug={citySlug} onSelect={pick} ariaLabel="What are you looking for?"
+              <SearchSuggest value={q} onChange={setQ} citySlug={citySlug} areaId={areaId} country={countryCode} onSelect={pick} ariaLabel="What are you looking for?"
                 placeholder={categoryNames.length ? '' : 'Search for services, businesses…'}
                 className="min-w-0 flex-1" panelClassName="-ml-9 mt-3 sm:min-w-[460px]"
                 inputClassName="h-12 w-full truncate bg-transparent text-[15px] text-ink outline-none placeholder:text-faint">
@@ -183,7 +187,7 @@ function Hero({ data }: { data?: HomeData }) {
           </form>
           <button type="button" onClick={() => openAssistant(q)}
             className="group mt-3 inline-flex items-center gap-1.5 text-left text-sm text-on-navy-muted transition-colors hover:text-white">
-            <AutoAwesomeRounded sx={{ fontSize: 16 }} className="text-accent" />
+            <span className="cb-ai-spark text-accent"><AutoAwesomeRounded sx={{ fontSize: 16 }} /></span>
             Not sure what to search for? <span className="font-semibold text-on-navy underline-offset-2 group-hover:underline">Describe it to our AI assistant</span>
           </button>
 

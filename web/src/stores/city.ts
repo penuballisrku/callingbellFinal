@@ -36,12 +36,17 @@ interface LocationState {
   areaId: string | null;
   areaSlug: string | null;
   areaName: string | null;
-  /** 'user' once the visitor picks a place themselves; 'ip' while it comes from their detected location. */
-  source: 'user' | 'ip' | null;
+  /**
+   * 'user' once the visitor picks a place themselves; 'device' when it came from their device's position (shared with permission);
+   * 'ip' while it comes from their IP address (approximate).
+   */
+  source: 'user' | 'device' | 'ip' | null;
   /** A state / province / region: its city and area are cleared. */
   setState: (slug: string | null, name?: string | null) => void;
   /** A city (and optionally one of its areas): the previous area is cleared. */
   setCity: (slug: string | null, areaId?: string | null, names?: PlaceNames) => void;
+  /** The place at the device's position (see lib/deviceLocation): like a choice of the visitor's, it outlasts the IP's location. */
+  setDevice: (place: { countryCode: string; citySlug: string; areaId?: string | null } & PlaceNames) => void;
   /** Fills in names learned later (e.g. from the city's area list) without changing the selection. */
   describe: (citySlug: string, names: PlaceNames) => void;
   /**
@@ -64,9 +69,10 @@ export type LocationSelection = Pick<LocationState, 'countryCode' | 'stateSlug' 
  * arrives in, before the store has been updated.
  */
 export function resolveLocation(s: LocationSelection, { countryCode, located, district: d }: DetectedLocation): LocationSelection {
-  if (s.source === 'user' && countryCode && s.countryCode === countryCode) return s;
+  const chosen = s.source === 'user' || s.source === 'device';
+  if (chosen && countryCode && s.countryCode === countryCode) return s;
   // Chosen before the IP had answered (e.g. a city in a shared link): it was picked from this country's lists, so it stays.
-  if (s.source === 'user' && s.citySlug && !s.countryCode) return { ...s, countryCode };
+  if (chosen && s.citySlug && !s.countryCode) return { ...s, countryCode };
   if (!d) return { countryCode, ...EMPTY, source: located ? 'ip' : null };
   const next: LocationSelection = {
     countryCode, stateSlug: d.stateSlug ?? null, stateName: d.state, citySlug: d.citySlug, cityName: d.cityName,
@@ -104,6 +110,10 @@ export const useCity = create<LocationState>()(
           areaName: areaId ? names.areaName ?? (same && s.areaId === areaId ? s.areaName : null) : null,
           source: 'user',
         };
+      }),
+      setDevice: ({ countryCode, citySlug, areaId = null, cityName = null, stateSlug = null, stateName = null, areaSlug = null, areaName = null }) => set({
+        countryCode, citySlug, cityName, stateSlug, stateName, areaId,
+        areaSlug: areaId ? areaSlug : null, areaName: areaId ? areaName : null, source: 'device',
       }),
       describe: (citySlug, names) => set((s) => (s.citySlug !== citySlug ? s : {
         cityName: s.cityName ?? names.cityName ?? null,
