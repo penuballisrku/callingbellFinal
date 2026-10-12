@@ -28,8 +28,14 @@
           document.documentElement.style.backgroundColor = dark ? '#080C14' : '#F7F8FA';
           document.documentElement.dataset.accent = s.accent || 'amber';
         } catch (e) { document.documentElement.dataset.theme = 'dark'; }
+        // The server renders each page's content into #root for crawlers (data-prerendered). Browsers running this script hide it
+        // until React renders the real page over it, so visitors don't see an unstyled version flash first. If the app hasn't
+        // started after 8 seconds (a script failed to load), the content is shown after all.
+        document.documentElement.classList.add('app-booting');
+        setTimeout(function () { document.documentElement.classList.remove('app-booting'); }, 8000);
       })();
     </script>
+    <style>html.app-booting [data-prerendered] { visibility: hidden; }</style>
   </head>
   <body>
     <div id="root"></div>

@@ -8,9 +8,9 @@ namespace CallingBell.Api.Seo;
 
 /// <summary>
 /// HTML for a resolved SEO page: the head tags (title, description, canonical, robots, Open Graph, Twitter, JSON-LD), and a semantic,
-/// server-rendered version of the page's content placed inside the app's root element. It is what the page shows - the same facts -
-/// until the React app starts and renders over it, so crawlers and answer engines get the content without running JavaScript, and
-/// visitors see content immediately. Nothing is hidden. Every value is HTML-encoded; JSON-LD is already escaped by its serialiser.
+/// server-rendered version of the page's content placed inside the app's root element, with the same facts the page shows, so crawlers
+/// and answer engines get the content without running JavaScript. Browsers hide it (web/index.html, html.app-booting) until the React
+/// app renders over it. Every value is HTML-encoded; JSON-LD is already escaped by its serialiser.
 /// </summary>
 public sealed class SeoHtmlRenderer(Microsoft.Extensions.Options.IOptions<SeoOptions> options)
 {
