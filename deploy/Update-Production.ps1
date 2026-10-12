@@ -24,4 +24,5 @@ robocopy "$env:TEMP\cb-publish" C:\CallingBell\api /E /NFL /NDL /NJH /NP /XD App
 robocopy "$repo\web\dist" C:\CallingBell\spa /MIR /NFL /NDL /NJH /NP | Out-Null
 Start-Service CallingBell
 Start-Sleep 5
-(Invoke-WebRequest http://127.0.0.1:8080/health -UseBasicParsing).Content
+# As the tunnel asks: a plain http request is redirected to https://127.0.0.1, which fails the certificate check.
+(Invoke-WebRequest http://127.0.0.1:8080/health -Headers @{ 'X-Forwarded-Proto' = 'https' } -UseBasicParsing).Content

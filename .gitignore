@@ -23,3 +23,6 @@ backend/src/CallingBell.Api/App_Data/semantic-index.json*
 
 ## Test output (screenshots from tests/e2e)
 tests/e2e/output/
+
+## Production build output (web + API), made by dotnet publish / vite build
+publish/

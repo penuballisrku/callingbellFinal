@@ -27,6 +27,21 @@ function loadGoogle(): Promise<void> {
   return loading;
 }
 
+/**
+ * Google keeps one configuration per page and warns when initialize() runs again, so it is set up once per client id; its callback
+ * goes to the button currently on screen (`onCredential`). The sign-in/sign-up wording comes from renderButton's `text`.
+ */
+let initializedFor: string | null = null;
+let onCredential: ((credential: string) => void) | null = null;
+function initializeGoogle(clientId: string) {
+  if (initializedFor === clientId || !window.google) return;
+  initializedFor = clientId;
+  window.google.accounts.id.initialize({
+    client_id: clientId, ux_mode: 'popup', itp_support: true, auto_select: false,
+    callback: ({ credential }) => onCredential?.(credential),
+  });
+}
+
 /** Google never accepts a bare IP address as a sign-in origin; on the local network the same PC is reachable by name through nip.io. */
 const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
 function nameForIpHost(): string | null {
@@ -63,30 +78,32 @@ export function GoogleSignIn({ context, onSignedIn, accountType = 'Customer', di
   useEffect(() => {
     if (!clientId || byName) return;
     let cancelled = false;
+    const handle = async (credential: string) => {
+      setError(null);
+      setBusy(true);
+      try {
+        const { data: result } = await api.post<AuthResult>('/api/auth/google', { credential, citySlug: city.current, accountType: type.current });
+        signedIn.current(result);
+      } catch (e) {
+        setError(errorMessage(e));
+      } finally {
+        setBusy(false);
+      }
+    };
     loadGoogle().then(() => {
       if (cancelled || !box.current || !window.google) return;
-      window.google.accounts.id.initialize({
-        client_id: clientId, ux_mode: 'popup', context, itp_support: true, auto_select: false,
-        callback: async ({ credential }) => {
-          setError(null);
-          setBusy(true);
-          try {
-            const { data: result } = await api.post<AuthResult>('/api/auth/google', { credential, citySlug: city.current, accountType: type.current });
-            signedIn.current(result);
-          } catch (e) {
-            setError(errorMessage(e));
-          } finally {
-            setBusy(false);
-          }
-        },
-      });
+      initializeGoogle(clientId);
+      onCredential = handle;
       const dark = document.documentElement.dataset.theme === 'dark';
       window.google.accounts.id.renderButton(box.current, {
         type: 'standard', theme: dark ? 'filled_black' : 'outline', size: 'large', shape: 'pill', logo_alignment: 'center',
         text: context === 'signup' ? 'signup_with' : 'continue_with', width: Math.min(400, Math.round(box.current.getBoundingClientRect().width)),
       });
     }).catch((e: Error) => !cancelled && setError(e.message));
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      if (onCredential === handle) onCredential = null;
+    };
   }, [clientId, context, byName]);
 
   if (!isPending && !clientId) return <>{unavailable}</>;
@@ -100,8 +117,9 @@ export function GoogleSignIn({ context, onSignedIn, accountType = 'Customer', di
   return (
     <div className={divider ? 'mb-5' : undefined}>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-      {/* Height reserved for Google's button (44px), also while the settings load, so nothing moves when it appears. */}
-      <div ref={box} className={`flex h-11 w-full justify-center ${busy ? 'pointer-events-none opacity-60' : ''}`} aria-busy={busy || isPending} />
+      {/* Height reserved for Google's button (44px), also while the settings load, so nothing moves when it appears. color-scheme
+          light matches Google's iframe: in the dark theme a mismatch makes the browser paint a white box behind the button. */}
+      <div ref={box} style={{ colorScheme: 'light' }} className={`flex h-11 w-full justify-center ${busy ? 'pointer-events-none opacity-60' : ''}`} aria-busy={busy || isPending} />
       {divider && (
         <div className="mt-5 flex items-center gap-3 text-xs font-medium uppercase tracking-wide text-faint" role="separator">
           <span className="h-px flex-1 bg-line" />or<span className="h-px flex-1 bg-line" />

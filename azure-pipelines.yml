@@ -1,0 +1,133 @@
+# CallInBell: builds the web app and the API, runs the unit tests and deploys to production (https://www.callinbell.com).
+#
+#   Build   Microsoft-hosted Windows agent: vite build, dotnet test, dotnet publish. One artifact "callinbell" holding
+#           api\, web\, database\scripts\ and deploy\Install-Release.ps1.
+#   Deploy  The production machine, registered as a VM resource of the Azure DevOps environment "callinbell-production"
+#           (its agent connects out to Azure DevOps, so no inbound ports). Runs deploy\Install-Release.ps1, which keeps the
+#           previous release and puts it back if the new one isn't healthy. Main branch only; add an approval check on the
+#           environment to gate it.
+#
+# Secrets are not in the pipeline: they live in the CallingBell service's environment on the production machine.
+
+trigger:
+  branches:
+    include: [main]
+  paths:
+    exclude: ['*.md', marketing/*, tests/README.md]
+
+pr:
+  branches:
+    include: [main]
+
+parameters:
+  - name: runSqlScripts
+    displayName: Run database scripts (RunAll.sql) against CallingBell_Prod
+    type: boolean
+    default: false
+
+variables:
+  buildConfiguration: Release
+  npm_config_cache: $(Pipeline.Workspace)/.npm
+
+stages:
+  - stage: Build
+    jobs:
+      - job: Build
+        pool:
+          vmImage: windows-latest
+        steps:
+          - task: UseDotNet@2
+            displayName: .NET 8 SDK
+            inputs:
+              packageType: sdk
+              version: 8.x
+
+          - task: NodeTool@0
+            displayName: Node 20
+            inputs:
+              versionSpec: 20.x
+
+          - task: Cache@2
+            displayName: npm cache
+            inputs:
+              key: 'npm | "$(Agent.OS)" | web/package-lock.json'
+              restoreKeys: 'npm | "$(Agent.OS)"'
+              path: $(npm_config_cache)
+
+          - script: npm ci --no-audit --no-fund
+            displayName: Web - install
+            workingDirectory: web
+
+          - script: npm run build
+            displayName: Web - type check and build
+            workingDirectory: web
+
+          - task: DotNetCoreCLI@2
+            displayName: API - unit tests
+            inputs:
+              command: test
+              projects: |
+                backend/tests/CallingBell.Seo.Tests/CallingBell.Seo.Tests.csproj
+                backend/tests/CallingBell.Onboarding.Tests/CallingBell.Onboarding.Tests.csproj
+              arguments: --configuration $(buildConfiguration)
+
+          - task: DotNetCoreCLI@2
+            displayName: API - publish
+            inputs:
+              command: publish
+              publishWebProjects: false
+              projects: backend/src/CallingBell.Api/CallingBell.Api.csproj
+              arguments: --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/api
+              zipAfterPublish: false
+              modifyOutputPath: false
+
+          - task: CopyFiles@2
+            displayName: Stage web app
+            inputs:
+              sourceFolder: web/dist
+              targetFolder: $(Build.ArtifactStagingDirectory)/web
+
+          - task: CopyFiles@2
+            displayName: Stage database scripts
+            inputs:
+              sourceFolder: database/scripts
+              contents: '*.sql'
+              targetFolder: $(Build.ArtifactStagingDirectory)/database/scripts
+
+          - task: CopyFiles@2
+            displayName: Stage deploy script
+            inputs:
+              sourceFolder: deploy
+              contents: Install-Release.ps1
+              targetFolder: $(Build.ArtifactStagingDirectory)/deploy
+
+          - publish: $(Build.ArtifactStagingDirectory)
+            artifact: callinbell
+            displayName: Publish artifact
+
+  - stage: Deploy
+    dependsOn: Build
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - deployment: Production
+        displayName: Deploy to production
+        environment:
+          name: callinbell-production
+          resourceType: VirtualMachine
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                # The deployment job downloads the "callinbell" artifact to $(Pipeline.Workspace)/callinbell.
+                - powershell: >
+                    & "$(Pipeline.Workspace)/callinbell/deploy/Install-Release.ps1"
+                    -Source "$(Pipeline.Workspace)/callinbell"
+                    -SqlScripts:$${{ parameters.runSqlScripts }}
+                  displayName: Install release
+                  errorActionPreference: stop
+
+                - powershell: |
+                    $r = Invoke-WebRequest https://www.callinbell.com/health -UseBasicParsing -TimeoutSec 20
+                    if ($r.StatusCode -ne 200) { throw "Public health check returned $($r.StatusCode)" }
+                    Write-Host "Live: $($r.Content)"
+                  displayName: Public health check
