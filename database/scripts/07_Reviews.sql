@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 07_Reviews.sql
+   CallInBell - 07_Reviews.sql
    Customer reviews with ratings, owner replies and moderation states, then recalculates
    Businesses.AverageRating / ReviewCount.
 
@@ -26,7 +26,7 @@ INSERT INTO #R VALUES
 (N'home-services', 5, N'Honest pricing', N'They quoted upfront and did not add any hidden charges. Even cleaned up after finishing the job. Will definitely call them again.'),
 (N'home-services', 5, N'Saved our weekend', N'Called them on a Sunday morning and someone reached in 40 minutes. Problem sorted the same day.'),
 (N'home-services', 4, N'Good work, slight delay', N'Work quality was good and the staff were polite. They came about 30 minutes after the slot, but kept me informed.'),
-(N'home-services', 4, N'Reliable service', N'Second time using them. Consistent quality and reasonable rates. Booking through Calling Bell was easy.'),
+(N'home-services', 4, N'Reliable service', N'Second time using them. Consistent quality and reasonable rates. Booking through CallInBell was easy.'),
 (N'home-services', 3, N'Average experience', N'The issue was fixed but I had to follow up twice for the bill. Work itself was okay.'),
 (N'home-services', 2, N'Needed a repeat visit', N'The problem came back after two days. They did come again without charge, but it was inconvenient.'),
 (N'home-services', 1, N'Did not turn up', N'Booked a slot but nobody came and the phone was not answered. Had to call someone else.'),

@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 29_Notifications.sql
+   CallInBell - 29_Notifications.sql
    Delivery of notifications beyond the app: web push (Firebase Cloud Messaging), WhatsApp
    (Meta Cloud API), RCS and SMS, with fallback between them, plus OTP over WhatsApp then SMS.
 
@@ -201,17 +201,17 @@ GO
 MERGE dbo.NotificationTemplates AS t
 USING (VALUES
     (N'NEW_LEAD', N'WHATSAPP', N'en', N'callingbell_new_lead',
-        N'🔔 New Lead' + NCHAR(10) + NCHAR(10) + N'Service: {{1}}' + NCHAR(10) + N'Area: {{2}}' + NCHAR(10) + N'Customer: {{3}}' + NCHAR(10) + NCHAR(10) + N'Open the lead in Calling Bell.'),
+        N'🔔 New Lead' + NCHAR(10) + NCHAR(10) + N'Service: {{1}}' + NCHAR(10) + N'Area: {{2}}' + NCHAR(10) + N'Customer: {{3}}' + NCHAR(10) + NCHAR(10) + N'Open the lead in CallInBell.'),
     (N'NEW_LEAD', N'RCS',      N'en', N'callingbell_new_lead',
-        N'New lead on Calling Bell: {{1}} enquiry near {{2}} from {{3}}. Open {{4}} to respond.'),
+        N'New lead on CallInBell: {{1}} enquiry near {{2}} from {{3}}. Open {{4}} to respond.'),
     (N'NEW_LEAD', N'SMS',      N'en', N'DLT_TEMPLATE_ID_NEW_LEAD',
-        N'New lead on Calling Bell: {{1}} enquiry near {{2}} from {{3}}. Respond at {{4}} - Calling Bell'),
+        N'New lead on CallInBell: {{1}} enquiry near {{2}} from {{3}}. Respond at {{4}} - CallInBell'),
     (N'BOOKING',  N'WHATSAPP', N'en', N'callingbell_booking_update',
-        N'📅 {{1}}' + NCHAR(10) + NCHAR(10) + N'{{2}}' + NCHAR(10) + N'When: {{3}}' + NCHAR(10) + NCHAR(10) + N'View it in Calling Bell.'),
+        N'📅 {{1}}' + NCHAR(10) + NCHAR(10) + N'{{2}}' + NCHAR(10) + N'When: {{3}}' + NCHAR(10) + NCHAR(10) + N'View it in CallInBell.'),
     (N'OTP',      N'WHATSAPP_AUTHENTICATION', N'en', N'callingbell_otp',
         N'{{1}} is your verification code. For your security, do not share this code.'),
     (N'OTP',      N'SMS',      N'en', N'DLT_TEMPLATE_ID_OTP',
-        N'{{1}} is your Calling Bell verification code. It expires in {{2}} minutes. Do not share it with anyone.')
+        N'{{1}} is your CallInBell verification code. It expires in {{2}} minutes. Do not share it with anyone.')
 ) AS s (TemplateCode, Channel, LanguageCode, TemplateName, TemplateContent)
 ON t.TemplateCode = s.TemplateCode AND t.Channel = s.Channel AND t.LanguageCode = s.LanguageCode
 WHEN NOT MATCHED BY TARGET THEN INSERT (TemplateCode, Channel, LanguageCode, TemplateName, TemplateContent) VALUES (s.TemplateCode, s.Channel, s.LanguageCode, s.TemplateName, s.TemplateContent);

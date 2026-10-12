@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 17_HomeContent.sql
+   CallInBell - 17_HomeContent.sql
    Home page content stored in dbo.MarketingContent (PageKey = 'Home'), served by
    GET /api/content/pages/Home.
 

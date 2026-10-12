@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 24_ContactSupportContent.sql
+   CallInBell - 24_ContactSupportContent.sql
    Content for the "Contact support" page (/support): help topics, contact channels, what to
    include when you contact us, support for business owners, FAQs and a closing call to action.
    Contact channels (section "Channel") are shown only when rows exist: fill in the real support
@@ -23,7 +23,7 @@ INSERT INTO #Support (Code, SectionKey, SortOrder, Eyebrow, Title, Subtitle, Bod
 /* ---------- Hero ---------- */
 (N'CS-HERO', N'Hero', 1, N'Contact support',
  N'How can we help?',
- N'Whether you are booking a service or running a business on Calling Bell, our support team is here to help. Find quick answers below, or get in touch and we will take it from there.',
+ N'Whether you are booking a service or running a business on CallInBell, our support team is here to help. Find quick answers below, or get in touch and we will take it from there.',
  NULL, NULL, N'Go to my account', N'/account'),
 
 /* ---------- Help topics ---------- */
@@ -48,7 +48,7 @@ INSERT INTO #Support (Code, SectionKey, SortOrder, Eyebrow, Title, Subtitle, Bod
 
 /* ---------- What to include ---------- */
 (N'CS-PREP-ACCOUNT', N'Prepare', 1, NULL, N'Your account details',
- N'The email address or mobile number you use to sign in to Calling Bell.', NULL, N'groups', NULL, NULL),
+ N'The email address or mobile number you use to sign in to CallInBell.', NULL, N'groups', NULL, NULL),
 (N'CS-PREP-REFERENCE', N'Prepare', 2, NULL, N'Booking or enquiry details',
  N'The business name, the date of the booking or enquiry, and the service involved.', NULL, N'event', NULL, NULL),
 (N'CS-PREP-DESCRIBE', N'Prepare', 3, NULL, N'A clear description',
@@ -58,14 +58,14 @@ INSERT INTO #Support (Code, SectionKey, SortOrder, Eyebrow, Title, Subtitle, Bod
 
 /* ---------- Business owners ---------- */
 (N'CS-BUSINESS', N'Business', 1, N'For business owners',
- N'Support for your business on Calling Bell',
+ N'Support for your business on CallInBell',
  N'Most day-to-day tasks can be done straight from your business dashboard.',
  N'From your dashboard you can update your profile, services and working hours, add photos and videos, set your live availability, reply to leads, manage bookings and review your analytics.\nIf your new listing is not yet visible in search, it is most likely still being reviewed by our team. Listings go live with a verified badge once they pass verification. For help with plans, verification or anything else, contact our support team with your business name.',
  N'storefront', N'Go to business dashboard', N'/business'),
 
 /* ---------- FAQs ---------- */
 (N'CS-FAQ-CANCEL', N'Faq', 1, NULL, N'How do I cancel a booking?', NULL,
- N'Sign in, open My account and go to Upcoming bookings. Choose the booking and select Cancel booking. To change the time instead, message the business through Calling Bell or cancel and book a new slot.', NULL, NULL, NULL),
+ N'Sign in, open My account and go to Upcoming bookings. Choose the booking and select Cancel booking. To change the time instead, message the business through CallInBell or cancel and book a new slot.', NULL, NULL, NULL),
 (N'CS-FAQ-REQUESTS', N'Faq', 2, NULL, N'Where can I see my enquiries and quotation requests?', NULL,
  N'Sign in and open My account, then go to My requests. You will see every enquiry, callback request and quotation request you have sent, with its current status.', NULL, NULL, NULL),
 (N'CS-FAQ-LISTING', N'Faq', 3, NULL, N'Why is my business not showing in search yet?', NULL,

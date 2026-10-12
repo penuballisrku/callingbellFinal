@@ -59,7 +59,7 @@ internal sealed class OllamaServiceRecommender(
             "Reply as JSON: {\"picks\":[{\"id\":1,\"reason\":\"...\"}],\"related\":[{\"id\":101,\"reason\":\"...\"}]}";
 
         var content = await chat.ChatJsonAsync(
-            "You are a local-services analyst for Calling Bell, an Indian local services marketplace. Choose what people near the " +
+            "You are a local-services analyst for CallInBell, an Indian local services marketplace. Choose what people near the " +
             "given place most likely need right now: weigh recent local bookings and ratings most, then the season, festivals and " +
             "how close the nearest provider is. Only use the ids provided. Reply with JSON only.",
             prompt, ct);

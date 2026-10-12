@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 01_MasterData.sql
+   CallInBell - 01_MasterData.sql
    Lookup values (statuses/types with display metadata), roles and permission claims.
    Idempotent: MERGE on natural keys.
    ===================================================================================== */
@@ -13,7 +13,7 @@ BEGIN TRANSACTION;
 MERGE dbo.LookupValues AS t
 USING (VALUES
     -- Real-time availability (the platform's primary differentiator)
-    (N'AvailabilityStatus', N'Online',              N'Online',                           N'Active on Calling Bell right now',                 N'#12B76A', 1),
+    (N'AvailabilityStatus', N'Online',              N'Online',                           N'Active on CallInBell right now',                 N'#12B76A', 1),
     (N'AvailabilityStatus', N'AvailableForCall',    N'Available for Call',               N'Ready to take phone calls',                        N'#2E90FA', 2),
     (N'AvailabilityStatus', N'AvailableForChat',    N'Available for Chat',               N'Responding to chat messages',                      N'#7A5AF8', 3),
     (N'AvailabilityStatus', N'AvailableForVideo',   N'Available for Video Consultation', N'Accepting video consultations now',                N'#EE46BC', 4),
@@ -22,7 +22,7 @@ USING (VALUES
     (N'AvailabilityStatus', N'Offline',             N'Offline',                          N'Not available at the moment',                      N'#98A2B3', 7),
 
     (N'BusinessStatus', N'Active',          N'Active',           N'Listed and visible to customers',          N'#12B76A', 1),
-    (N'BusinessStatus', N'PendingApproval', N'Pending Approval', N'Awaiting review by the Calling Bell team', N'#F79009', 2),
+    (N'BusinessStatus', N'PendingApproval', N'Pending Approval', N'Awaiting review by the CallInBell team', N'#F79009', 2),
     (N'BusinessStatus', N'Suspended',       N'Suspended',        N'Hidden due to a policy issue',             N'#F04438', 3),
     (N'BusinessStatus', N'Inactive',        N'Inactive',         N'Temporarily closed by the owner',          N'#98A2B3', 4),
 

@@ -47,6 +47,13 @@ internal static class AuthRules
         if (await identity.IsPhoneRegisteredAsync(normalizedPhone, ct)) throw PhoneTaken();
     }
 
+    /// <summary>The password rules for a new or changed password: 8+ characters with an uppercase letter, a lowercase letter and a number.</summary>
+    public static IRuleBuilderOptions<T, string> StrongPassword<T>(this IRuleBuilder<T, string> rule) =>
+        rule.NotEmpty().WithMessage("Enter a password.").MinimumLength(8).WithMessage("Use at least 8 characters.")
+            .Matches("[A-Z]").WithMessage("Password must contain an uppercase letter.")
+            .Matches("[a-z]").WithMessage("Password must contain a lowercase letter.")
+            .Matches("[0-9]").WithMessage("Password must contain a number.");
+
     public static ValidationException PhoneTaken() =>
         new(new Dictionary<string, string[]> { ["phoneNumber"] = ["An account already uses this mobile number. Sign in instead."] });
 }
@@ -285,6 +292,39 @@ public sealed class RegisterHandler(IIdentityService identity, IPhoneOtpService 
             await otp.ConsumeVerificationAsync(phone, r.PhoneVerificationToken, token);
             return await identity.RegisterAsync(new RegisterRequest(r.DisplayName.Trim(), r.Email.Trim(), phone, r.AccountType, r.CitySlug), token);
         }, ct);
+    }
+}
+
+// ---------- Register (customer, email + password) ----------
+/// <summary>
+/// An account with a password: the other way to sign up besides Google. <paramref name="AccountType"/> <c>BusinessOwner</c> creates an
+/// owner account (who then sets up the business); default Customer. The email isn't verified by this.
+/// </summary>
+public sealed record RegisterWithPasswordCommand(string DisplayName, string Email, string Password, string ConfirmPassword, string? CitySlug,
+    string? AccountType = null) : IRequest<AuthResultDto>;
+
+public sealed class RegisterWithPasswordValidator : AbstractValidator<RegisterWithPasswordCommand>
+{
+    public RegisterWithPasswordValidator()
+    {
+        RuleFor(x => x.DisplayName).NotEmpty().WithMessage("Enter your full name.").MinimumLength(2).WithMessage("Enter your full name.").MaximumLength(120);
+        RuleFor(x => x.Email).NotEmpty().WithMessage("Enter your email address.").EmailAddress().WithMessage("Enter a valid email address.").MaximumLength(256);
+        RuleFor(x => x.Password).StrongPassword().MaximumLength(128);
+        RuleFor(x => x.ConfirmPassword).NotEmpty().WithMessage("Confirm your password.")
+            .Equal(x => x.Password).WithMessage("Passwords don't match.");
+        RuleFor(x => x.CitySlug).MaximumLength(120);
+        RuleFor(x => x.AccountType).Must(t => t is null or Roles.Customer or Roles.BusinessOwner).WithMessage("Choose a customer or business account.");
+    }
+}
+
+public sealed class RegisterWithPasswordHandler(IIdentityService identity) : IRequestHandler<RegisterWithPasswordCommand, AuthResultDto>
+{
+    public async Task<AuthResultDto> Handle(RegisterWithPasswordCommand r, CancellationToken ct)
+    {
+        var email = r.Email.Trim().ToLowerInvariant();
+        if (!await identity.IsEmailAvailableAsync(email, ct))
+            throw new ConflictException("An account with this email already exists. Sign in instead.");
+        return await identity.RegisterWithPasswordAsync(r.DisplayName.Trim(), email, r.Password, r.CitySlug, r.AccountType ?? Roles.Customer, ct);
     }
 }
 

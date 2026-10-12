@@ -59,7 +59,7 @@ function RouteError() {
     <div className="container-page py-20">
       <EmptyState title={notFound ? 'Page not found' : stale ? 'A new version is available' : 'Something went wrong'}
         message={notFound ? "The page you're looking for doesn't exist or has moved."
-          : stale ? 'Calling Bell was updated while this page was open. Refresh to load the latest version.' : 'Please refresh the page or go back home.'}
+          : stale ? 'CallInBell was updated while this page was open. Refresh to load the latest version.' : 'Please refresh the page or go back home.'}
         action={stale || !notFound
           ? <Button variant="contained" onClick={() => window.location.reload()}>Refresh the page</Button>
           : <Button component={Link} to="/" variant="contained">Go to home</Button>} />

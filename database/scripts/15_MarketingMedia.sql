@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 15_MarketingMedia.sql            *** GENERATED - do not edit by hand ***
+   CallInBell - 15_MarketingMedia.sql            *** GENERATED - do not edit by hand ***
    Regenerate with: python database/tools/generate_marketing_media.py
    Photos (Unsplash License) and video posters (Mixkit Free License) for the "List your business"
    page (the hero photo depends on the visitor's country: 26_CountryImages.sql), stored in dbo.Media (EntityType = 'MarketingContent') and served by /api/media/{id}.

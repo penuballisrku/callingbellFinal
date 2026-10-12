@@ -1,6 +1,6 @@
 /* =====================================================================================
-   Calling Bell - 30_JoinCallingBell.sql
-   "Join Calling Bell": a business found on Google Maps or OpenStreetMap signs up with its
+   CallInBell - 30_JoinCallingBell.sql
+   "Join CallInBell": a business found on Google Maps or OpenStreetMap signs up with its
    details imported from that source.
 
    * Businesses.SourceProvider / SourceExternalId: the place the listing was created from
@@ -27,7 +27,7 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Businesses_PhoneNumbe
     CREATE INDEX IX_Businesses_PhoneNumber ON dbo.Businesses (PhoneNumber) INCLUDE (Name, Slug, Status, CityId) WHERE IsDeleted = 0;
 GO
 
-PRINT 'Join Calling Bell: Businesses.SourceProvider / SourceExternalId ready.';
+PRINT 'Join CallInBell: Businesses.SourceProvider / SourceExternalId ready.';
 GO
 
 /* ---------- Claim requests: "this business is mine" for a listing that already exists ----------

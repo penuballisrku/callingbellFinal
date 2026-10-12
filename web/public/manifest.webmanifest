@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "Calling Bell",
-  "short_name": "Calling Bell",
+  "name": "CallInBell",
+  "short_name": "CallInBell",
   "description": "Discover trusted local businesses, see who is available right now, request quotes and book services.",
   "start_url": "/?source=homescreen",
   "scope": "/",

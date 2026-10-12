@@ -16,7 +16,7 @@ internal static class OtpMessages
         RouteCode = NotificationRoutes.Otp,
         Recipient = new NotificationRecipient(null, e164, Phones.CountryOf(e164)),
         Title = "Verification code",
-        Body = "Your Calling Bell verification code",
+        Body = "Your CallInBell verification code",
         TemplateParameters = [code, expiryMinutes.ToString()],
         IsSensitive = true,
     };

@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 21_ServerMemory.sql   (instance-wide; run once per SQL Server, NOT part of RunAll.sql)
+   CallInBell - 21_ServerMemory.sql   (instance-wide; run once per SQL Server, NOT part of RunAll.sql)
 
    Why: with the default "min server memory" of 16 MB, Windows can trim SQL Server down to a
    few hundred MB when the machine is busy (browsers, IDEs). Queries then wait for a memory

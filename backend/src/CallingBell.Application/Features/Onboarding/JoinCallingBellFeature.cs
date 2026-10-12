@@ -32,14 +32,14 @@ public sealed class OnboardingOptions
 public sealed record JoinImageDto(string Reference, string ImageUrl, string ThumbnailUrl, string MobileImageUrl, string DesktopImageUrl, string AltText,
     bool IsPrimary, int SortOrder, string Source, string? Attribution, string? AttributionUrl, bool Importable);
 
-/// <summary>A Calling Bell business that may be the same as the imported place.</summary>
+/// <summary>A CallInBell business that may be the same as the imported place.</summary>
 /// <param name="MatchedBy">SourceId (created from this very place), Phone, Website, Location or NameAndCity.</param>
 /// <param name="IsStrong">Almost certainly the same business: registering again is refused.</param>
 public sealed record ExistingBusinessDto(Guid Id, string Slug, string Name, string? City, string Status, string MatchedBy, bool IsStrong);
 
 /// <summary>
-/// Everything known about a place outside Calling Bell, ready for the business sign-up form. Only what the source provides is filled in;
-/// the Calling Bell category, city and area are matched from the database.
+/// Everything known about a place outside CallInBell, ready for the business sign-up form. Only what the source provides is filled in;
+/// the CallInBell category, city and area are matched from the database.
 /// </summary>
 public sealed record JoinCallingBellBusinessDto(
     string SourceBusinessId, string Source, string SourceName, string? SourceUrl, string? GooglePlaceId,
@@ -71,8 +71,8 @@ public sealed class GetJoinCallingBellBusinessValidator : AbstractValidator<GetJ
 
 /// <summary>
 /// Reads the place from its source on the server (never from what the browser sends): Google Place Details, or OpenStreetMap plus the same
-/// place on Google Maps. Cleans and validates every value, matches the Calling Bell category, city and area, parses opening hours, lists
-/// the photos, and finds Calling Bell businesses that may already be this one. Nothing from the source is stored.
+/// place on Google Maps. Cleans and validates every value, matches the CallInBell category, city and area, parses opening hours, lists
+/// the photos, and finds CallInBell businesses that may already be this one. Nothing from the source is stored.
 /// </summary>
 public sealed class GetJoinCallingBellBusinessHandler(ISender sender, IUnitOfWork uow, ReverseGeocoder geocoder, BusinessDuplicateFinder duplicates,
     IOptions<OnboardingOptions> options, ILogger<GetJoinCallingBellBusinessHandler> logger)
@@ -99,12 +99,12 @@ public sealed class GetJoinCallingBellBusinessHandler(ISender sender, IUnitOfWor
         var countryCode = JoinImport.CountryCode(d.Country) ?? Phones.CountryOf(Phones.ToE164(d.InternationalPhone ?? d.Phone));
         double? lat = d.Latitude is { } la && Math.Abs(la) <= 90 ? la : null, lon = d.Longitude is { } lo && Math.Abs(lo) <= 180 ? lo : null;
 
-        // City and area as listed on Calling Bell, from the coordinates.
+        // City and area as listed on CallInBell, from the coordinates.
         ReverseGeocodeResult? place = null;
         if (lat is { } plat && lon is { } plon && countryCode is not null)
         {
             try { place = await geocoder.ReverseAsync(plat, plon, countryCode, CityRadiusKm, ct); }
-            catch (Exception ex) when (ex is not OperationCanceledException) { logger.LogWarning(ex, "Join Calling Bell: reverse geocoding failed"); }
+            catch (Exception ex) when (ex is not OperationCanceledException) { logger.LogWarning(ex, "Join CallInBell: reverse geocoding failed"); }
         }
 
         // Category: first by name against the category list ("Electrician" → Electricians), then the search parser (keywords, AI).
@@ -129,7 +129,7 @@ public sealed class GetJoinCallingBellBusinessHandler(ISender sender, IUnitOfWor
                 (categorySlug, subSlug) = (parsed.CategorySlug, parsed.SubCategorySlug);
             }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException) { logger.LogWarning(ex, "Join Calling Bell: category match failed"); }
+        catch (Exception ex) when (ex is not OperationCanceledException) { logger.LogWarning(ex, "Join CallInBell: category match failed"); }
         var category = await uow.Repository<SubCategory>().QueryNoTracking()
             .Where(s => s.Slug == subSlug && s.IsActive).Select(s => new { s.Slug, s.Name, CategorySlug = s.Category.Slug, CategoryName = s.Category.Name })
             .FirstOrDefaultAsync(ct);
@@ -218,7 +218,7 @@ public sealed class GetJoinCallingBellBusinessHandler(ISender sender, IUnitOfWor
         return digits.Length == 10 && digits[0] is >= '6' and <= '9';
     }
 
-    /// <summary>Social profiles on a platform Calling Bell supports (matched by the URL's site, as the sign-up form checks).</summary>
+    /// <summary>Social profiles on a platform CallInBell supports (matched by the URL's site, as the sign-up form checks).</summary>
     private async Task<IReadOnlyList<OnboardingSocialLinkInput>> SocialLinksAsync(IReadOnlyList<Businesses.SocialLinkDto> links, CancellationToken ct)
     {
         if (links.Count == 0) return [];
@@ -267,7 +267,7 @@ public sealed class GetJoinCallingBellBusinessHandler(ISender sender, IUnitOfWor
 public sealed record DuplicateProbe(SourceRef? Source, string Name, IReadOnlyList<string?> Phones, string? Website, Guid? CityId, double? Latitude, double? Longitude);
 
 /// <summary>
-/// Calling Bell businesses that may be the same as a new one: created from the same source place; the same phone or website with a similar
+/// CallInBell businesses that may be the same as a new one: created from the same source place; the same phone or website with a similar
 /// name; a similar name within 150 m; or a very similar name in the same city. Strong matches (same place, or same phone/website/location
 /// and a similar name) block registering again; others are shown to the person to decide.
 /// </summary>

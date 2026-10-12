@@ -84,7 +84,7 @@ public sealed class GetLocalReviewsHandler(IUnitOfWork uow, VisitorOriginResolve
         var picked = ordered.Where(x => (perBusiness[x.Slug] = perBusiness.GetValueOrDefault(x.Slug) + 1) <= MaxPerBusiness).Take(Show).ToList();
 
         // AI summary of the real reviews in scope (cached per place); computed numbers are always available as a fallback.
-        var place = scopeName ?? "Calling Bell";
+        var place = scopeName ?? "CallInBell";
         var key = $"reviews|{scope}|{(scope == "country" ? country : origin?.CitySlug)}|{(scope == "area" ? origin!.PlaceKey : scope == "state" ? origin!.State : "")}";
         var summary = summarizer.GetCached(key);
         if (summary is null && summarizer.IsEnabled && showcase.Count >= 5)

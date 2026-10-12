@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 11_Advertisements.sql
+   CallInBell - 11_Advertisements.sql
    Advertising campaigns (featured listings, sponsored businesses, homepage banners,
    search promotions) with delivery metrics, plus the corresponding prepaid invoices
    in dbo.Payments (18% GST).

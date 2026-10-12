@@ -7,7 +7,7 @@ export type AccentTheme = 'amber' | 'ocean' | 'emerald' | 'violet' | 'rose';
 
 /** Colour themes offered to users. Values mirror the --cb-accent tokens in index.css. */
 export const accents: { key: AccentTheme; label: string; light: string; dark: string }[] = [
-  { key: 'amber', label: 'Calling Bell', light: '#F4A62C', dark: '#F4A62C' },
+  { key: 'amber', label: 'CallInBell', light: '#F4A62C', dark: '#F4A62C' },
   { key: 'ocean', label: 'Ocean', light: '#2E90FA', dark: '#53B1FD' },
   { key: 'emerald', label: 'Emerald', light: '#079455', dark: '#3CCB7F' },
   { key: 'violet', label: 'Violet', light: '#7A5AF8', dark: '#9B8AFB' },

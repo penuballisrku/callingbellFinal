@@ -269,7 +269,7 @@ public sealed class UpdateLeadHandler(IUnitOfWork uow, ICurrentUser user, IRealt
         {
             EnquiryStatuses.Contacted => ("Your request was accepted", $"{businessName} accepted your {request} and will be in touch shortly."),
             EnquiryStatuses.Quoted => ("You have a quote", $"{businessName} sent you a quote for your {request}. Open it to see the price."),
-            EnquiryStatuses.Converted => ("Your request is confirmed", $"{businessName} confirmed your {request}. Thanks for choosing them on Calling Bell."),
+            EnquiryStatuses.Converted => ("Your request is confirmed", $"{businessName} confirmed your {request}. Thanks for choosing them on CallInBell."),
             EnquiryStatuses.Lost => ("Your request was declined", $"{businessName} can't take your {request} this time. Other businesses nearby can help."),
             _ => null,
         };

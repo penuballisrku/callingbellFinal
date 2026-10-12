@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 26_CountryImages.sql             *** GENERATED - do not edit by hand ***
+   CallInBell - 26_CountryImages.sql             *** GENERATED - do not edit by hand ***
    Regenerate with: python database/tools/generate_marketing_media.py countries
    Photos for the country a visitor is browsing (dbo.MarketingContentImages), e.g. a Montreal
    storefront on the "List your business" hero for Canada. The block's own photo (CountryCode

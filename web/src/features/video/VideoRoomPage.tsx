@@ -50,7 +50,7 @@ export default function VideoRoomPage() {
       action={<Button component={Link} to="/" variant="outlined">Go home</Button>} /></Shell>;
   }
   const r = room.data!;
-  if (r.status === 'Ended') return <Shell><Centered title="This call has ended" message="Thanks for using Calling Bell video consultations." action={<BackButton room={r} />} /></Shell>;
+  if (r.status === 'Ended') return <Shell><Centered title="This call has ended" message="Thanks for using CallInBell video consultations." action={<BackButton room={r} />} /></Shell>;
   if (!r.canJoinNow) {
     return (
       <Shell>

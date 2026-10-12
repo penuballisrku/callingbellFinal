@@ -13,7 +13,7 @@ function useInstall() {
   const { available, mode, install } = useInstallApp();
   const { enqueueSnackbar } = useSnackbar();
   const start = async () => {
-    if ((await install()) === 'installed') enqueueSnackbar('Calling Bell is on your home screen', { variant: 'success' });
+    if ((await install()) === 'installed') enqueueSnackbar('CallInBell is on your home screen', { variant: 'success' });
   };
   return { available, mode, start };
 }
@@ -50,7 +50,7 @@ const HIDDEN_ON = /^\/(business\/|video\/|login|register|owner\/messages|account
 const snoozed = () => { try { return Date.now() - Number(localStorage.getItem(DISMISSED_KEY) ?? 0) < SNOOZE_MS; } catch { return true; } };
 
 /**
- * A small "Add Calling Bell to your home screen" card on phones, once per two weeks at most, and the iPhone steps dialog for every
+ * A small "Add CallInBell to your home screen" card on phones, once per two weeks at most, and the iPhone steps dialog for every
  * install button on the page. Rendered once by each layout.
  */
 export function InstallPrompt() {
@@ -75,11 +75,11 @@ export function InstallPrompt() {
   return (
     <>
       {visible && (
-        <aside aria-label="Install Calling Bell"
+        <aside aria-label="Install CallInBell"
           className="fixed inset-x-3 bottom-3 z-[1100] flex items-center gap-3 rounded-2xl border border-line bg-surface p-3 shadow-[var(--cb-shadow-lg)] pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <img src="/icons/app-192.png" alt="" width={44} height={44} className="h-11 w-11 shrink-0 rounded-xl" />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-ink">Add Calling Bell to your home screen</p>
+            <p className="text-sm font-semibold text-ink">Add CallInBell to your home screen</p>
             <p className="text-xs text-muted">Opens like an app, full screen, in one tap.</p>
           </div>
           <Button size="small" variant="contained" disableElevation onClick={() => { dismiss(); void start(); }} sx={{ flexShrink: 0 }}>
@@ -98,7 +98,7 @@ function IosInstallSteps({ open, onClose }: { open: boolean; onClose: () => void
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs" aria-labelledby="ios-install-title">
       <DialogTitle id="ios-install-title" sx={{ pr: 6 }}>
-        Add Calling Bell to your home screen
+        Add CallInBell to your home screen
         <IconButton onClick={onClose} aria-label="Close" sx={{ position: 'absolute', right: 8, top: 8 }}><CloseRounded /></IconButton>
       </DialogTitle>
       <DialogContent>
@@ -113,7 +113,7 @@ function IosInstallSteps({ open, onClose }: { open: boolean; onClose: () => void
           </li>
           <li className="flex items-start gap-3">
             <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-subtle text-xs font-bold">3</span>
-            <span>Tap <strong>Add</strong>. Calling Bell appears on your home screen and opens full screen, like an app.</span>
+            <span>Tap <strong>Add</strong>. CallInBell appears on your home screen and opens full screen, like an app.</span>
           </li>
         </ol>
         <Button fullWidth variant="contained" onClick={onClose} sx={{ mt: 3 }}>Got it</Button>

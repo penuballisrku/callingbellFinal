@@ -53,7 +53,7 @@ export default function PlaceDetailPage() {
   // The server names the page generically (it doesn't look places up); the business name replaces that once both are in.
   const seo = useSeoPage();
   const name = d?.name ?? seed?.name;
-  useEffect(() => { if (name && seo.data) document.title = `${name} · Calling Bell`; }, [name, seo.data]);
+  useEffect(() => { if (name && seo.data) document.title = `${name} · CallInBell`; }, [name, seo.data]);
 
   const back = () => (state?.from ? navigate(-1) : navigate('/nearby'));
 
@@ -123,7 +123,7 @@ function Details({ d, seed }: { d: PlaceDetails; seed?: GooglePlace }) {
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-bold tracking-tight md:text-[28px]">{d.name}</h1>
             <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-line-strong px-2 py-0.5 text-[11px] font-medium text-muted">
-              <MapRounded sx={{ fontSize: 12 }} className="text-info" />From <GoogleMapsAttribution /> · not on Calling Bell
+              <MapRounded sx={{ fontSize: 12 }} className="text-info" />From <GoogleMapsAttribution /> · not on CallInBell
             </span>
           </div>
           {d.category && <p className="mt-1 text-sm text-muted">{d.category}</p>}
@@ -251,7 +251,7 @@ function Details({ d, seed }: { d: PlaceDetails; seed?: GooglePlace }) {
 
           <p className="flex items-start gap-1.5 px-1 text-xs text-muted">
             <InfoOutlined sx={{ fontSize: 14, mt: '1px' }} />
-            This business hasn’t joined Calling Bell, so please confirm details with it before you visit or pay.
+            This business hasn’t joined CallInBell, so please confirm details with it before you visit or pay.
           </p>
           {d.dataSources.includes('Google Maps') && <GoogleMapsDataCredit className="px-1 text-xs text-muted" />}
         </aside>

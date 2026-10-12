@@ -129,7 +129,7 @@ public sealed class GetCitiesHandler(IUnitOfWork uow, IGeoLocationService geo, R
 /// <param name="CityCount">Cities listed so far; 0 until the city catalogue agent has imported the country (choosing it queues that).</param>
 public sealed record CountryDto(string Code, string Name, int CityCount);
 
-/// <summary>Countries a visitor can browse: every country Calling Bell prices its plans for (CountryPricing), by name.</summary>
+/// <summary>Countries a visitor can browse: every country CallInBell prices its plans for (CountryPricing), by name.</summary>
 public sealed record GetCountriesQuery : IRequest<IReadOnlyList<CountryDto>>;
 
 public sealed class GetCountriesHandler(IUnitOfWork uow) : IRequestHandler<GetCountriesQuery, IReadOnlyList<CountryDto>>

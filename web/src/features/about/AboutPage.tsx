@@ -3,9 +3,9 @@ import { useDocumentTitle } from '@/lib/hooks';
 import { ErrorState } from '@/components/ui';
 import { ClosingCta, ContentPageSkeleton, DividedList, FeaturePanel, IconCardGrid, IntroSection, PageHero, StatsStrip, useMarketingPage } from '@/features/content/ContentBlocks';
 
-/** "About Calling Bell": every word comes from MarketingContent (PageKey "About"); the numbers are live platform stats. */
+/** "About CallInBell": every word comes from MarketingContent (PageKey "About"); the numbers are live platform stats. */
 export default function AboutPage() {
-  useDocumentTitle('About Calling Bell');
+  useDocumentTitle('About CallInBell');
   const { data, isLoading, isError, refetch } = useMarketingPage('About');
 
   if (isError) return <div className="container-page py-16"><ErrorState onRetry={() => refetch()} /></div>;

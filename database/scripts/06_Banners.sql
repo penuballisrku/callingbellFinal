@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 06_Banners.sql
+   CallInBell - 06_Banners.sql
    Marketing banners (home hero, home mid-page, search) with desktop and mobile artwork.
    Headline text lives in the Banners table and is rendered by the UI (accessible, translatable);
    the SVG artwork is decorative.
@@ -26,7 +26,7 @@ INSERT INTO #Bn VALUES
 (N'HOME-HERO-FESTIVE-HOMES', N'Festive-ready homes start here',
  N'Deep cleaning, painting and pest control from trusted local professionals. Fixed prices, no surprises.',
  N'Explore home services', N'/categories/home-services', N'HomeHero', 3, -10, 40, 1, N'cleaning', N'#F4A62C', N'Home cleaning illustration'),
-(N'HOME-MID-LIST-BUSINESS', N'Grow your business with Calling Bell',
+(N'HOME-MID-LIST-BUSINESS', N'Grow your business with CallInBell',
  N'Get discovered by customers nearby, receive leads in real time and manage bookings from one dashboard.',
  N'List your business free', N'/list-your-business', N'HomeMid', 1, -120, NULL, 1, N'real-estate-agents', N'#F4A62C', N'Business growth illustration'),
 (N'HOME-MID-WEDDING-SEASON', N'Plan the wedding season with confidence',

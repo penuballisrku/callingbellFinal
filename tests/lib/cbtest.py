@@ -1,4 +1,4 @@
-"""Shared helpers for the Calling Bell API test scripts (Python 3 standard library only).
+"""Shared helpers for the CallInBell API test scripts (Python 3 standard library only).
 
 Settings come from environment variables so the same scripts run against any local instance:
   CB_API        API base URL (default http://localhost:5080)

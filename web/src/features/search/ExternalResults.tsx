@@ -130,7 +130,7 @@ export function useExternalSearch(p: ExternalSearchParams, options: ExternalSear
 }
 
 /**
- * The Google Maps or AI recommended part of the search results, shown after the Calling Bell businesses. A source that is switched off,
+ * The Google Maps or AI recommended part of the search results, shown after the CallInBell businesses. A source that is switched off,
  * has nothing to search for or found nothing is left out, so the single results list only shows what there is.
  */
 export function ExternalResults({ ext, loading, isError, only, polling, onRefresh, onSelect, moreGoogle, loadingMoreGoogle }: {
@@ -169,7 +169,7 @@ export function ExternalResults({ ext, loading, isError, only, polling, onRefres
       {only === 'google' && (
         <TierSection tier={ext.google} source="google" title="More businesses nearby" where={where} onSelect={onSelect}
           onLoadMore={moreGoogle} loadingMore={loadingMoreGoogle}
-          subtitle="Nearest first · not on Calling Bell"
+          subtitle="Nearest first · not on CallInBell"
           empty={`No other ${what} found near ${where?.label ?? 'this location'}.`}
           attribution={<GoogleMapsDataCredit />} />
       )}
@@ -177,10 +177,10 @@ export function ExternalResults({ ext, loading, isError, only, polling, onRefres
       {only === 'ai' && (
         <TierSection tier={ext.ai} source="ai" title="AI recommended" where={where} onSelect={onSelect}
           subtitle={ext.ai.aiStatus === 'ranked'
-            ? 'Best matches picked by AI · not on Calling Bell'
+            ? 'Best matches picked by AI · not on CallInBell'
             : ext.ai.aiStatus === 'pending'
               ? 'Nearest first · AI is picking the best matches…'
-              : 'Nearest first · not on Calling Bell'}
+              : 'Nearest first · not on CallInBell'}
           empty={`OpenStreetMap has no ${what} mapped near ${where?.label ?? 'this location'} yet.`}
           attribution={<>Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="underline">OpenStreetMap contributors</a></>} />
       )}
@@ -188,7 +188,7 @@ export function ExternalResults({ ext, loading, isError, only, polling, onRefres
   );
 }
 
-/** The AI's overview of these results, written by the local AI from the places found and Calling Bell's own prices and bookings. */
+/** The AI's overview of these results, written by the local AI from the places found and CallInBell's own prices and bookings. */
 function AiInsight({ insight, stalled, onRefresh }: { insight?: ExternalSearch['insight']; stalled: boolean; onRefresh?: () => void }) {
   if (!insight || insight.status === 'off') return null;
   if (insight.status === 'pending' && stalled) {
@@ -209,7 +209,7 @@ function AiInsight({ insight, stalled, onRefresh }: { insight?: ExternalSearch['
       {insight.status === 'pending' || !insight.text ? (
         <div className="mt-3 space-y-1.5" role="status">
           <Skeleton width="92%" /><Skeleton width="85%" /><Skeleton width="60%" />
-          <p className="pt-1 text-xs text-muted">Our AI assistant is reviewing these places and Calling Bell’s prices and bookings…</p>
+          <p className="pt-1 text-xs text-muted">Our AI assistant is reviewing these places and CallInBell’s prices and bookings…</p>
         </div>
       ) : (
         <InsightText text={insight.text} />
@@ -359,7 +359,7 @@ type PlaceDetails = ReturnType<typeof usePlaceDetails>;
 
 
 /**
- * Highlighted invitation for the owner of a place that isn't on Calling Bell to list it, with the sign-up pre-filled from what is known.
+ * Highlighted invitation for the owner of a place that isn't on CallInBell to list it, with the sign-up pre-filled from what is known.
  * Accent-tinted so it stands out from the card's own details and actions.
  */
 export function ClaimBusinessBanner({ place, className }: {
@@ -372,20 +372,20 @@ export function ClaimBusinessBanner({ place, className }: {
       <span aria-hidden className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-surface shadow-[var(--cb-shadow-xs)]"><LogoMark size={22} /></span>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-bold text-ink">Want more customers?</p>
-        <p className="text-xs text-ink-2">Own {place.name}? List it on Calling Bell and get enquiries, bookings and reviews from customers nearby.</p>
+        <p className="text-xs text-ink-2">Own {place.name}? List it on CallInBell and get enquiries, bookings and reviews from customers nearby.</p>
       </div>
       <Button size="small" variant="contained" disableElevation component={Link} to={joinHref(place, joinHint(search))}
         sx={{
           flexShrink: 0, bgcolor: 'var(--cb-accent)', color: 'var(--cb-on-accent)', fontWeight: 700, px: 2,
           '&:hover': { bgcolor: 'color-mix(in srgb, var(--cb-accent) 88%, #000)' },
         }}>
-        Join Calling Bell
+        Join CallInBell
       </Button>
     </div>
   );
 }
 
-/** Rating with review count, or a plain "No reviews yet" (external places have no Calling Bell reviews). */
+/** Rating with review count, or a plain "No reviews yet" (external places have no CallInBell reviews). */
 function PlaceRating({ d }: { d: PlaceDetails }) {
   if (d.rating == null || !d.ratingCount) return <span className="text-muted">No reviews yet</span>;
   return (
@@ -408,13 +408,13 @@ function OpenBadge({ openNow, hours }: { openNow: boolean | null; hours?: string
   return hours ? <Tooltip title={hours}><span tabIndex={0} className="rounded outline-offset-2">{badge}</span></Tooltip> : badge;
 }
 
-/** Marks a result as an outside listing, so it can't be mistaken for a business on Calling Bell. */
+/** Marks a result as an outside listing, so it can't be mistaken for a business on CallInBell. */
 function ExternalLabel({ source, compact }: { source: 'ai' | 'google'; compact?: boolean }) {
   const from = source === 'google' ? 'Google Maps' : 'OpenStreetMap';
   return (
-    <Tooltip describeChild title={`This business hasn't joined Calling Bell. Details are from ${from}${source === 'ai' ? ' and Google Maps' : ''}, so please confirm them with the business.`}>
+    <Tooltip describeChild title={`This business hasn't joined CallInBell. Details are from ${from}${source === 'ai' ? ' and Google Maps' : ''}, so please confirm them with the business.`}>
       <span tabIndex={0} className={`inline-flex shrink-0 items-center gap-1 rounded-full border border-dashed border-line-strong px-2 py-0.5 font-medium text-muted ${compact ? 'text-[10px]' : 'text-[11px]'}`}>
-        {source === 'ai' ? <><AutoAwesomeRounded sx={{ fontSize: 12 }} className="text-accent-ink" />AI pick</> : <GoogleMapsAttribution />} · Not on Calling Bell
+        {source === 'ai' ? <><AutoAwesomeRounded sx={{ fontSize: 12 }} className="text-accent-ink" />AI pick</> : <GoogleMapsAttribution />} · Not on CallInBell
       </span>
     </Tooltip>
   );
@@ -469,7 +469,7 @@ function PlaceActions({ p, d, source, compact }: { p: ExternalPlace; d: PlaceDet
 }
 
 /**
- * A dense place row for narrow panels such as the AI search assistant. With `join`, the place's owner is offered "Join Calling Bell"
+ * A dense place row for narrow panels such as the AI search assistant. With `join`, the place's owner is offered "Join CallInBell"
  * (`hint`: what was searched for, suggesting the category; `onOpen`: e.g. closes the panel as the sign-up form opens).
  */
 export function CompactPlace({ p, source, join }: {
@@ -502,12 +502,12 @@ export function CompactPlace({ p, source, join }: {
           <span className="min-w-0 flex-1 truncate text-xs text-ink-2">Want More Customers?</span>
           <Button size="small" variant="contained" disableElevation component={Link} onClick={join.onOpen}
             to={joinHref({ name: p.name, phone: d.phone, website: d.website, address: p.address, sourceId: p.id }, join.hint)}
-            aria-label={`Join Calling Bell as ${p.name}`}
+            aria-label={`Join CallInBell as ${p.name}`}
             sx={{
               flexShrink: 0, bgcolor: 'var(--cb-accent)', color: 'var(--cb-on-accent)', fontWeight: 700, whiteSpace: 'nowrap',
               '&:hover': { bgcolor: 'color-mix(in srgb, var(--cb-accent) 88%, #000)' },
             }}>
-            Join Calling Bell
+            Join CallInBell
           </Button>
         </div>
       )}

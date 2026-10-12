@@ -1,5 +1,5 @@
 /*
- * Calling Bell web push service worker.
+ * CallInBell web push service worker.
  *
  * The server sends Firebase Cloud Messaging *data* messages, so this worker decides how they appear: it shows a notification while the
  * site isn't in front (an open, focused tab already gets the same update live), opens the right page when it is clicked, and tells the

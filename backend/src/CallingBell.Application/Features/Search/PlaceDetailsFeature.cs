@@ -12,7 +12,7 @@ namespace CallingBell.Application.Features.Search;
 public sealed record PlaceFieldDto(string Label, string Value);
 
 /// <summary>
-/// Everything known about a place found outside Calling Bell (a Google Maps or AI recommended search result), combined from its sources
+/// Everything known about a place found outside CallInBell (a Google Maps or AI recommended search result), combined from its sources
 /// for the result detail window. Fields a source doesn't have are null or empty; nothing is filled in by guesswork.
 /// </summary>
 /// <param name="Source">"google" or "osm" (the AI recommended places come from OpenStreetMap).</param>

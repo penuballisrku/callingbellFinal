@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - RunAll.sql
+   CallInBell - RunAll.sql
    Runs every database script in dependency order. Requires SQLCMD mode:
      * SSMS:            Query > SQLCMD Mode, then execute
      * Azure Data Studio: enable "SQLCMD" in the query toolbar
@@ -46,3 +46,4 @@
 :r $(ScriptDir)\31_ChatStaffVideo.sql
 :r $(ScriptDir)\32_PlanComparison.sql
 :r $(ScriptDir)\33_NotificationEvents.sql
+:r $(ScriptDir)\34_Rebrand.sql

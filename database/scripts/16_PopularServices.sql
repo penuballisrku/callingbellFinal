@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 16_PopularServices.sql
+   CallInBell - 16_PopularServices.sql
    Curated home-page "Popular services" with card artwork.
 
    * Each row points at a sub-category and a ServiceName that exists in BusinessServices for

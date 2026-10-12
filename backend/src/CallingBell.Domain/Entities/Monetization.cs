@@ -3,7 +3,7 @@ using CallingBell.Domain.Common;
 namespace CallingBell.Domain.Entities;
 
 /// <summary>
-/// How platform prices (subscription plans, Calling Bell's typical service prices) are shown and charged in a country. Platform prices are
+/// How platform prices (subscription plans, CallInBell's typical service prices) are shown and charged in a country. Platform prices are
 /// set in Indian rupees; a country's price is <c>INR price × PriceMultiplier</c>, rounded to <see cref="RoundingStep"/>. The multiplier is
 /// purchasing-power based (local currency per rupee at PPP), so prices are realistic locally rather than a plain exchange-rate conversion.
 /// A business's own service prices are never converted: they are in its own currency. Country "ZZ" is the default for unlisted countries.

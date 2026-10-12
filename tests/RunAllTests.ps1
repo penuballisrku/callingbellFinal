@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Runs every Calling Bell check in order and prints one summary.
+    Runs every CallInBell check in order and prints one summary.
 
 .DESCRIPTION
     1. Database: Phase 2 tables present (or -ApplyDatabase runs database\scripts\RunAll.sql first).

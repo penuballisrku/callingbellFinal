@@ -38,7 +38,7 @@ public sealed record ExternalSearchDto(string? Query, string? PlaceName, string?
     ExternalInsightDto? Insight = null);
 
 /// <param name="Status">"ready" (<paramref name="Text"/> is set), "pending" (being written; poll) or "off" (AI disabled, unavailable or nothing to say).</param>
-/// <param name="Text">A few sentences helping the visitor choose, using only the places found and Calling Bell's own figures.</param>
+/// <param name="Text">A few sentences helping the visitor choose, using only the places found and CallInBell's own figures.</param>
 public sealed record ExternalInsightDto(string Status, string? Text);
 
 /// <param name="Place">A place that is not a listed city or area (e.g. "Nellore" from "lawyers in Nellore"): results are near it instead.</param>
@@ -250,7 +250,7 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
 
     /// <summary>
     /// The AI's overview of the results. The facts are live: the places found (Google Maps and the AI's OpenStreetMap picks), the matching
-    /// businesses registered on Calling Bell nearby, and Calling Bell's prices and most booked services for the searched service. It is
+    /// businesses registered on CallInBell nearby, and CallInBell's prices and most booked services for the searched service. It is
     /// written once the OpenStreetMap search has finished, so it covers the places shown. It doesn't wait for the AI's ranking (both
     /// are queued at once), and its cache key ignores the places themselves, so re-ranking or shifting map results don't start it over.
     /// </summary>
@@ -270,7 +270,7 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
             .Select(b => new { b.Name, b.Area, b.AverageRating, b.ReviewCount, Verified = b.VerifiedOn != null,
                 From = b.Services.Where(s => s.IsActive && s.Price > 0).Min(s => (decimal?)s.Price) })
             .ToListAsync(ct);
-        // Calling Bell's prices and most booked services for this service across the platform: a guide to what it typically costs.
+        // CallInBell's prices and most booked services for this service across the platform: a guide to what it typically costs.
         var prices = slugs.Count == 0 ? [] : await matching.SelectMany(b => b.Services.Where(s => s.IsActive && s.Price > 0).Select(s => s.Price)).ToListAsync(ct);
         var since = DateTimeOffset.UtcNow.AddDays(-180);
         var booked = slugs.Count == 0 ? [] : await uow.Repository<Booking>().QueryNoTracking()
@@ -283,32 +283,32 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
         var picks = aiTier.Items.Take(5).ToList();
         if (google.Count == 0 && picks.Count == 0 && registeredCount == 0) return new("off", null);
 
-        // A registered business's own price is shown as it charges it; Calling Bell's platform-wide figures (in rupees) are converted
+        // A registered business's own price is shown as it charges it; CallInBell's platform-wide figures (in rupees) are converted
         // to fair local prices for the country searched in.
         string Own(decimal? p) => money.Format(p);
         string Typical(decimal? p) => money.Format(p is { } v ? money.Convert(v) : null);
         string Place(ExternalPlaceDto p) =>
             $"- {p.Name}{(p.Kind is null ? "" : $" ({p.Kind})")}: {p.DistanceKm:0.0} km away" +
             (p.Rating is { } r ? $", rated {r:0.0}{(p.RatingCount is { } n ? $" from {n} reviews" : "")}" : ", no rating") +
-            (p.Phone is null ? "" : ", phone listed") + (p.OpeningHours is null ? "" : $", hours {p.OpeningHours}") + ". NOT on Calling Bell: cannot be booked here, contact them directly";
+            (p.Phone is null ? "" : ", phone listed") + (p.OpeningHours is null ? "" : $", hours {p.OpeningHours}") + ". NOT on CallInBell: cannot be booked here, contact them directly";
         var where = Where(origin);
         var facts = new System.Text.StringBuilder();
         facts.AppendLine($"Searched for: {label}, near {where}");
         facts.AppendLine(registeredCount == 0
-            ? $"Registered on Calling Bell near {where}: none yet for this service (customers can't book them through Calling Bell)."
-            : $"Registered on Calling Bell near {where}: {registeredCount} (bookable with verified reviews). Top rated:");
+            ? $"Registered on CallInBell near {where}: none yet for this service (customers can't book them through CallInBell)."
+            : $"Registered on CallInBell near {where}: {registeredCount} (bookable with verified reviews). Top rated:");
         foreach (var b in registered)
             facts.AppendLine($"- {b.Name}{(b.Area is null ? "" : $" ({b.Area})")}: " +
-                $"{(b.ReviewCount > 0 ? $"rated {b.AverageRating:0.0} from {b.ReviewCount} reviews" : "no reviews yet")}, from {Own(b.From)}{(b.Verified ? ", verified" : "")}. On Calling Bell: can be booked here");
+                $"{(b.ReviewCount > 0 ? $"rated {b.AverageRating:0.0} from {b.ReviewCount} reviews" : "no reviews yet")}, from {Own(b.From)}{(b.Verified ? ", verified" : "")}. On CallInBell: can be booked here");
         if (prices.Count > 0)
-            facts.AppendLine($"Typical prices for {label} on Calling Bell: {Typical(prices.Min())} to {Typical(prices.Max())}, average {Typical(Math.Round(prices.Average()))}");
+            facts.AppendLine($"Typical prices for {label} on CallInBell: {Typical(prices.Min())} to {Typical(prices.Max())}, average {Typical(Math.Round(prices.Average()))}");
         if (booked.Count > 0)
-            facts.AppendLine($"Most booked {label} services on Calling Bell (last 6 months): " +
+            facts.AppendLine($"Most booked {label} services on CallInBell (last 6 months): " +
                 string.Join("; ", booked.Select(b => $"{b.Name} ({b.Count} bookings, from {Typical(b.From)})")));
-        if (google.Count > 0) { facts.AppendLine("On Google Maps nearby (not on Calling Bell):"); foreach (var p in google) facts.AppendLine(Place(p)); }
+        if (google.Count > 0) { facts.AppendLine("On Google Maps nearby (not on CallInBell):"); foreach (var p in google) facts.AppendLine(Place(p)); }
         if (picks.Count > 0)
         {
-            facts.AppendLine(aiTier.AiStatus == "ranked" ? "AI-picked places from OpenStreetMap (not on Calling Bell), best match first:" : "Places from OpenStreetMap nearby (not on Calling Bell), nearest first:");
+            facts.AppendLine(aiTier.AiStatus == "ranked" ? "AI-picked places from OpenStreetMap (not on CallInBell), best match first:" : "Places from OpenStreetMap nearby (not on CallInBell), nearest first:");
             foreach (var p in picks) facts.AppendLine(Place(p));
         }
 
@@ -316,8 +316,8 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
         var key = $"insight|{string.Join(' ', Words(label))}|{origin.PlaceKey}|{registeredCount}";
         if (assistant.GetAnswer(key) is { } answer) return new("ready", answer.Text);
         assistant.RequestAnswer(key,
-            $"I need {label} near {where}. Recommend the best 3 or 4 options from ALL the places in the facts (Calling Bell, Google Maps and " +
-            "OpenStreetMap), naming each one and saying briefly why (rating, reviews, distance, price) and whether it can be booked on Calling Bell. " +
+            $"I need {label} near {where}. Recommend the best 3 or 4 options from ALL the places in the facts (CallInBell, Google Maps and " +
+            "OpenStreetMap), naming each one and saying briefly why (rating, reviews, distance, price) and whether it can be booked on CallInBell. " +
             "End with one short tip on choosing, using the typical prices if given.", facts.ToString());
         return new(assistant.IsAnswerPending(key) ? "pending" : "off", null);
     }

@@ -26,7 +26,7 @@ export function WelcomeBanner({ name, onDismiss }: { name: string; onDismiss: ()
     <div className="mb-6 flex items-start gap-4 rounded-xl border border-success/30 bg-success-soft p-4 md:p-5" role="status">
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success text-white"><CelebrationOutlined /></span>
       <div className="min-w-0 flex-1">
-        <div className="font-semibold text-ink">Welcome to Calling Bell! {name} has been created.</div>
+        <div className="font-semibold text-ink">Welcome to CallInBell! {name} has been created.</div>
         <p className="mt-0.5 text-sm text-ink-2">Our team will review your listing, usually within one working day. Meanwhile, complete your profile below so you're ready for your first customers.</p>
       </div>
       <IconButton size="small" onClick={onDismiss} aria-label="Dismiss"><CloseRounded fontSize="small" /></IconButton>
@@ -59,7 +59,7 @@ export function BusinessHero({ data, greeting, attention }: { data?: OwnerOvervi
   const b = data?.business;
   return (
     <section className="relative mb-6 overflow-hidden rounded-2xl bg-navy text-white ring-1 ring-inset ring-white/8" aria-label="Business overview">
-      {/* Signal rings from the Calling Bell mark, radiating behind the content. */}
+      {/* Signal rings from the CallInBell mark, radiating behind the content. */}
       <svg aria-hidden className="pointer-events-none absolute -right-24 -top-24 h-[420px] w-[420px] text-accent" viewBox="0 0 420 420" fill="none">
         {[60, 110, 160, 210].map((r, i) => <circle key={r} cx="210" cy="210" r={r} stroke="currentColor" strokeWidth="1.5" opacity={0.28 - i * 0.06} />)}
       </svg>

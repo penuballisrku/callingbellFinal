@@ -184,7 +184,7 @@ public sealed class UpdateBusinessAdminHandler(IUnitOfWork uow, IRealtimeNotifie
             b.Status = r.Status;
             messages.Add(r.Status switch
             {
-                BusinessStatuses.Active => "Your listing is now live on Calling Bell.",
+                BusinessStatuses.Active => "Your listing is now live on CallInBell.",
                 BusinessStatuses.Suspended => $"Your listing has been suspended.{(string.IsNullOrWhiteSpace(r.Note) ? "" : $" Reason: {r.Note}")}",
                 _ => $"Your listing status changed to {r.Status}."
             });

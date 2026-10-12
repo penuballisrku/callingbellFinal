@@ -38,12 +38,12 @@ public sealed class SeoMetadataService(ISender sender, IUnitOfWork uow, IOptions
     /// <summary>Public pages with fixed titles; descriptions come from their database content when it has one.</summary>
     private static readonly Dictionary<string, (string Title, string Description, string? ContentKey)> StaticPages = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["/categories"] = ("All categories of local businesses and services", "Browse every category of local businesses and services listed on Calling Bell, with the number of businesses in each.", null),
-        ["/pricing"] = ("Plans and pricing for businesses", "Calling Bell plans for local businesses: listing, leads, bookings and advertising, with prices for your country.", null),
-        ["/list-your-business"] = ("List your business", "List your business on Calling Bell: get found by nearby customers, receive enquiries and bookings, and grow.", "ListYourBusiness"),
-        ["/about"] = ("About Calling Bell", "About Calling Bell, the real-time local business network for discovering, contacting and booking local businesses.", "About"),
-        ["/trust-and-safety"] = ("Trust and safety", "How Calling Bell verifies businesses, moderates reviews and keeps customers and businesses safe.", "TrustSafety"),
-        ["/support"] = ("Contact support", "Get help with Calling Bell: contact support, find answers and report a problem.", "ContactSupport"),
+        ["/categories"] = ("All categories of local businesses and services", "Browse every category of local businesses and services listed on CallInBell, with the number of businesses in each.", null),
+        ["/pricing"] = ("Plans and pricing for businesses", "CallInBell plans for local businesses: listing, leads, bookings and advertising, with prices for your country.", null),
+        ["/list-your-business"] = ("List your business", "List your business on CallInBell: get found by nearby customers, receive enquiries and bookings, and grow.", "ListYourBusiness"),
+        ["/about"] = ("About CallInBell", "About CallInBell, the real-time local business network for discovering, contacting and booking local businesses.", "About"),
+        ["/trust-and-safety"] = ("Trust and safety", "How CallInBell verifies businesses, moderates reviews and keeps customers and businesses safe.", "TrustSafety"),
+        ["/support"] = ("Contact support", "Get help with CallInBell: contact support, find answers and report a problem.", "ContactSupport"),
     };
 
     private SeoOptions O => options.Value;

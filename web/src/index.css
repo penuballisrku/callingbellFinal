@@ -22,6 +22,8 @@
   --cb-line-strong: #cbd2dc;
   --cb-inverse: #0b1220;
   --cb-on-inverse: #ffffff;
+  /* The amber "In" of the CallInBell wordmark: brand amber, deepened on light surfaces so it stays legible. Fixed, not the theme accent. */
+  --cb-brand-in: #c97a0a;
   /* Brand navy surfaces (hero, footer, sidebar) stay dark in both modes. */
   --cb-navy: #0b1220;
   --cb-navy-2: #021223;
@@ -50,7 +52,7 @@
   --cb-warning-soft: #fffaeb;
   --cb-warning-line: #fedf89;
 
-  /* Accent theme (default: Calling Bell amber) */
+  /* Accent theme (default: CallInBell amber) */
   --cb-accent: #f4a62c;
   --cb-accent-soft: #fef4e2;
   --cb-accent-ink: #93530a;
@@ -70,6 +72,7 @@
   --cb-line-strong: #334056;
   --cb-inverse: #f2f4f7;
   --cb-on-inverse: #0b1220;
+  --cb-brand-in: #f4a62c;
   --cb-navy: #060a11;
   --cb-navy-2: #04070d;
   --cb-shadow: rgba(0, 0, 0, 0.35);

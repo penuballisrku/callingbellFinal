@@ -36,6 +36,11 @@ public sealed class AuthController : ApiControllerBase
     public async Task<ActionResult<ApiResponse<AuthResultDto>>> Register(RegisterCommand command, CancellationToken ct) =>
         Success(await Sender.Send(command, ct), "Account created");
 
+    /// <summary>Creates a customer or business owner account that signs in with email and password (the alternative to Google sign-up).</summary>
+    [HttpPost("register-with-password"), EnableRateLimiting("auth")]
+    public async Task<ActionResult<ApiResponse<AuthResultDto>>> RegisterWithPassword(RegisterWithPasswordCommand command, CancellationToken ct) =>
+        Success(await Sender.Send(command, ct), "Account created");
+
     /// <summary>Which sign-in options are available (the Google client id for the "Sign in with Google" button, or null).</summary>
     [HttpGet("providers")]
     public async Task<ActionResult<ApiResponse<AuthProvidersDto>>> Providers(CancellationToken ct) => Success(await Sender.Send(new GetAuthProvidersQuery(), ct));
@@ -238,7 +243,7 @@ public sealed class BusinessesController : ApiControllerBase
         Success(await Sender.Send(new CallingBell.Application.Features.Staff.GetBusinessTeamQuery(id), ct));
 
     /// <summary>
-    /// "Claim business": asks to take over an existing listing (e.g. one found while joining Calling Bell). An administrator verifies the
+    /// "Claim business": asks to take over an existing listing (e.g. one found while joining CallInBell). An administrator verifies the
     /// person before transferring it. Signed-in or not.
     /// </summary>
     [HttpPost("{id:guid}/claim-requests"), EnableRateLimiting("submissions")]
@@ -466,9 +471,9 @@ public sealed class PlacesController : ApiControllerBase
     }
 
     /// <summary>
-    /// "Join Calling Bell": everything known about a Google Maps or OpenStreetMap place, read from the source on the server, cleaned and
-    /// matched to Calling Bell's categories, cities and areas, for the business sign-up form; its photos (shown with their credit); and
-    /// Calling Bell businesses that may already be this one (<c>existingBusinesses</c>; a strong match can't be registered again).
+    /// "Join CallInBell": everything known about a Google Maps or OpenStreetMap place, read from the source on the server, cleaned and
+    /// matched to CallInBell's categories, cities and areas, for the business sign-up form; its photos (shown with their credit); and
+    /// CallInBell businesses that may already be this one (<c>existingBusinesses</c>; a strong match can't be registered again).
     /// 404 when the place can't be found. Nothing is stored.
     /// </summary>
     /// <param name="sourceId">"google:{place id}" or "osm:node/123", as on the search and Explore nearby results.</param>

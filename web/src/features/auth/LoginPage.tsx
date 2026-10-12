@@ -61,7 +61,7 @@ export default function LoginPage() {
           slotProps={{ input: { endAdornment: <InputAdornment position="end"><IconButton onClick={() => setShow((s) => !s)} edge="end" aria-label={show ? 'Hide password' : 'Show password'}>{show ? <VisibilityOffOutlined /> : <VisibilityOutlined />}</IconButton></InputAdornment> } }} />
         <Button type="submit" variant="outlined" size="large" fullWidth disabled={isSubmitting}>{isSubmitting ? 'Signing in…' : 'Sign in with email'}</Button>
       </form>
-      <p className="mt-6 text-center text-sm text-muted">New to Calling Bell? <Link to="/register" className="font-semibold text-ink underline-offset-2 hover:underline">Create an account</Link></p>
+      <p className="mt-6 text-center text-sm text-muted">New to CallInBell? <Link to="/register" className="font-semibold text-ink underline-offset-2 hover:underline">Create an account</Link></p>
 
       <div className="mt-8 rounded-xl border border-dashed border-line bg-canvas p-4">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted">Demo accounts · password CallingBell@2026</p>
@@ -81,7 +81,7 @@ export function AuthShell({ title, subtitle, children }: { title: string; subtit
     <div className="container-page grid gap-10 py-10 md:py-16 lg:grid-cols-2 lg:items-center">
       <div className="hidden lg:block">
         <div className="rounded-2xl bg-navy p-10 text-white">
-          <p className="text-sm font-semibold uppercase tracking-[0.12em] text-accent">Calling Bell</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.12em] text-accent">CallInBell</p>
           <h2 className="mt-3 text-3xl font-bold leading-tight">{tagline}</h2>
           <ul className="mt-6 space-y-3 text-[15px] text-on-navy-muted">
             <li>• See who's available right now - call, chat or book instantly</li>

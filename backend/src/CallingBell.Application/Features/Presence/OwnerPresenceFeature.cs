@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 namespace CallingBell.Application.Features.Presence;
 
 /// <summary>
-/// An owner's businesses follow whether the owner has Calling Bell open (their live connections are tracked in the API).
+/// An owner's businesses follow whether the owner has CallInBell open (their live connections are tracked in the API).
 /// Arriving: a business that is Offline goes Online; a status the owner chose (Busy, Available for call…) is kept. Leaving: every
 /// business goes Offline. Both update "last seen" and are pushed live to customers viewing the business.
 /// </summary>

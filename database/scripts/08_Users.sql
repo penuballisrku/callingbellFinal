@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 08_Users.sql
+   CallInBell - 08_Users.sql
    Platform administrators and customer accounts.
    (Business-owner accounts are created by 04_Businesses.sql together with their listings.)
 

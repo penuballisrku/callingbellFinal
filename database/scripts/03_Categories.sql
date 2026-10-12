@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 03_Categories.sql
+   CallInBell - 03_Categories.sql
    Category taxonomy (top-level categories + sub-categories) and their artwork.
 
    * Merges onto the categories/sub-categories that already existed (matched by Slug),

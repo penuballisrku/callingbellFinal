@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 00_Schema.sql
+   CallInBell - 00_Schema.sql
    Extends the existing CallingBell schema (created by the original EF Core migrations
    InitialCreate + AddSubCategoriesAndMedia) to the full platform model.
 

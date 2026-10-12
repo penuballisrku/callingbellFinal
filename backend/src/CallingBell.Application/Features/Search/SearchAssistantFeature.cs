@@ -376,7 +376,7 @@ public sealed partial class AskSearchAssistantHandler(ISender sender, IUnitOfWor
         if (f.Sort is { } sort) facts.AppendLine($"Sorted by: {sort switch { "price" => "lowest price first", "rating" => "highest rated first", "reviews" => "most reviewed first", _ => "nearest first" }}");
         if (relaxed.Count > 0) facts.AppendLine($"Nothing matched every filter, so these were dropped: {string.Join(", ", relaxed)}");
         var total = result.Pagination.TotalCount;
-        facts.AppendLine($"Businesses on Calling Bell matching: {total}");
+        facts.AppendLine($"Businesses on CallInBell matching: {total}");
         if (result.Applied is { AreaName: { } area, AreaMatches: { } inArea }) facts.AppendLine($"Of these, {inArea} are in {area} itself");
         foreach (var c in result.Items)
         {
@@ -388,13 +388,13 @@ public sealed partial class AskSearchAssistantHandler(ISender sender, IUnitOfWor
         }
         // The panel tops a short list up with places from the map (Google Maps, then OpenStreetMap).
         if (total is > 0 and < ResultCount && f is { Sub: not null } or { Category: not null } or { Q: not null })
-            facts.AppendLine("More places nearby from the map (not on Calling Bell) are shown below the reply.");
+            facts.AppendLine("More places nearby from the map (not on CallInBell) are shown below the reply.");
         if (total == 0 && elsewhere is not null)
         {
-            if (!elsewhere.CityHasListings) facts.AppendLine("No businesses of any kind are listed in this city on Calling Bell yet.");
+            if (!elsewhere.CityHasListings) facts.AppendLine("No businesses of any kind are listed in this city on CallInBell yet.");
             if (elsewhere.Cities.Count > 0)
-                facts.AppendLine($"{elsewhere.Related ?? understood ?? "Matching businesses"} are listed on Calling Bell in: {JoinAnd(elsewhere.Cities)}");
-            if (where is not null) facts.AppendLine("Real places nearby from the map (not on Calling Bell) are shown below the reply.");
+                facts.AppendLine($"{elsewhere.Related ?? understood ?? "Matching businesses"} are listed on CallInBell in: {JoinAnd(elsewhere.Cities)}");
+            if (where is not null) facts.AppendLine("Real places nearby from the map (not on CallInBell) are shown below the reply.");
         }
         return facts.ToString();
     }
@@ -459,10 +459,10 @@ public sealed partial class AskSearchAssistantHandler(ISender sender, IUnitOfWor
         {
             var understoodSomething = understood is not null || f.Q is not null;
             answer = elsewhere is { CityHasListings: false } && applied.CityName is not null
-                ? $"No businesses are listed on Calling Bell in {applied.CityName} yet."
+                ? $"No businesses are listed on CallInBell in {applied.CityName} yet."
                 : elsewhere is { Cities.Count: 0, Related: null } && understood is not null
-                    ? $"There are no listings for {what} on Calling Bell yet."
-                    : $"There are no listings for {what}{place} on Calling Bell yet.";
+                    ? $"There are no listings for {what} on CallInBell yet."
+                    : $"There are no listings for {what}{place} on CallInBell yet.";
             if (elsewhere is { Cities.Count: > 0 })
                 answer += elsewhere.Related is { } related
                     ? $" Related {related} services are listed in {JoinAnd(elsewhere.Cities)}."
@@ -627,7 +627,7 @@ public sealed partial class AskSearchAssistantHandler(ISender sender, IUnitOfWor
         string Rupees(decimal? p) => p is > 0 ? "₹" + p.Value.ToString("N0", inr) : "price on request";
         var facts = new StringBuilder();
         facts.AppendLine(CultureInfo.InvariantCulture, $"Today: {DateTime.UtcNow.AddHours(5.5):dddd d MMMM yyyy}");
-        if (city is not null && !local) facts.AppendLine($"No businesses are listed on Calling Bell in {city.Name} yet; the figures below are for all of India.");
+        if (city is not null && !local) facts.AppendLine($"No businesses are listed on CallInBell in {city.Name} yet; the figures below are for all of India.");
         facts.AppendLine(local ? $"Location: {city!.Name}, {city.State} ({cityCount:N0} businesses listed)"
             : $"Location: all of India ({await all.CountAsync(ct):N0} businesses listed)");
         if (top.Applied.AreaName is { } area) facts.AppendLine($"Customer's area: {area}");
@@ -676,7 +676,7 @@ public sealed partial class AskSearchAssistantHandler(ISender sender, IUnitOfWor
         var composed = focus is not null && top.Items.Count > 0
             ? $"Top rated {focus} {placeText}: " + JoinAnd(top.Items.Take(n).Select(c => c.ReviewCount > 0 ? $"{c.Name} ({c.AverageRating:0.0}★)" : c.Name).ToList()) + "."
             : services.Count > 0
-                ? $"The most popular services {placeText} on Calling Bell right now are " + JoinAnd(services.Take(n).Select(s => s.Name).ToList()) + "."
+                ? $"The most popular services {placeText} on CallInBell right now are " + JoinAnd(services.Take(n).Select(s => s.Name).ToList()) + "."
                 : "There aren't enough listings yet to answer that. Try searching for a service instead.";
         if (city is not null && !local) composed = $"No businesses are listed in {city.Name} yet. " + composed;
         if (pending) composed += " Let me put together a fuller answer…";

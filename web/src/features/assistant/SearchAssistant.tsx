@@ -167,17 +167,17 @@ export function SearchAssistant() {
             <SendRounded fontSize="small" />
           </IconButton>
         </div>
-        <p className="mt-1.5 text-[11px] text-faint">Calling Bell businesses first, then Google Maps, then OpenStreetMap. AI suggestions can be imperfect.</p>
+        <p className="mt-1.5 text-[11px] text-faint">CallInBell businesses first, then Google Maps, then OpenStreetMap. AI suggestions can be imperfect.</p>
       </form>
     </Drawer>
   );
 }
 
-/** Places an answer shows (the server returns up to this many Calling Bell businesses). */
+/** Places an answer shows (the server returns up to this many CallInBell businesses). */
 const ANSWER_SIZE = 5;
 
 /**
- * Tops an answer up to {@link ANSWER_SIZE} places, in priority order: Calling Bell businesses (shown above), then Google Maps, then
+ * Tops an answer up to {@link ANSWER_SIZE} places, in priority order: CallInBell businesses (shown above), then Google Maps, then
  * OpenStreetMap, the free open source map, which is only searched when Google Maps is off, fails or finds too few. The server leaves out
  * places a higher source already listed.
  */
@@ -192,7 +192,7 @@ function NearbyPlaces({ filters, need, listed, onClose }: { filters: AssistantFi
   const fromGoogle = google.length > 0;
   const fromOsm = places.some((x) => x.source === 'ai');
 
-  // Below Calling Bell's own results, nothing is shown when the map has nothing to add.
+  // Below CallInBell's own results, nothing is shown when the map has nothing to add.
   if (listed > 0 && !isLoading && places.length === 0 && !stillSearching) return null;
 
   return (
@@ -217,7 +217,7 @@ function NearbyPlaces({ filters, need, listed, onClose }: { filters: AssistantFi
             ))}
           </ul>
           <p className="flex flex-wrap items-center gap-x-1 text-[11px] text-faint">
-            <span>Not listed on Calling Bell.</span>
+            <span>Not listed on CallInBell.</span>
             {fromGoogle && <GoogleMapsDataCredit />}
             {fromOsm && <span>Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline">OpenStreetMap contributors</a></span>}
           </p>
@@ -291,7 +291,7 @@ function AnswerView({ turn, disabled, onSuggest, onRemoveChip, onRetry, onClose 
       {stillThinking && (
         <div className="space-y-1">
           <LinearProgress sx={{ borderRadius: 1, height: 3 }} aria-label="AI is working on your request" />
-          <p className="text-[11px] text-faint">The AI is working on a fuller answer from live Calling Bell data…</p>
+          <p className="text-[11px] text-faint">The AI is working on a fuller answer from live CallInBell data…</p>
         </div>
       )}
 

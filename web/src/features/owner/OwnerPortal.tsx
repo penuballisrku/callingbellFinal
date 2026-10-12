@@ -138,7 +138,7 @@ function AvailabilitySwitch({ business }: { business: OwnerBusiness }) {
     },
     onError: (e) => enqueueSnackbar(errorMessage(e), { variant: 'error' }),
   });
-  // Opening or leaving Calling Bell changes the status automatically (OwnerPresenceTracker on the server): keep this control in step.
+  // Opening or leaving CallInBell changes the status automatically (OwnerPresenceTracker on the server): keep this control in step.
   usePresence([business.id], (e) => queryClient.setQueryData<OwnerBusiness[]>(['owner', 'businesses'],
     (old) => old?.map((b) => (b.id === e.businessId ? { ...b, availabilityStatus: e.status } : b))));
   const current = statuses.find((s) => s.code === business.availabilityStatus);

@@ -1,8 +1,8 @@
 /* =====================================================================================
-   Calling Bell - 25_CountryPricing.sql
+   CallInBell - 25_CountryPricing.sql
    Currency and fair local prices per country (dbo.CountryPricing).
 
-   Platform prices (subscription plans, Calling Bell's typical service prices in the AI
+   Platform prices (subscription plans, CallInBell's typical service prices in the AI
    overview) are set in Indian rupees. In another country they are shown and charged as
        INR price x PriceMultiplier, rounded to RoundingStep, in that country's currency.
    PriceMultiplier is purchasing-power based: the country's PPP conversion factor divided
@@ -13,7 +13,7 @@
 
    TaxRate: India charges 18% GST. Services billed from India to customers abroad are
    zero-rated exports, so other countries carry no tax here; set TaxName/TaxRate for a
-   country once Calling Bell registers for its sales tax/VAT.
+   country once CallInBell registers for its sales tax/VAT.
 
    "ZZ" is the default for countries without a row (US dollars, US price level).
    The values are reasonable starting points; adjust them per market as needed.

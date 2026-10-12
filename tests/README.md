@@ -1,4 +1,4 @@
-# Calling Bell tests
+# CallInBell tests
 
 One command runs everything: database check, unit tests, web build, API checks, phone checks, browser checks, then cleanup.
 

@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 02_Locations.sql
+   CallInBell - 02_Locations.sql
    States, cities (with database-stored SVG artwork) and localities with real pincodes.
    Idempotent: MERGE on Slug / (CityId, Slug).
    ===================================================================================== */

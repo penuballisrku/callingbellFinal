@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 32_PlanComparison.sql
+   CallInBell - 32_PlanComparison.sql
    The plan comparison table on the Pricing page: one value per plan and feature
    (e.g. "Featured placement": Starter = Limited, Growth = Yes). The Price row comes from the
    plans themselves, in the visitor's currency, so it is not stored here.

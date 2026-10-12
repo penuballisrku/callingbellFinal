@@ -59,7 +59,7 @@ function applyHead(d: SeoDocument) {
   canonical.dataset.seo = '';
   head.appendChild(canonical);
   meta('property', 'og:type', d.ogType);
-  meta('property', 'og:site_name', 'Calling Bell');
+  meta('property', 'og:site_name', 'CallInBell');
   meta('property', 'og:title', d.title);
   meta('property', 'og:description', d.description);
   meta('property', 'og:url', d.canonicalUrl);

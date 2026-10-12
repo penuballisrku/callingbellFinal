@@ -4,7 +4,7 @@ using MediatR;
 namespace CallingBell.Api.Hubs;
 
 /// <summary>
-/// Which business owners have Calling Bell open, from their NotificationHub connections (one per tab). The first connection after being
+/// Which business owners have CallInBell open, from their NotificationHub connections (one per tab). The first connection after being
 /// away puts their businesses Online; when the last one closes and stays closed for the grace period (Presence:OfflineAfterSeconds,
 /// default 120) they go Offline. A reconnect within the grace period (a reload, a network blip) changes nothing.
 /// </summary>

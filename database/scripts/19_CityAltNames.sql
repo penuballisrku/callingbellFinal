@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 19_CityAltNames.sql
+   CallInBell - 19_CityAltNames.sql
    Other names people type for the listed cities (dbo.Cities.AltNames), '|' separated.
 
    A search such as "salons in Bangalore" names its place after "in"; the search parser

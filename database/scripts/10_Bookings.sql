@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 10_Bookings.sql
+   CallInBell - 10_Bookings.sql
    Service bookings (past and upcoming) for businesses that accept online booking.
    Times are within working hours (IST), statuses follow the booking date, and platform
    commission (8%) is recorded on completed paid bookings.

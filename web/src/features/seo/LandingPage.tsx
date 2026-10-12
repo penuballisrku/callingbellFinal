@@ -51,7 +51,7 @@ export default function LandingPage() {
         </section>
       ) : (
         <div className="mt-8">
-          <EmptyState title="Nothing listed here yet" message="Businesses appear here once they are listed on Calling Bell."
+          <EmptyState title="Nothing listed here yet" message="Businesses appear here once they are listed on CallInBell."
             action={<Button component={Link} to="/list-your-business" variant="outlined">List your business</Button>} />
         </div>
       )}

@@ -38,10 +38,7 @@ public sealed class ChangePasswordValidator : AbstractValidator<ChangePasswordCo
 {
     public ChangePasswordValidator()
     {
-        RuleFor(x => x.NewPassword).NotEmpty().MinimumLength(8)
-            .Matches("[A-Z]").WithMessage("Password must contain an uppercase letter.")
-            .Matches("[a-z]").WithMessage("Password must contain a lowercase letter.")
-            .Matches("[0-9]").WithMessage("Password must contain a number.");
+        RuleFor(x => x.NewPassword).StrongPassword();
         RuleFor(x => x.NewPassword).NotEqual(x => x.CurrentPassword).When(x => !string.IsNullOrEmpty(x.CurrentPassword))
             .WithMessage("Choose a password different from your current one.");
     }

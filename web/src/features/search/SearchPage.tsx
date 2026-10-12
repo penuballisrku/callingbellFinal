@@ -188,7 +188,7 @@ export default function SearchPage() {
     ? { q: query.q, category: query.category, sub: query.sub, place }
     : parsePending ? {}
     : { q: query.q, category: query.category, sub: query.sub, city: query.city, areaId: query.areaId });
-  // One list in priority order: Calling Bell businesses, then Google Maps, then AI recommended (each source leaves out places above it).
+  // One list in priority order: CallInBell businesses, then Google Maps, then AI recommended (each source leaves out places above it).
   const searchesExternal = !!(query.q?.trim() || query.category || query.sub);
   const { data: categoryTree } = useCategories();
   // Rotating "e.g. …" placeholder: categories alternating with the most-listed sub-categories, from the catalogue.
@@ -256,14 +256,14 @@ export default function SearchPage() {
   const filters = <Filters params={params} update={update} />;
   const filtersNote = searchesExternal && (
     <p className="mb-3 flex items-start gap-1.5 rounded-lg bg-subtle px-3 py-2 text-xs text-muted">
-      <InfoOutlined sx={{ fontSize: 14, mt: '1px' }} />Category and location apply to all results; the other filters apply to Calling Bell businesses.
+      <InfoOutlined sx={{ fontSize: 14, mt: '1px' }} />Category and location apply to all results; the other filters apply to CallInBell businesses.
     </p>
   );
 
   return (
     <div className="container-page py-8">
       <PageHeader title={title} crumbs={[{ label: 'Home', to: '/' }, { label: 'Search' }]}
-        subtitle={place ? 'Google Maps businesses and AI recommendations · not a Calling Bell city yet'
+        subtitle={place ? 'Google Maps businesses and AI recommendations · not a CallInBell city yet'
           : data ? `${number(data.pagination.totalCount)} ${data.pagination.totalCount === 1 ? 'business' : 'businesses'} found` : 'Searching…'} />
 
       <div className="grid gap-6 lg:grid-cols-[264px_1fr]">
@@ -285,7 +285,7 @@ export default function SearchPage() {
             </form>
             <div className="flex gap-2">
               <Button className="lg:!hidden" variant="outlined" startIcon={<TuneRounded />} onClick={() => setDrawer(true)}>Filters{activeChips.length ? ` (${activeChips.length})` : ''}</Button>
-              {/* Sorting applies to Calling Bell results; Google Maps and AI results are listed nearest first. */}
+              {/* Sorting applies to CallInBell results; Google Maps and AI results are listed nearest first. */}
               {!place && (
                 <TextField select size="small" value={query.sort} onChange={(e) => update({ sort: e.target.value === 'relevance' ? null : e.target.value })}
                   sx={{ minWidth: 170 }} slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Sort by' } }}>
@@ -337,7 +337,7 @@ export default function SearchPage() {
                   {searchesExternal && (
                     <p className="flex items-center gap-1.5 text-sm text-muted">
                       <VerifiedRounded sx={{ fontSize: 16 }} className="text-success" />
-                      Verified businesses registered on Calling Bell: enquire, book and review them here.
+                      Verified businesses registered on CallInBell: enquire, book and review them here.
                     </p>
                   )}
                   {areaNotice && (
@@ -389,7 +389,7 @@ export default function SearchPage() {
   );
 }
 
-/** Shown instead of registered businesses when the search names a place that isn't a Calling Bell city or area ("lawyers in Nellore"). */
+/** Shown instead of registered businesses when the search names a place that isn't a CallInBell city or area ("lawyers in Nellore"). */
 function UnlistedPlaceNotice({ place, notFound, onUseDropdown }: { place: string; notFound: boolean; onUseDropdown: () => void }) {
   const selected = useCity((s) => s.citySlug);
   return (
@@ -399,7 +399,7 @@ function UnlistedPlaceNotice({ place, notFound, onUseDropdown }: { place: string
         <p className="font-medium text-ink">
           {notFound
             ? `We couldn’t find a place called “${place}”.`
-            : `${place} isn’t a Calling Bell city yet, so there are no registered businesses there.`}
+            : `${place} isn’t a CallInBell city yet, so there are no registered businesses there.`}
         </p>
         <p className="mt-0.5 text-muted">
           {notFound

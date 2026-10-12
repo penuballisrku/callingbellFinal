@@ -130,7 +130,7 @@ builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
-    options.SwaggerDoc("v1", new OpenApiInfo { Title = "Calling Bell API", Version = "v1", Description = "Discover. Connect. Book. Grow." });
+    options.SwaggerDoc("v1", new OpenApiInfo { Title = "CallInBell API", Version = "v1", Description = "Discover. Connect. Book. Grow." });
     options.CustomSchemaIds(type => type.FullName!.Replace("+", "."));
     var scheme = new OpenApiSecurityScheme
     {
@@ -168,7 +168,7 @@ app.UseResponseCompression();
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI(o => o.DocumentTitle = "Calling Bell API");
+    app.UseSwaggerUI(o => o.DocumentTitle = "CallInBell API");
 }
 else
 {

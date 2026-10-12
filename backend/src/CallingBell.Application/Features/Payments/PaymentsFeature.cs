@@ -48,7 +48,7 @@ internal static class Pricing
 
     /// <summary>
     /// The plan's price in the business's country: the rupee price converted to its currency at a fair local price, plus that
-    /// country's tax (18% GST in India; none where Calling Bell doesn't collect tax). Same figures as GET /api/plans for that country.
+    /// country's tax (18% GST in India; none where CallInBell doesn't collect tax). Same figures as GET /api/plans for that country.
     /// </summary>
     public static (decimal Subtotal, decimal Tax, decimal Total) For(SubscriptionPlan plan, string cycle, CountryPrice country)
     {

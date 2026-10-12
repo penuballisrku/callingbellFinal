@@ -76,7 +76,7 @@ export const businessSchema = z.object({
   billingCycle: z.enum(['Monthly', 'Annual']),
   socialLinks: z.array(socialSchema),
   hours: z.array(hourSchema),
-  /** "Join Calling Bell": the Google Maps / OpenStreetMap place this listing is created from, and its exact position. */
+  /** "Join CallInBell": the Google Maps / OpenStreetMap place this listing is created from, and its exact position. */
   sourceId: z.string(),
   latitude: z.number().nullable(),
   longitude: z.number().nullable(),

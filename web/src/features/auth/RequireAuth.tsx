@@ -12,7 +12,7 @@ export function RequireAuth({ role, children }: { role?: string; children?: Reac
     return (
       <div className="container-page py-20">
         <EmptyState title="You don't have access to this area"
-          message={`This section is for ${role === 'Administrator' ? 'Calling Bell administrators' : 'business owners'}. Sign in with an account that has access.`}
+          message={`This section is for ${role === 'Administrator' ? 'CallInBell administrators' : 'business owners'}. Sign in with an account that has access.`}
           action={<Button component={Link} to="/" variant="contained">Back to home</Button>} />
       </div>
     );

@@ -89,7 +89,7 @@ function AccountDetails({ data }: { data: AccountSettings }) {
     } catch (e) { enqueueSnackbar(errorMessage(e), { variant: 'error' }); }
   };
   return (
-    <Panel title="Account details" subtitle="The person who manages this business on Calling Bell">
+    <Panel title="Account details" subtitle="The person who manages this business on CallInBell">
       <form onSubmit={handleSubmit(save)} noValidate className="grid gap-4 sm:grid-cols-2">
         <TextField label="Full name" autoComplete="name" {...register('displayName')} error={!!errors.displayName} helperText={errors.displayName?.message} />
         <TextField label="Mobile number" autoComplete="tel" {...register('phoneNumber')} error={!!errors.phoneNumber} helperText={errors.phoneNumber?.message}
@@ -170,7 +170,7 @@ function SessionsPanel({ data }: { data: AccountSettings }) {
         </div>
       </div>
       <ConfirmDialog open={!!confirm} loading={busy} destructive={confirm === 'all'} confirmLabel={confirm === 'others' ? 'Sign out others' : 'Sign out'}
-        title={confirm === 'others' ? 'Sign out of other devices?' : 'Sign out of Calling Bell?'}
+        title={confirm === 'others' ? 'Sign out of other devices?' : 'Sign out of CallInBell?'}
         message={confirm === 'others' ? 'Anyone signed in to your account elsewhere will need to sign in again. This device stays signed in.' : 'You will need to sign in again to manage your business.'}
         onConfirm={() => void run()} onClose={() => setConfirm(null)} />
     </Panel>

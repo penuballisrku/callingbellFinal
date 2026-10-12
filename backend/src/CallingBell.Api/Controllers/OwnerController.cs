@@ -158,7 +158,7 @@ public sealed class OwnerController : ApiControllerBase
     public sealed record ImportPhotosRequest(IReadOnlyList<string> References);
 
     /// <summary>
-    /// Copies chosen photos of the Google Maps place this business was created from ("Join Calling Bell") into its gallery. Only for the
+    /// Copies chosen photos of the Google Maps place this business was created from ("Join CallInBell") into its gallery. Only for the
     /// owner, only that place's photos, and only when Onboarding:AllowExternalPhotoImport is on (403 otherwise). Returns how many were added.
     /// </summary>
     [HttpPost("businesses/{id:guid}/media/import"), EnableRateLimiting("submissions")]

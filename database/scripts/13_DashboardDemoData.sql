@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 13_DashboardDemoData.sql
+   CallInBell - 13_DashboardDemoData.sql
    Analytics and activity data that power the business and admin dashboards:
      * BusinessDailyStats   - 180 days of profile views, impressions and contact clicks
      * PlatformDailyStats   - 365 days of DAU / new users / sessions / searches

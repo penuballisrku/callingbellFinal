@@ -116,7 +116,7 @@ export function PageHero({ block, crumb, secondary }: { block: ContentBlock; cru
 /** Live platform numbers under a page hero. */
 export function StatsStrip({ items }: { items: [label: string, value: string][] }) {
   return (
-    <section aria-label="Calling Bell in numbers" className="border-b border-line bg-surface">
+    <section aria-label="CallInBell in numbers" className="border-b border-line bg-surface">
       <dl className={`container-page grid grid-cols-2 py-6 sm:grid-cols-3 lg:divide-x lg:divide-line ${items.length > 4 ? 'lg:grid-cols-6' : 'lg:grid-cols-4'}`}>
         {items.map(([label, value]) => (
           <div key={label} className="px-2 py-3 text-center lg:px-4">

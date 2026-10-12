@@ -10,14 +10,14 @@ public sealed class SeoOptions
     public const string Section = "Seo";
     /// <summary>The public origin canonical URLs use, without a trailing slash (e.g. https://www.callingbell.com).</summary>
     public string SiteUrl { get; set; } = "https://www.callingbell.com";
-    public string SiteName { get; set; } = "Calling Bell";
+    public string SiteName { get; set; } = "CallInBell";
     /// <summary>The site's language (html lang, og:locale).</summary>
     public string Language { get; set; } = "en";
     /// <summary>Logo for Organization schema; relative to <see cref="SiteUrl"/> or absolute.</summary>
     public string? LogoUrl { get; set; } = "/favicon.svg";
     /// <summary>Share image for pages without one of their own.</summary>
     public string? DefaultImageUrl { get; set; }
-    /// <summary>Calling Bell's own official profiles (Organization sameAs); empty until real ones exist.</summary>
+    /// <summary>CallInBell's own official profiles (Organization sameAs); empty until real ones exist.</summary>
     public string[] SameAs { get; set; } = [];
     /// <summary>A location / category page is indexable only with at least this many listed businesses (no thin pages).</summary>
     public int MinBusinessesForIndex { get; set; } = 1;
@@ -112,7 +112,7 @@ public static class SeoText
         string.IsNullOrWhiteSpace(region) || string.Equals(region, city, StringComparison.OrdinalIgnoreCase) ? city : $"{city}, {region}";
 
     /// <summary>
-    /// {BusinessName} | {Category} in {City}, {Region} | Calling Bell. When too long: the region goes first, then the site name, then the
+    /// {BusinessName} | {Category} in {City}, {Region} | CallInBell. When too long: the region goes first, then the site name, then the
     /// category - the name and the city stay as long as possible; never cut mid-word.
     /// </summary>
     public static string BusinessTitle(string name, string? category, string city, string? region, string site)
@@ -130,7 +130,7 @@ public static class SeoText
         return Clamp(name, MaxTitle);
     }
 
-    /// <summary>{Category} in {City}, {Region} | Local {Category} | Calling Bell; without a place, {Category} | Calling Bell.</summary>
+    /// <summary>{Category} in {City}, {Region} | Local {Category} | CallInBell; without a place, {Category} | CallInBell.</summary>
     public static string CategoryTitle(string category, string? place, string site)
     {
         if (place is null) return Fit($"{category} | Find Local {category} | {site}", $"{category} | {site}");
@@ -138,11 +138,11 @@ public static class SeoText
         return title.Length <= MaxTitle ? title : Fit($"{category} in {place} | {site}", $"{category} in {place}");
     }
 
-    /// <summary>Local Services in {City}, {Region} | Calling Bell.</summary>
+    /// <summary>Local Services in {City}, {Region} | CallInBell.</summary>
     public static string LocationTitle(string place, string site) => Fit($"Local Services in {place} | {site}", $"{place} | {site}");
 
     /// <summary>
-    /// "Find {Name}, {a category} in {Place}. View contact details, services, hours, reviews and location on Calling Bell." Lists only what
+    /// "Find {Name}, {a category} in {Place}. View contact details, services, hours, reviews and location on CallInBell." Lists only what
     /// the page really has.
     /// </summary>
     public static string BusinessDescription(string name, string? category, string place, bool hasContact, bool hasServices, bool hasHours,
@@ -158,7 +158,7 @@ public static class SeoText
         return Clamp($"Find {name}{what} in {place}. View {JoinList(parts)} on {site}.", MaxDescription);
     }
 
-    /// <summary>"Find {count} {category} in {place}. Compare local businesses, services, reviews and contact details on Calling Bell."</summary>
+    /// <summary>"Find {count} {category} in {place}. Compare local businesses, services, reviews and contact details on CallInBell."</summary>
     public static string CategoryDescription(string category, string? place, int count, string site)
     {
         var where = place is null ? "" : $" in {place}";

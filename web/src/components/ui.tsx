@@ -93,21 +93,21 @@ export function Stars({ value, size = 16 }: { value: number; size?: number }) {
 }
 
 export const VerifiedMark = () => (
-  <Tooltip title="Documents verified by Calling Bell"><VerifiedRounded sx={{ fontSize: 18, color: '#2E90FA' }} aria-label="Verified" /></Tooltip>
+  <Tooltip title="Documents verified by CallInBell"><VerifiedRounded sx={{ fontSize: 18, color: '#2E90FA' }} aria-label="Verified" /></Tooltip>
 );
 
 /**
- * Marks a registered Calling Bell business in lists that also show outside listings (Google Maps, AI picks): "Verified on Calling Bell"
- * once its documents are verified, otherwise "On Calling Bell".
+ * Marks a registered CallInBell business in lists that also show outside listings (Google Maps, AI picks): "Verified on CallInBell"
+ * once its documents are verified, otherwise "On CallInBell".
  */
 export function CallingBellBadge({ verified, compact }: { verified: boolean; compact?: boolean }) {
   return (
-    <Tooltip describeChild title={verified ? 'Registered on Calling Bell and documents verified' : 'Registered on Calling Bell; verification pending'}>
+    <Tooltip describeChild title={verified ? 'Registered on CallInBell and documents verified' : 'Registered on CallInBell; verification pending'}>
       {/* Not focusable: it sits inside the card's link. */}
       <span className={`inline-flex shrink-0 items-center gap-1 rounded-full font-semibold ${compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-[11px]'} ${
         verified ? 'bg-success-soft text-success' : 'bg-subtle text-ink-2'}`}>
         <VerifiedRounded sx={{ fontSize: compact ? 12 : 14 }} aria-hidden />
-        {verified ? 'Verified on Calling Bell' : 'On Calling Bell'}
+        {verified ? 'Verified on CallInBell' : 'On CallInBell'}
       </span>
     </Tooltip>
   );

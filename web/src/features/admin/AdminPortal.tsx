@@ -32,7 +32,7 @@ export default function AdminPortal() {
 
   return (
     <Routes>
-      <Route element={<PortalLayout title="Admin console" nav={nav} headerExtra={<span className="font-semibold">Calling Bell Admin</span>} />}>
+      <Route element={<PortalLayout title="Admin console" nav={nav} headerExtra={<span className="font-semibold">CallInBell Admin</span>} />}>
         <Route index element={<AdminDashboard />} />
         <Route path="businesses" element={<AdminBusinesses />} />
         <Route path="businesses/:id" element={<AdminBusinessDetail />} />

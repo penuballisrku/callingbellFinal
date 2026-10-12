@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 27_Seo.sql
+   CallInBell - 27_Seo.sql
    Database support for SEO:
    * dbo.BusinessSlugHistory: a business's former slugs. /business/{old-slug} answers with a
      301 redirect to the current address, so links and search results keep working.

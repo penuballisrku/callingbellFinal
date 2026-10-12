@@ -165,7 +165,7 @@ public static class DependencyInjection
         services.AddScoped<IPopularSearchCounter, PopularSearchCounter>();
         services.AddHttpClient(PhotonPlaceGeocoder.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(8));
         services.AddSingleton<IPlaceGeocoder, PhotonPlaceGeocoder>();
-        // Join Calling Bell: photos copied from the source only when Onboarding:AllowExternalPhotoImport is on (licence permitting).
+        // Join CallInBell: photos copied from the source only when Onboarding:AllowExternalPhotoImport is on (licence permitting).
         services.Configure<CallingBell.Application.Features.Onboarding.OnboardingOptions>(configuration.GetSection(CallingBell.Application.Features.Onboarding.OnboardingOptions.Section));
         services.AddHttpClient(ExternalPhotoFetcher.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(20));
         services.AddScoped<CallingBell.Application.Features.Onboarding.IExternalPhotoFetcher, ExternalPhotoFetcher>();

@@ -200,7 +200,7 @@ export default function PlacesPage() {
       : [first.location.areaName, first.location.cityName].filter(Boolean).join(', ')
     : null;
   // Only said when the location isn't the one shown in the location menu.
-  const locationNote = placeParam ? `Searching in ${first?.location.cityName ?? placeParam} · not a Calling Bell city yet`
+  const locationNote = placeParam ? `Searching in ${first?.location.cityName ?? placeParam} · not a CallInBell city yet`
     : citySlug ? null
       : gps ? 'Searching around your current location'
         : ipCoords ? 'No city selected · searching around your approximate location'
@@ -291,7 +291,7 @@ export default function PlacesPage() {
                 </h2>
                 <p className="mt-0.5 text-sm text-muted">
                   {results.isLoading ? 'Searching Google Maps…'
-                    : `${number(places.length)}${results.hasNextPage ? '+' : ''} ${places.length === 1 ? 'place' : 'places'} · not registered on Calling Bell`}
+                    : `${number(places.length)}${results.hasNextPage ? '+' : ''} ${places.length === 1 ? 'place' : 'places'} · not registered on CallInBell`}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -332,7 +332,7 @@ export default function PlacesPage() {
                 )}
                 <p className="mt-8 flex flex-wrap items-center gap-x-1.5 border-t border-line pt-2 text-xs text-faint">
                   <InfoOutlined sx={{ fontSize: 14 }} />
-                  <span>These businesses are not registered on Calling Bell, so details may be out of date.</span>
+                  <span>These businesses are not registered on CallInBell, so details may be out of date.</span>
                   <GoogleMapsDataCredit />
                 </p>
               </>

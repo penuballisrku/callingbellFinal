@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 31_ChatStaffVideo.sql
+   CallInBell - 31_ChatStaffVideo.sql
    Phase 2: customer-business chat, staff management and video consultations.
 
    * dbo.Conversations / dbo.ChatMessages : one conversation per customer and business, with
@@ -173,7 +173,7 @@ WHEN NOT MATCHED BY TARGET THEN INSERT (RouteCode, Priority, Channel) VALUES (s.
 IF OBJECT_ID(N'dbo.NotificationTemplates', N'U') IS NOT NULL
 MERGE dbo.NotificationTemplates AS t
 USING (VALUES (N'VIDEO', N'WHATSAPP', N'en', N'callingbell_video_consultation',
-    N'🎥 Video consultation with {{1}}' + NCHAR(10) + N'When: {{2}}' + NCHAR(10) + NCHAR(10) + N'Join from Calling Bell: {{3}}')) AS s (TemplateCode, Channel, LanguageCode, TemplateName, TemplateContent)
+    N'🎥 Video consultation with {{1}}' + NCHAR(10) + N'When: {{2}}' + NCHAR(10) + NCHAR(10) + N'Join from CallInBell: {{3}}')) AS s (TemplateCode, Channel, LanguageCode, TemplateName, TemplateContent)
 ON t.TemplateCode = s.TemplateCode AND t.Channel = s.Channel AND t.LanguageCode = s.LanguageCode
 WHEN NOT MATCHED BY TARGET THEN INSERT (TemplateCode, Channel, LanguageCode, TemplateName, TemplateContent) VALUES (s.TemplateCode, s.Channel, s.LanguageCode, s.TemplateName, s.TemplateContent);
 GO

@@ -43,7 +43,7 @@ internal sealed class OllamaCityCategoryRecommender(
             "Reply as JSON: {\"picks\":[{\"id\":1,\"reason\":\"...\"}]}";
 
         var content = await chat.ChatJsonAsync(
-            "You are a local-market analyst for Calling Bell, an Indian local services marketplace. You know Indian cities well. " +
+            "You are a local-market analyst for CallInBell, an Indian local services marketplace. You know Indian cities well. " +
             "Only use the ids provided. Reply with JSON only.",
             prompt, ct);
         if (content is null) return null;

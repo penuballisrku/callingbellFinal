@@ -23,7 +23,7 @@ export default function TrustSafetyPage() {
 
   return (
     <>
-      {hero && <PageHero block={hero} crumb="Trust & safety" secondary={{ label: 'About Calling Bell', to: '/about' }} />}
+      {hero && <PageHero block={hero} crumb="Trust & safety" secondary={{ label: 'About CallInBell', to: '/about' }} />}
       <StatsStrip items={[
         ['Verified businesses', number(s.verifiedBusinesses)],
         ['Active businesses', number(s.activeBusinesses)],
@@ -33,7 +33,7 @@ export default function TrustSafetyPage() {
 
       <div className="container-page space-y-20 py-16 md:space-y-24 md:py-20">
         {story && <IntroSection block={story} id="commitment-h" />}
-        <IconCardGrid items={section('Pillar')} id="pillars-h" title="How we keep Calling Bell safe" />
+        <IconCardGrid items={section('Pillar')} id="pillars-h" title="How we keep CallInBell safe" />
         <NumberedSteps items={section('Step')} id="verify-h" title="How business verification works"
           subtitle="Every listing is reviewed before customers can find it." />
         <DividedList items={section('Standard')} id="standards-h" title="Our review standards"

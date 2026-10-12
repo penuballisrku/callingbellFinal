@@ -28,8 +28,8 @@ public class Business : AuditableEntity
     public string? WhatsAppNumber { get; set; }
 
     /// <summary>
-    /// Where the listing was created from with "Join Calling Bell": "google" (Google Maps) or "osm" (OpenStreetMap), and the place's id
-    /// there (a Google place id, or "node/123"). Only the id is kept; one place can become only one Calling Bell business.
+    /// Where the listing was created from with "Join CallInBell": "google" (Google Maps) or "osm" (OpenStreetMap), and the place's id
+    /// there (a Google place id, or "node/123"). Only the id is kept; one place can become only one CallInBell business.
     /// </summary>
     public string? SourceProvider { get; set; }
     public string? SourceExternalId { get; set; }
@@ -187,7 +187,7 @@ public class BusinessSlugHistory
 }
 
 /// <summary>
-/// "This business is mine": someone asks to take over a listing that already exists (found as a duplicate while joining Calling Bell).
+/// "This business is mine": someone asks to take over a listing that already exists (found as a duplicate while joining CallInBell).
 /// An administrator verifies the person before transferring the listing.
 /// </summary>
 public class BusinessClaimRequest : AuditableEntity

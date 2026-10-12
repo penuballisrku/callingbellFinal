@@ -1,9 +1,9 @@
 /* =====================================================================================
-   Calling Bell - 14_MarketingContent.sql
+   CallInBell - 14_MarketingContent.sql
    Content for the "List your business" page (/list-your-business): company overview,
    objectives, services & key offerings, unique selling points, photo gallery, videos,
    onboarding steps, owner testimonials, roadmap and FAQs.
-   Copy is drawn from the Calling Bell business plan; plan-tier labels match SubscriptionPlans.
+   Copy is drawn from the CallInBell business plan; plan-tier labels match SubscriptionPlans.
    Photos and video posters are attached by 15_MarketingMedia.sql.
    The hero photo is chosen per country by 26_CountryImages.sql (this row holds the neutral default).
    Testimonials reference real businesses (FK) so their live leads, bookings, rating and plan are shown.
@@ -33,10 +33,10 @@ INSERT INTO #Mc (Code, SectionKey, SortOrder, Eyebrow, Title, Subtitle, Body, Ic
  N'Photo: Aaron Pruzaniec, CC BY 2.0, via Wikimedia Commons', N'https://commons.wikimedia.org/wiki/File:Neon_Open_Sign.jpg', N'List your business', N'/register?type=business', NULL),
 
 /* ---------- Company overview ---------- */
-(N'LYB-OVERVIEW', N'Overview', 1, N'About Calling Bell',
+(N'LYB-OVERVIEW', N'Overview', 1, N'About CallInBell',
  N'More than a directory: a growth platform for local businesses',
  N'Discover. Connect. Book. Grow.',
- N'Calling Bell is a real-time local business discovery, lead generation and booking platform built for {country''s} cities. Customers don''t just find you; they see whether you''re available right now, chat or call instantly, request a quotation, book a slot or start a video consultation.\nFor business owners, Calling Bell brings everything needed to win and serve local customers into one place: a verified profile, live availability, a lead inbox, a booking calendar, reviews, advertising and analytics. Whether you run a one-person repair service or a multi-branch clinic, you get the professional tools that large brands use, at a price that fits a local business.',
+ N'CallInBell is a real-time local business discovery, lead generation and booking platform built for {country''s} cities. Customers don''t just find you; they see whether you''re available right now, chat or call instantly, request a quotation, book a slot or start a video consultation.\nFor business owners, CallInBell brings everything needed to win and serve local customers into one place: a verified profile, live availability, a lead inbox, a booking calendar, reviews, advertising and analytics. Whether you run a one-person repair service or a multi-branch clinic, you get the professional tools that large brands use, at a price that fits a local business.',
  NULL, N'Business team discussing growth plans in an office', NULL,
  N'Photo: Smartworks Coworking on Unsplash', N'https://unsplash.com/photos/cW4lLTavU80', NULL, NULL, NULL),
 
@@ -80,13 +80,13 @@ INSERT INTO #Mc (Code, SectionKey, SortOrder, Eyebrow, Title, Subtitle, Body, Ic
 (N'LYB-USP-ALERTS', N'Highlight', 3, NULL, N'Instant lead alerts',
  N'Get notified the moment a customer enquires or books, so you can respond in minutes and win the job.', NULL, N'notifications', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 (N'LYB-USP-TRUST', N'Highlight', 4, NULL, N'A verified, trusted marketplace',
- N'Document verification and moderated reviews keep Calling Bell credible for customers and fair for businesses.', NULL, N'shield', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+ N'Document verification and moderated reviews keep CallInBell credible for customers and fair for businesses.', NULL, N'shield', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 (N'LYB-USP-ONE', N'Highlight', 5, NULL, N'One dashboard for everything',
  N'Leads, bookings, staff, availability, reviews, advertising and analytics together. No more juggling notebooks and chat threads.', NULL, N'dashboard', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 (N'LYB-USP-LOCAL', N'Highlight', 6, NULL, N'Built for {country''s} cities',
  N'Search by city, area and pincode, with mobile-first profiles, call and WhatsApp buttons, and UPI payments.', NULL, N'place', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 
-/* ---------- Photo gallery: businesses that grow on Calling Bell ---------- */
+/* ---------- Photo gallery: businesses that grow on CallInBell ---------- */
 (N'LYB-GAL-RETAIL', N'Gallery', 1, N'Retail', N'Kirana & neighbourhood stores', N'Jodhpur', NULL, NULL,
  N'Elderly shopkeeper sitting in his small, well-stocked store', NULL, N'Photo: Anil Reddy on Unsplash', N'https://unsplash.com/photos/fyB7L3uMUnQ', NULL, N'/categories', NULL),
 (N'LYB-GAL-FOOD', N'Gallery', 2, N'Food', N'Restaurants & street food', NULL, NULL, NULL,
@@ -126,7 +126,7 @@ INSERT INTO #Mc (Code, SectionKey, SortOrder, Eyebrow, Title, Subtitle, Body, Ic
 
 /* ---------- Owner testimonials (Title = owner, Subtitle = role; business data is live via FK) ---------- */
 (N'LYB-TST-SPARKLINE', N'Testimonial', 1, NULL, N'Venkatesh Goud', N'Founder',
- N'We used to depend only on word of mouth in our locality. Now customers can see when we''re available and book directly, and most of our weekday jobs come through Calling Bell.',
+ N'We used to depend only on word of mouth in our locality. Now customers can see when we''re available and book directly, and most of our weekday jobs come through CallInBell.',
  NULL, NULL, NULL, NULL, NULL, NULL, NULL, N'sparkline-electricals'),
 (N'LYB-TST-ANITHA', N'Testimonial', 2, NULL, N'Dr. Anitha Rao', N'Family physician',
  N'Patients can see when I''m available for a video consultation and book a slot themselves. My front desk spends far less time on the phone, and follow-ups are much easier.',
@@ -169,7 +169,7 @@ INSERT INTO #Mc (Code, SectionKey, SortOrder, Eyebrow, Title, Subtitle, Body, Ic
  NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 
 /* ---------- Closing call to action ---------- */
-(N'LYB-CTA', N'Cta', 1, NULL, N'Ready to grow with Calling Bell?',
+(N'LYB-CTA', N'Cta', 1, NULL, N'Ready to grow with CallInBell?',
  N'Create your business profile today. It takes a few minutes, and customers in your city are searching right now.',
  NULL, NULL, NULL, NULL, NULL, NULL, N'List your business', N'/register?type=business', NULL);
 

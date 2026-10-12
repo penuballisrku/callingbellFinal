@@ -76,6 +76,14 @@ internal sealed class IdentityService(
                 await userManager.AddToRoleAsync(user, owner ? Roles.BusinessOwner : Roles.Customer);
             }
             if (user.IsDeleted) throw new BadRequestException("This account no longer exists.");
+            // Created with a password but an unverified email: whoever chose that password never proved the address was theirs, and
+            // Google just proved it belongs to someone else. Drop the password and sign out its sessions before linking Google.
+            if (!user.EmailConfirmed && await userManager.HasPasswordAsync(user))
+            {
+                var removed = await userManager.RemovePasswordAsync(user);
+                if (!removed.Succeeded) throw new BadRequestException(removed.Errors.First().Description);
+                await RevokeOtherSessionsAsync(user.Id, null, ct);
+            }
             var linked = await userManager.AddLoginAsync(user, new UserLoginInfo(GoogleProvider, google.Subject, GoogleProvider));
             if (!linked.Succeeded) throw new BadRequestException(linked.Errors.First().Description);
         }
@@ -95,6 +103,30 @@ internal sealed class IdentityService(
         if (string.IsNullOrEmpty(user.AvatarUrl) && google.PictureUrl is not null) user.AvatarUrl = google.PictureUrl;
         user.LastLoginOn = DateTimeOffset.UtcNow;
         await userManager.UpdateAsync(user);
+        return await IssueTokensAsync(user, ct);
+    }
+
+    public async Task<AuthResultDto> RegisterWithPasswordAsync(string displayName, string email, string password, string? citySlug, string accountType, CancellationToken ct)
+    {
+        var role = accountType == Roles.BusinessOwner ? Roles.BusinessOwner : Roles.Customer;
+        var cityId = string.IsNullOrWhiteSpace(citySlug)
+            ? null
+            : await db.Cities.Where(c => c.Slug == citySlug).Select(c => (Guid?)c.Id).FirstOrDefaultAsync(ct);
+        var user = new ApplicationUser
+        {
+            UserName = email, Email = email, DisplayName = displayName, UserType = role, CityId = cityId, IsActive = true,
+            EmailConfirmed = false, // until they sign in with Google (or a verification step confirms it)
+            LastLoginOn = DateTimeOffset.UtcNow,
+        };
+        var created = await userManager.CreateAsync(user, password);
+        if (!created.Succeeded)
+        {
+            if (created.Errors.Any(e => e.Code is nameof(IdentityErrorDescriber.DuplicateEmail) or nameof(IdentityErrorDescriber.DuplicateUserName)))
+                throw new ConflictException("An account with this email already exists. Sign in instead.");
+            // Identity's own password rules (same as the validator's): reported on the password field.
+            throw new ValidationException(new Dictionary<string, string[]> { ["password"] = created.Errors.Select(e => e.Description).ToArray() });
+        }
+        await userManager.AddToRoleAsync(user, role);
         return await IssueTokensAsync(user, ct);
     }
 

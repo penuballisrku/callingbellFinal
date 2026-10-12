@@ -22,7 +22,7 @@ import { ClaimBusinessBanner } from './ExternalResults';
 import { coordinates, ExternalLink, Field, PhotoCredit, prettyUrl, Section, SocialLinks } from '@/features/places/PlaceParts';
 import { GoogleMapsAttribution, GoogleMapsDataCredit } from '@/components/GoogleMapsAttribution';
 
-/** The search result whose details are shown: a Calling Bell business (by slug) or a Google Maps / AI recommended place. */
+/** The search result whose details are shown: a CallInBell business (by slug) or a Google Maps / AI recommended place. */
 export type SelectedResult =
   | { kind: 'business'; slug: string; name: string }
   | { kind: 'place'; source: 'google' | 'ai'; place: ExternalPlace };
@@ -44,7 +44,7 @@ export function ResultDetailDrawer({ selected, onClose }: { selected: SelectedRe
             <div className="min-w-0 flex-1">
               <h2 className="truncate text-base font-semibold">{title}</h2>
               <p className="truncate text-xs text-muted">
-                {selected.kind === 'business' ? 'Registered on Calling Bell' : selected.source === 'google' ? <>From <GoogleMapsAttribution /> · not on Calling Bell</> : 'AI recommended · not on Calling Bell'}
+                {selected.kind === 'business' ? 'Registered on CallInBell' : selected.source === 'google' ? <>From <GoogleMapsAttribution /> · not on CallInBell</> : 'AI recommended · not on CallInBell'}
               </p>
             </div>
             <Tooltip title="Close"><IconButton onClick={onClose} aria-label="Close details" edge="end"><CloseRounded /></IconButton></Tooltip>
@@ -58,7 +58,7 @@ export function ResultDetailDrawer({ selected, onClose }: { selected: SelectedRe
   );
 }
 
-/* ---------- Calling Bell business ---------- */
+/* ---------- CallInBell business ---------- */
 
 let regionNames: Intl.DisplayNames | null = null;
 const countryName = (code?: string | null) => {
@@ -174,7 +174,7 @@ function BusinessDetailView({ slug }: { slug: string }) {
           <Field label="Plan" value={b.planName} />
           <Field label="Verified on" value={b.verifiedOn ? date(b.verifiedOn) : null} />
           <Field label="Business ID" value={<code className="break-all text-xs">{c.id}</code>} />
-          <Field label="Source" value="Calling Bell" />
+          <Field label="Source" value="CallInBell" />
         </Section>
       </div>
     </div>
@@ -218,7 +218,7 @@ function PlaceDetailView({ source, place }: { source: 'google' | 'ai'; place: Ex
             <h3 className="text-xl font-bold tracking-tight">{d.name}</h3>
             <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-line-strong px-2 py-0.5 text-[11px] font-medium text-muted">
               {source === 'ai' ? <AutoAwesomeRounded sx={{ fontSize: 12 }} className="text-accent-ink" /> : <MapRounded sx={{ fontSize: 12 }} className="text-info" />}
-              Not on Calling Bell
+              Not on CallInBell
             </span>
           </div>
           {d.category && <p className="mt-0.5 text-sm text-muted">{d.category}</p>}
@@ -306,7 +306,7 @@ function PlaceDetailView({ source, place }: { source: 'google' | 'ai'; place: Ex
           {source === 'ai' && place.aiReason && <Field label="Why AI picked it" value={place.aiReason} />}
         </Section>
         <ClaimBusinessBanner place={{ name: d.name, phone: d.phone ?? d.mobile, website: d.website, address: d.address, sourceId: `${d.source}:${d.sourceId}` }} />
-        <p className="text-xs text-muted">This business hasn't joined Calling Bell. Please confirm details with the business before you visit or pay.</p>
+        <p className="text-xs text-muted">This business hasn't joined CallInBell. Please confirm details with the business before you visit or pay.</p>
         {d.dataSources.includes('Google Maps') && <GoogleMapsDataCredit className="-mt-3 text-xs text-muted" />}
       </div>
     </div>

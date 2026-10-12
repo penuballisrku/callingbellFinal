@@ -2,7 +2,7 @@ using CallingBell.Application.Features.Onboarding;
 
 namespace CallingBell.Onboarding.Tests;
 
-/// <summary>The pure parts of "Join Calling Bell": source references, cleaning, hours, addresses and duplicate matching.</summary>
+/// <summary>The pure parts of "Join CallInBell": source references, cleaning, hours, addresses and duplicate matching.</summary>
 public sealed class JoinImportTests
 {
     // ---------- source references ----------

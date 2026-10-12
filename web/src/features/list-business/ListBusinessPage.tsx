@@ -52,7 +52,7 @@ export default function ListBusinessPage() {
       {hero && <Hero block={hero} stats={s} />}
 
       {/* Live proof points */}
-      <section aria-label="Calling Bell in numbers" className="border-b border-line bg-surface">
+      <section aria-label="CallInBell in numbers" className="border-b border-line bg-surface">
         <dl className="container-page grid grid-cols-2 divide-line py-6 sm:grid-cols-3 lg:grid-cols-6 lg:divide-x">
           {[
             ['Active businesses', number(s.activeBusinesses)],
@@ -216,8 +216,8 @@ function Highlights({ items }: { items: ContentBlock[] }) {
     <section aria-labelledby="usp-h" className="bg-navy text-white">
       <div className="container-page py-16 md:py-20">
         <div className="max-w-2xl">
-          <Eyebrow onDark>Why Calling Bell</Eyebrow>
-          <h2 id="usp-h" className="mt-2 text-2xl font-bold tracking-[-0.02em] md:text-[34px] md:leading-tight">Why businesses choose Calling Bell</h2>
+          <Eyebrow onDark>Why CallInBell</Eyebrow>
+          <h2 id="usp-h" className="mt-2 text-2xl font-bold tracking-[-0.02em] md:text-[34px] md:leading-tight">Why businesses choose CallInBell</h2>
         </div>
         <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {lead && (
@@ -248,7 +248,7 @@ function Gallery({ items }: { items: ContentBlock[] }) {
     <section aria-labelledby="gallery-h">
       <SectionHeader title="Built for every kind of local business"
         subtitle={`From neighbourhood stores to clinics and home-service experts${country ? ` across ${country}` : ''}.`} />
-      <h2 id="gallery-h" className="sr-only">Businesses on Calling Bell</h2>
+      <h2 id="gallery-h" className="sr-only">Businesses on CallInBell</h2>
       <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-3">
         {items.map((g, i) => (
           <figure key={g.code} className={`group relative overflow-hidden rounded-xl bg-subtle ${i === 0 ? 'lg:col-span-2 lg:row-span-2' : ''}`}>
@@ -312,7 +312,7 @@ function Videos({ items }: { items: ContentBlock[] }) {
   const [main, ...side] = items;
   return (
     <section aria-labelledby="video-h">
-      <SectionHeader title={main!.eyebrow ?? 'See Calling Bell in action'} subtitle="How business owners use Calling Bell day to day." />
+      <SectionHeader title={main!.eyebrow ?? 'See CallInBell in action'} subtitle="How business owners use CallInBell day to day." />
       <h2 id="video-h" className="sr-only">Videos</h2>
       <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
         <VideoCard block={main!} featured />
@@ -327,7 +327,7 @@ function Testimonials({ items }: { items: ContentBlock[] }) {
   if (!items.length) return null;
   return (
     <section aria-labelledby="tst-h">
-      <SectionHeader title="Trusted by local business owners" subtitle="Real businesses on Calling Bell. Figures update live from their dashboards." />
+      <SectionHeader title="Trusted by local business owners" subtitle="Real businesses on CallInBell. Figures update live from their dashboards." />
       <h2 id="tst-h" className="sr-only">Testimonials</h2>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {items.map((t) => {

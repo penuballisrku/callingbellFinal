@@ -117,7 +117,7 @@ export async function payForPlan(businessId: string, plan: { planCode: string; b
       order_id: order.gatewayOrderId,
       amount: order.amountInPaise,
       currency: order.currency,
-      name: 'Calling Bell',
+      name: 'CallInBell',
       description: `${order.planName} plan · ${order.billingCycle}`,
       prefill: order.prefill,
       notes: { orderNumber: order.orderNumber, business: order.businessName },

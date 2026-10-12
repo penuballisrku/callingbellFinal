@@ -1,11 +1,11 @@
 /*
- * Calling Bell app service worker (makes the site installable: "Add to Home Screen").
+ * CallInBell app service worker (makes the site installable: "Add to Home Screen").
  *
  * It deliberately caches nothing the visitor reads - no pages, no API data - so everything shown is always current. It only keeps a
  * small offline page, shown when a page is opened without a connection. Web push runs in its own worker
  * (firebase-messaging-sw.js, separate scope), so the two never interfere.
  */
-const OFFLINE_CACHE = 'cb-offline-v1';
+const OFFLINE_CACHE = 'cb-offline-v2'; // v2: CallInBell rebrand (new offline page text and icon)
 const OFFLINE_URL = '/offline.html';
 
 self.addEventListener('install', (event) => {

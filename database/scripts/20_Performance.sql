@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 20_Performance.sql
+   CallInBell - 20_Performance.sql
    Database-level performance settings and indexes for the portal's hot read paths.
 
    * Indexes cover the queries every page makes (taken from SQL Server's missing-index

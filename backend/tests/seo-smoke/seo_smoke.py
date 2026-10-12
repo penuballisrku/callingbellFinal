@@ -1,5 +1,5 @@
 """
-SEO smoke test against a running Calling Bell API that serves the built app (Seo:SpaRoot -> web/dist) and its SQL Server database.
+SEO smoke test against a running CallInBell API that serves the built app (Seo:SpaRoot -> web/dist) and its SQL Server database.
 
 Checks what crawlers receive: robots.txt, the sitemaps, and for business, category and location pages the status code, title,
 description, canonical URL, robots rule, Open Graph tags, JSON-LD (parsed and compared with the database) and internal links;
@@ -114,7 +114,7 @@ def main() -> int:
     st, headers, page = get(f"{base}/business/{slug}")
     h = head(page)
     biz = next((x for x in h["jsonld"] if x.get("@type") not in ("BreadcrumbList", "FAQPage")), {})
-    check(st == 200 and h["title"].startswith(f"{name} | ") and h["title"].endswith("| Calling Bell"), f"business title: {h['title']}")
+    check(st == 200 and h["title"].startswith(f"{name} | ") and h["title"].endswith("| CallInBell"), f"business title: {h['title']}")
     check(h["description"].startswith(f"Find {name}") and len(h["description"]) <= 160, "business meta description from real data")
     check(h["canonical"] == f"{site}/business/{slug}" and h["robots"].startswith("index"), "business canonical and robots")
     check(bool(h["og_title"]) and h["twitter"] in ("summary", "summary_large_image"), "business Open Graph / Twitter tags")

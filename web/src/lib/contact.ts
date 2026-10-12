@@ -22,10 +22,10 @@ export function whatsAppHref(phone: string | null | undefined, name: string): st
   return `https://wa.me/91${digits}?text=${encodeURIComponent(waText(name))}`;
 }
 
-const waText = (name: string) => `Hi ${name}, I found your business on Calling Bell and would like to know more about your services.`;
+const waText = (name: string) => `Hi ${name}, I found your business on CallInBell and would like to know more about your services.`;
 
 /**
- * What the visitor is browsing, from the page address (Explore nearby or search: ?sub=, ?category=, ?q=), so "Join Calling Bell" can
+ * What the visitor is browsing, from the page address (Explore nearby or search: ?sub=, ?category=, ?q=), so "Join CallInBell" can
  * suggest that category when the map's own category is too vague.
  */
 export function joinHint(search: URLSearchParams): string | null {

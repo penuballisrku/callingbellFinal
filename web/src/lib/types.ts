@@ -337,7 +337,7 @@ export interface PopularSearch {
   code: string; label: string; searchText: string; categorySlug?: string | null; subCategorySlug?: string | null; group?: string | null;
   iconUrl?: string | null; colorHex?: string | null; searchCount: number;
 }
-/** "Join Calling Bell": a Google Maps / OpenStreetMap place prepared by GET /api/places/join-calling-bell for the business sign-up form. */
+/** "Join CallInBell": a Google Maps / OpenStreetMap place prepared by GET /api/places/join-calling-bell for the business sign-up form. */
 export interface JoinCallingBellImage {
   reference: string; imageUrl: string; thumbnailUrl: string; mobileImageUrl: string; desktopImageUrl: string; altText: string;
   isPrimary: boolean; sortOrder: number; source: string; attribution?: string | null; attributionUrl?: string | null;
@@ -345,7 +345,7 @@ export interface JoinCallingBellImage {
   importable: boolean;
 }
 export interface JoinCallingBellHours { dayOfWeek: number; open?: string | null; close?: string | null; isClosed: boolean }
-/** A Calling Bell business that may be the same place; isStrong = registering again is refused. */
+/** A CallInBell business that may be the same place; isStrong = registering again is refused. */
 export interface ExistingBusinessMatch { id: string; slug: string; name: string; city?: string | null; status: string; matchedBy: string; isStrong: boolean }
 export interface JoinCallingBellBusiness {
   sourceBusinessId: string; source: 'google' | 'osm'; sourceName: string; sourceUrl?: string | null; googlePlaceId?: string | null;

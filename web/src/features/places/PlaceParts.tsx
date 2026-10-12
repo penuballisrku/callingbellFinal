@@ -9,10 +9,10 @@ import NotificationsActiveRounded from '@mui/icons-material/NotificationsActiveR
 import { joinHint, joinHref, telHref, whatsAppHref } from '@/lib/contact';
 import type { PlaceDetails } from '@/lib/types';
 
-/* ---------- Actions for a place that isn't on Calling Bell ---------- */
+/* ---------- Actions for a place that isn't on CallInBell ---------- */
 
 /**
- * Call, WhatsApp, Directions, View on Map and Join Calling Bell, as an even five-column bar on phones and a row of buttons from 640px.
+ * Call, WhatsApp, Directions, View on Map and Join CallInBell, as an even five-column bar on phones and a row of buttons from 640px.
  * Call and WhatsApp stay in place, disabled, when there's no number, so every place lines up the same way. With `compactMid`, between
  * 1024px and 1280px (where the actions share a row with the details) the plain actions show only their icon, named by the tooltip.
  */
@@ -32,7 +32,7 @@ export function PlaceActions({ place: p, compactMid, className = '' }: {
       <RowAction href={p.directionsUrl} external icon={<DirectionsRounded sx={{ fontSize: 18 }} />} label="Directions" hint="Directions in Google Maps" compactMid={compactMid} />
       <RowAction href={p.mapsUrl} external icon={<MapOutlined sx={{ fontSize: 18 }} />} label="View on Map" short="Map" hint="Open in Google Maps" compactMid={compactMid} />
       <RowAction to={joinHref({ name: p.name, phone: p.phone, address: p.address, sourceId: p.sourceId }, joinHint(search))} icon={<NotificationsActiveRounded sx={{ fontSize: 18 }} />}
-        label="Join Calling Bell" short="Join" tone="accent" hint={`Own ${p.name}? List it on Calling Bell`} />
+        label="Join CallInBell" short="Join" tone="accent" hint={`Own ${p.name}? List it on CallInBell`} />
     </div>
   );
 }

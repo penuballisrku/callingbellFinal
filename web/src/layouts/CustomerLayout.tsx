@@ -109,7 +109,7 @@ function Footer() {
   const cols = [
     { title: 'Discover', links: [...discover, ['All categories', '/categories']] },
     { title: 'For business', links: [['List your business', '/list-your-business'], ['Plans & pricing', '/pricing'], ['Business sign in', '/login']] },
-    { title: 'Company', links: [['About Calling Bell', '/about'], ['Trust & safety', '/trust-and-safety'], ['Contact support', '/support']] },
+    { title: 'Company', links: [['About CallInBell', '/about'], ['Trust & safety', '/trust-and-safety'], ['Contact support', '/support']] },
   ];
   return (
     <footer className="mt-16 bg-navy text-on-navy-muted">
@@ -127,7 +127,7 @@ function Footer() {
       </div>
       <div className="border-t border-navy-line">
         <div className="container-page flex flex-col gap-2 py-5 text-xs sm:flex-row sm:justify-between">
-          <span>© {new Date().getFullYear()} TekOrtus Pvt., Ltd.</span>
+          <span>© {new Date().getFullYear()} CallInBell</span>
           <span>Privacy · Terms · Grievance officer</span>
         </div>
       </div>

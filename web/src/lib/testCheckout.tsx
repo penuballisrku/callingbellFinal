@@ -56,7 +56,7 @@ function TestCheckout({ order, onDone }: { order: CheckoutOrder; onDone: (r: Tes
       <div className="w-full max-w-sm rounded-2xl border border-line bg-surface p-5 text-ink shadow-xl">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 id="test-checkout-title" className="text-base font-semibold">Calling Bell</h2>
+            <h2 id="test-checkout-title" className="text-base font-semibold">CallInBell</h2>
             <p className="truncate text-sm text-muted">{order.planName} plan · {order.billingCycle}</p>
           </div>
           <span className="shrink-0 rounded-full bg-accent-soft px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-accent-ink">Test mode</span>

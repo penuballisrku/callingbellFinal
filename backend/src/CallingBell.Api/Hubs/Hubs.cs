@@ -35,7 +35,7 @@ public sealed class PresenceHub : Hub
 
 /// <summary>
 /// Per-user alerts: new leads, bookings, review and listing updates. Every signed-in tab keeps one connection, so it also tells
-/// <see cref="OwnerPresenceTracker"/> when a business owner has Calling Bell open (automatic Online / Offline and last seen).
+/// <see cref="OwnerPresenceTracker"/> when a business owner has CallInBell open (automatic Online / Offline and last seen).
 /// </summary>
 [Authorize]
 public sealed class NotificationHub(OwnerPresenceTracker presence) : Hub

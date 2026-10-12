@@ -17,7 +17,7 @@ public class BusinessPageTests
     public void Business_page_has_title_description_canonical_and_index()
     {
         var d = Page().Document;
-        Assert.Equal("Mr. Electric of San Antonio | Electricians in San Antonio, Texas | Calling Bell", d.Title);
+        Assert.Equal("Mr. Electric of San Antonio | Electricians in San Antonio, Texas | CallInBell", d.Title);
         Assert.StartsWith("Find Mr. Electric of San Antonio", d.Description);
         Assert.Equal("https://www.callingbell.com/business/mr-electric-san-antonio", d.CanonicalUrl);
         Assert.StartsWith("index,follow", d.Robots);
@@ -50,7 +50,7 @@ public class BusinessPageTests
     public void Summary_and_links_come_from_the_record()
     {
         var c = Page().Content;
-        Assert.Contains("listed on Calling Bell under Electricians in Alamo Heights, San Antonio, Texas", c.Summary);
+        Assert.Contains("listed on CallInBell under Electricians in Alamo Heights, San Antonio, Texas", c.Summary);
         Assert.Contains("+1 210 555 0142", c.Summary);
         var links = c.Links.SelectMany(g => g.Links).Select(l => l.Url).ToList();
         Assert.Contains("/location/united-states/texas/san-antonio/electrical", links);
@@ -110,7 +110,7 @@ public class SitemapAndHtmlTests
         var html = SpaSeoMiddleware.Inject(Template, renderer.Head(page.Document), renderer.Body(page), "en");
         Assert.DoesNotContain("<title>Old</title>", html);
         Assert.DoesNotContain("content=\"old\"", html);
-        Assert.Contains("<title>Mr. Electric of San Antonio | Electricians in San Antonio, Texas | Calling Bell</title>", html);
+        Assert.Contains("<title>Mr. Electric of San Antonio | Electricians in San Antonio, Texas | CallInBell</title>", html);
         Assert.Contains("<link rel=\"canonical\" href=\"https://www.callingbell.com/business/mr-electric-san-antonio\"", html);
         Assert.Contains("<meta property=\"og:title\"", html);
         Assert.Contains("<meta name=\"twitter:card\" content=\"summary_large_image\"", html);

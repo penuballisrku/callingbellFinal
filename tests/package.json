@@ -1,7 +1,7 @@
 {
   "name": "callingbell-tests",
   "private": true,
-  "description": "Browser tests for Calling Bell (Playwright driving the installed Chrome).",
+  "description": "Browser tests for CallInBell (Playwright driving the installed Chrome).",
   "scripts": {
     "e2e": "node e2e/phase2.cjs"
   },

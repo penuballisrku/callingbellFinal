@@ -80,8 +80,8 @@ export function ReviewsSection() {
   const place = data?.scope === 'area' ? selected : data?.scope === 'all' ? null : data?.scopeName ?? null;
   const narrower = data?.scope === 'city' ? area : data?.scope === 'state' || data?.scope === 'country' ? selected : null;
   const subtitle = narrower ? `Not many reviews in ${narrower} yet, so these are from across ${data!.scopeName}. Refreshed every few minutes.`
-    : data?.scope === 'all' && selected ? `No reviews in ${selected} yet. These are recent reviews from across Calling Bell.`
-      : data?.scope === 'all' && country ? `No reviews in ${countryName(country)} yet. These are recent reviews from across Calling Bell.`
+    : data?.scope === 'all' && selected ? `No reviews in ${selected} yet. These are recent reviews from across CallInBell.`
+      : data?.scope === 'all' && country ? `No reviews in ${countryName(country)} yet. These are recent reviews from across CallInBell.`
         : 'Real reviews from customers of local businesses, refreshed every few minutes';
 
   return (

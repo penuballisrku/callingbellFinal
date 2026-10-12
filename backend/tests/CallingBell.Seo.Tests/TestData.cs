@@ -8,7 +8,7 @@ namespace CallingBell.Seo.Tests;
 /// <summary>Business records shaped like the API's, for SEO tests.</summary>
 internal static class TestData
 {
-    public static SeoOptions Options => new() { SiteUrl = "https://www.callingbell.com", SiteName = "Calling Bell", Language = "en" };
+    public static SeoOptions Options => new() { SiteUrl = "https://www.callingbell.com", SiteName = "CallInBell", Language = "en" };
 
     public static SeoMetadataService Service() =>
         new(null!, null!, Microsoft.Extensions.Options.Options.Create(Options), new SeoCache(new MemoryCache(new MemoryCacheOptions())));

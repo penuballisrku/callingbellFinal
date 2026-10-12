@@ -134,7 +134,7 @@ public sealed class BusinessProfileInputValidator : AbstractValidator<BusinessPr
         RuleFor(x => x.SocialLinks).Must(l => l!.Select(x => x.Platform).Distinct().Count() == l!.Count)
             .When(x => x.SocialLinks is { Count: > 0 }).WithMessage("Add each social platform only once.");
 
-        // Join Calling Bell: the source place, its position and hours.
+        // Join CallInBell: the source place, its position and hours.
         RuleFor(x => x.SourceId).Must(s => JoinImport.ParseSource(s) is not null).When(x => !string.IsNullOrWhiteSpace(x.SourceId))
             .WithMessage("Unknown source business.");
         RuleFor(x => x.Latitude).InclusiveBetween(-90, 90).When(x => x.Latitude.HasValue);
@@ -230,8 +230,8 @@ internal sealed class BusinessFactory(IUnitOfWork uow)
             input.Website, city!.Id, input.Latitude, input.Longitude), ct);
         if (existing.FirstOrDefault(e => e.IsStrong) is { } dup)
             throw new ConflictException(dup.MatchedBy == "SourceId"
-                ? $"This business is already on Calling Bell as \u201C{dup.Name}\u201D. Claim it instead of creating it again."
-                : $"\u201C{dup.Name}\u201D is already on Calling Bell with the same {(dup.MatchedBy == "Location" ? "location" : dup.MatchedBy.ToLowerInvariant())}. Claim it instead of creating a duplicate.");
+                ? $"This business is already on CallInBell as \u201C{dup.Name}\u201D. Claim it instead of creating it again."
+                : $"\u201C{dup.Name}\u201D is already on CallInBell with the same {(dup.MatchedBy == "Location" ? "location" : dup.MatchedBy.ToLowerInvariant())}. Claim it instead of creating a duplicate.");
 
         var free = await uow.Repository<SubscriptionPlan>().QueryNoTracking().FirstAsync(p => p.Code == PlanCodes.Free, ct);
         return new ResolvedBusinessInput(category!, sub!, city!, area, plan!, free);
@@ -320,7 +320,7 @@ internal sealed class BusinessFactory(IUnitOfWork uow)
         uow.Repository<Notification>().Add(new Notification
         {
             UserId = ownerUserId,
-            Title = "Welcome to Calling Bell",
+            Title = "Welcome to CallInBell",
             Message = $"{business.Name} has been submitted for review. Add photos and videos while our team approves your listing.",
             NotificationType = "BusinessCreated",
             LinkUrl = "/owner",

@@ -7,29 +7,29 @@ public class SeoTextTests
     [Fact]
     public void Business_title_names_business_category_and_place()
     {
-        var title = SeoText.BusinessTitle("Mr. Electric of San Antonio", "Electricians", "San Antonio", "Texas", "Calling Bell");
-        Assert.Equal("Mr. Electric of San Antonio | Electricians in San Antonio, Texas | Calling Bell", title);
+        var title = SeoText.BusinessTitle("Mr. Electric of San Antonio", "Electricians", "San Antonio", "Texas", "CallInBell");
+        Assert.Equal("Mr. Electric of San Antonio | Electricians in San Antonio, Texas | CallInBell", title);
         Assert.True(title.Length <= SeoText.MaxTitle);
     }
 
     [Fact]
     public void Business_title_keeps_the_region_when_it_fits()
     {
-        Assert.Equal("Coastal Curry House | Restaurants in Mumbai, Maharashtra | Calling Bell",
-            SeoText.BusinessTitle("Coastal Curry House", "Restaurants", "Mumbai", "Maharashtra", "Calling Bell"));
+        Assert.Equal("Coastal Curry House | Restaurants in Mumbai, Maharashtra | CallInBell",
+            SeoText.BusinessTitle("Coastal Curry House", "Restaurants", "Mumbai", "Maharashtra", "CallInBell"));
     }
 
     [Fact]
     public void Region_then_site_name_give_way_before_the_category()
     {
         var name = "Sri Venkateswara Electrical and Plumbing Works";
-        Assert.Equal($"{name} | Electricians in Visakhapatnam", SeoText.BusinessTitle(name, "Electricians", "Visakhapatnam", "Andhra Pradesh", "Calling Bell"));
+        Assert.Equal($"{name} | Electricians in Visakhapatnam", SeoText.BusinessTitle(name, "Electricians", "Visakhapatnam", "Andhra Pradesh", "CallInBell"));
     }
 
     [Fact]
     public void Long_business_names_are_shortened_without_cutting_words()
     {
-        var title = SeoText.BusinessTitle(new string('x', 20) + " " + string.Join(' ', Enumerable.Repeat("Name", 20)), "Electricians", "San Antonio", "Texas", "Calling Bell");
+        var title = SeoText.BusinessTitle(new string('x', 20) + " " + string.Join(' ', Enumerable.Repeat("Name", 20)), "Electricians", "San Antonio", "Texas", "CallInBell");
         Assert.True(title.Length <= SeoText.MaxTitle);
         Assert.EndsWith("…", title);
     }
@@ -37,17 +37,17 @@ public class SeoTextTests
     [Fact]
     public void Category_and_location_titles_follow_the_patterns()
     {
-        Assert.Equal("Electricians in Hyderabad, Telangana | Local Electricians | Calling Bell",
-            SeoText.CategoryTitle("Electricians", "Hyderabad, Telangana", "Calling Bell"));
-        Assert.Equal("Local Services in San Antonio, Texas | Calling Bell", SeoText.LocationTitle("San Antonio, Texas", "Calling Bell"));
+        Assert.Equal("Electricians in Hyderabad, Telangana | Local Electricians | CallInBell",
+            SeoText.CategoryTitle("Electricians", "Hyderabad, Telangana", "CallInBell"));
+        Assert.Equal("Local Services in San Antonio, Texas | CallInBell", SeoText.LocationTitle("San Antonio, Texas", "CallInBell"));
     }
 
     [Fact]
     public void Business_description_lists_only_what_the_page_has()
     {
-        var full = SeoText.BusinessDescription("Acme", "Plumbers", "Pune", true, true, true, true, "Calling Bell");
+        var full = SeoText.BusinessDescription("Acme", "Plumbers", "Pune", true, true, true, true, "CallInBell");
         Assert.Contains("contact details, services, hours, reviews and location", full);
-        var bare = SeoText.BusinessDescription("Acme", "Plumbers", "Pune", false, false, false, false, "Calling Bell");
+        var bare = SeoText.BusinessDescription("Acme", "Plumbers", "Pune", false, false, false, false, "CallInBell");
         Assert.DoesNotContain("reviews", bare);
         Assert.DoesNotContain("contact", bare);
         Assert.Contains("location", bare);
@@ -57,9 +57,9 @@ public class SeoTextTests
     [Fact]
     public void Category_description_states_the_real_count_and_handles_none()
     {
-        Assert.Contains("12 listed businesses", SeoText.CategoryDescription("Plumbers", "Pune, Maharashtra", 12, "Calling Bell"));
-        Assert.Contains("1 listed business.", SeoText.CategoryDescription("Plumbers", "Pune, Maharashtra", 1, "Calling Bell"));
-        Assert.DoesNotContain("0 listed", SeoText.CategoryDescription("Plumbers", "Pune", 0, "Calling Bell"));
+        Assert.Contains("12 listed businesses", SeoText.CategoryDescription("Plumbers", "Pune, Maharashtra", 12, "CallInBell"));
+        Assert.Contains("1 listed business.", SeoText.CategoryDescription("Plumbers", "Pune, Maharashtra", 1, "CallInBell"));
+        Assert.DoesNotContain("0 listed", SeoText.CategoryDescription("Plumbers", "Pune", 0, "CallInBell"));
     }
 
     [Fact]

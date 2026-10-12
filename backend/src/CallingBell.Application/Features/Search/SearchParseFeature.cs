@@ -16,7 +16,7 @@ public sealed record SearchPlaceMatchDto(string CitySlug, string CityName, Guid?
 /// <param name="Text">The text as typed, trimmed.</param>
 /// <param name="Query">What is being searched for, without the place: "lawyers in Nellore" gives "lawyers".</param>
 /// <param name="PlaceText">The place after "in"/"near", as typed; null when the text names none.</param>
-/// <param name="Place">The listed city/area the place matched; null when it names none or isn't listed (e.g. a city not on Calling Bell yet).</param>
+/// <param name="Place">The listed city/area the place matched; null when it names none or isn't listed (e.g. a city not on CallInBell yet).</param>
 /// <param name="CategorySlug">Set when <paramref name="Query"/> names a category, e.g. "legal services".</param>
 /// <param name="SubCategorySlug">Set when <paramref name="Query"/> names a sub-category, e.g. "lawyers".</param>
 public sealed record ParsedSearchDto(string Text, string Query, string? PlaceText, SearchPlaceMatchDto? Place, string? CategorySlug, string? SubCategorySlug);

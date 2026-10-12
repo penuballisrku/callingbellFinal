@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 18_ExternalSearch.sql
+   CallInBell - 18_ExternalSearch.sql
    OpenStreetMap search tags per sub-category (dbo.SubCategories.OsmTags).
 
    Search results list registered businesses first. Below them the platform shows real places

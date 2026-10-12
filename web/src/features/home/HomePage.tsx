@@ -298,8 +298,8 @@ function NearbyServicesSection() {
       <SectionHeader id="near-h" title={place ? `Popular near ${place}` : 'Popular near you'}
         subtitle={data?.catalog
           ? (data.aiRanked
-            ? `No listings here yet - picked for ${place} and the season from services booked on Calling Bell`
-            : 'No listings here yet - services people book most on Calling Bell')
+            ? `No listings here yet - picked for ${place} and the season from services booked on CallInBell`
+            : 'No listings here yet - services people book most on CallInBell')
           : data?.aiRanked
             ? 'Picked for your area and the season, from recent local bookings'
             : 'What people around you are booking right now'} />
@@ -318,7 +318,7 @@ function NearbyServicesSection() {
           <RelatedCategories id="related" items={data.relatedCategories} title={`Categories in ${data.cityName ?? place ?? 'your city'}`}
             expandLabel={`Show all ${number(data.relatedCategories.length)} categories in ${data.cityName ?? place ?? 'your city'}`} citySlug={data.citySlug}
             note={data.catalog
-              ? (data.aiRanked ? 'Best matches for this city first, then the full catalogue' : 'Full catalogue - most booked on Calling Bell first')
+              ? (data.aiRanked ? 'Best matches for this city first, then the full catalogue' : 'Full catalogue - most booked on CallInBell first')
               : data.aiRanked ? 'Best matches first, then everything available in the city' : 'Everything available in the city'} />
         )
       )}
@@ -327,7 +327,7 @@ function NearbyServicesSection() {
         <RelatedCategories id="city-categories" items={data.cityCategories}
           title={data.relatedCategories.length ? `More categories in ${data.cityName}` : `Categories in ${data.cityName}`}
           expandLabel={`Show all ${number(data.cityCategories.length)} categories in ${data.cityName}`} citySlug={data.citySlug}
-          note={data.catalog ? 'Full catalogue - most booked on Calling Bell first' : `Elsewhere in ${data.cityName}, distance from ${place}`} />
+          note={data.catalog ? 'Full catalogue - most booked on CallInBell first' : `Elsewhere in ${data.cityName}, distance from ${place}`} />
       )}
     </section>
   );
@@ -563,7 +563,7 @@ function PromoBanner({ banner }: { banner: Banner }) {
   );
 }
 
-/** The "signal" arcs from the Calling Bell mark, radiating behind navy sections. Decorative. */
+/** The "signal" arcs from the CallInBell mark, radiating behind navy sections. Decorative. */
 function SignalRings({ className }: { className: string }) {
   return (
     <svg aria-hidden className={`pointer-events-none absolute text-accent ${className}`} viewBox="0 0 560 560" fill="none">
@@ -579,7 +579,7 @@ const PILLARS = [
   { word: 'Grow', icon: <TrendingUpRounded />, text: 'Local businesses get discovered by customers nearby.', to: '/list-your-business', cta: 'List your business' },
 ];
 
-/** How Calling Bell works, in the four steps of the tagline. The order is the customer's journey, so the steps are numbered. */
+/** How CallInBell works, in the four steps of the tagline. The order is the customer's journey, so the steps are numbered. */
 function PillarsSection() {
   return (
     <section aria-labelledby="how-h">
@@ -619,9 +619,9 @@ function JoinBand() {
           <h2 id="join-h" className="mt-4 text-3xl font-extrabold leading-[1.1] tracking-[-0.03em] md:text-[40px]">
             Get your business <span className="text-accent">discovered</span>
           </h2>
-          <p className="mt-3 max-w-lg text-base text-on-navy-muted md:text-lg">Join Calling Bell and reach customers searching near you. Receive enquiries and bookings in one place.</p>
+          <p className="mt-3 max-w-lg text-base text-on-navy-muted md:text-lg">Join CallInBell and reach customers searching near you. Receive enquiries and bookings in one place.</p>
           <div className="mt-7 flex flex-wrap gap-3">
-            <Button variant="contained" color="secondary" size="large" component={Link} to="/list-your-business" endIcon={<ArrowForwardRounded />}>Join Calling Bell Today</Button>
+            <Button variant="contained" color="secondary" size="large" component={Link} to="/list-your-business" endIcon={<ArrowForwardRounded />}>Join CallInBell Today</Button>
             <Button size="large" component={Link} to="/pricing"
               sx={{ color: 'var(--cb-on-navy)', '&:hover': { bgcolor: 'rgba(255,255,255,.06)' } }}>See plans</Button>
           </div>
@@ -634,7 +634,7 @@ function JoinBand() {
             <div className="-mt-8 px-5 pb-5">
               <span className="grid h-16 w-16 place-items-center rounded-2xl border-4 border-surface bg-accent text-on-accent"><StorefrontOutlined fontSize="large" /></span>
               <div className="mt-3 text-lg font-bold tracking-tight">Your Business</div>
-              <div className="mt-0.5 inline-flex items-center gap-1 text-sm font-semibold text-accent-ink"><CheckCircleRounded sx={{ fontSize: 16 }} />Listed on Calling Bell</div>
+              <div className="mt-0.5 inline-flex items-center gap-1 text-sm font-semibold text-accent-ink"><CheckCircleRounded sx={{ fontSize: 16 }} />Listed on CallInBell</div>
               <div className="mt-4 grid grid-cols-3 gap-2 text-xs font-semibold">
                 <span className="flex items-center justify-center gap-1 rounded-full border border-line py-2"><PhoneInTalkOutlined sx={{ fontSize: 15 }} />Call</span>
                 <span className="flex items-center justify-center gap-1 rounded-full border border-line py-2"><ChatOutlined sx={{ fontSize: 15 }} />Enquire</span>
@@ -660,7 +660,7 @@ function AppDownload({ data }: { data?: HomeData }) {
     <section className="card grid items-center gap-8 overflow-hidden p-6 md:grid-cols-[1.3fr_1fr] md:p-10">
       <div>
         <span className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-3 py-1 text-xs font-semibold text-accent-ink"><PhoneIphoneRounded sx={{ fontSize: 16 }} />Coming soon to Android & iOS</span>
-        <h2 className="mt-3 text-2xl font-bold tracking-tight md:text-3xl">Calling Bell in your pocket</h2>
+        <h2 className="mt-3 text-2xl font-bold tracking-tight md:text-3xl">CallInBell in your pocket</h2>
         <p className="mt-2 max-w-lg text-muted">Get instant alerts when your booking is confirmed, chat with businesses and see who's available nearby - wherever you are.</p>
         <ul className="mt-4 grid max-w-lg gap-2 text-sm text-ink-2 sm:grid-cols-2">
           {['Live availability of businesses near you', 'Book and reschedule in a few taps', 'Chat and call businesses directly', 'Booking and offer alerts'].map((t) => (
@@ -683,7 +683,7 @@ function AppDownload({ data }: { data?: HomeData }) {
 }
 
 /**
- * A phone showing the Calling Bell app's home screen, filled with live data: the visitor's city, its popular services and its top
+ * A phone showing the CallInBell app's home screen, filled with live data: the visitor's city, its popular services and its top
  * rated businesses (from the API, like the rest of the page). Decorative, so hidden from screen readers.
  */
 function AppPreview({ data }: { data?: HomeData }) {
@@ -719,7 +719,7 @@ function AppPreview({ data }: { data?: HomeData }) {
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1.5">
                 <LogoMark size={22} tone="onDark" />
-                <span className="text-[13px] font-bold tracking-[-0.02em]">Calling Bell</span>
+                <span className="text-[13px] font-bold tracking-[-0.02em]">CallInBell</span>
               </span>
               <NotificationsNoneRounded sx={{ fontSize: 18 }} />
             </div>

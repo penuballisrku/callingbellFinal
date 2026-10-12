@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 33_NotificationEvents.sql
+   CallInBell - 33_NotificationEvents.sql
    Push notifications for more events (each also shows in the app's notification bell):
      * LEAD_STATUS      the business accepted, quoted, confirmed or declined a customer's request
      * BOOKING_REMINDER the day before a confirmed booking (customer)

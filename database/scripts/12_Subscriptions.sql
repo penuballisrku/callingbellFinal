@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 12_Subscriptions.sql
+   CallInBell - 12_Subscriptions.sql
    Subscription plans: Starter (SILVER) and Growth (GOLD) are offered; Basic (FREE), Platinum and Enterprise are not
    (IsActive 0: existing subscriptions run until they end). With badge artwork,
    each business's subscription history (including upgrades) and subscription invoices.

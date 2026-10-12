@@ -55,6 +55,8 @@ public interface IIdentityService
     Task<AuthResultDto> LoginAsync(string email, string password, CancellationToken ct);
     /// <summary>Creates an account whose mobile number has already been verified by OTP (no password).</summary>
     Task<AuthResultDto> RegisterAsync(RegisterRequest request, CancellationToken ct);
+    /// <summary>A customer or business owner account that signs in with this email and password (email not yet verified).</summary>
+    Task<AuthResultDto> RegisterWithPasswordAsync(string displayName, string email, string password, string? citySlug, string accountType, CancellationToken ct);
     /// <summary>Signs in the account registered with this (normalised) mobile number, after its OTP was verified.</summary>
     Task<AuthResultDto> SignInWithPhoneAsync(string phoneNumber, CancellationToken ct);
     /// <summary>

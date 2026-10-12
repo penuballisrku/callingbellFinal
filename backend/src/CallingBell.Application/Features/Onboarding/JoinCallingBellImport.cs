@@ -5,14 +5,14 @@ using System.Text.RegularExpressions;
 
 namespace CallingBell.Application.Features.Onboarding;
 
-/// <summary>A place outside Calling Bell that a business can be created from: "google:{place id}" or "osm:node/123".</summary>
+/// <summary>A place outside CallInBell that a business can be created from: "google:{place id}" or "osm:node/123".</summary>
 public sealed record SourceRef(string Provider, string ExternalId)
 {
     public override string ToString() => $"{Provider}:{ExternalId}";
 }
 
 /// <summary>
-/// The pure parts of "Join Calling Bell": reading source references, cleaning imported text, turning opening-hours text into hours,
+/// The pure parts of "Join CallInBell": reading source references, cleaning imported text, turning opening-hours text into hours,
 /// and comparing businesses for duplicates. No I/O here, so it is unit-tested directly.
 /// </summary>
 public static partial class JoinImport

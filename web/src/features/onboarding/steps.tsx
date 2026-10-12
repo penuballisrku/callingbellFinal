@@ -493,7 +493,7 @@ export function PaymentStep({ data, paymentsEnabled, onChangePlan }: { data: Wiz
         <LockOutlined className="mt-0.5 text-muted" fontSize="small" />
         <div>
           <div className="font-semibold">Secure payment with Razorpay</div>
-          <p className="mt-0.5 text-muted">Pay by UPI, debit or credit card, net banking or wallet. Calling Bell never sees your card or bank details.
+          <p className="mt-0.5 text-muted">Pay by UPI, debit or credit card, net banking or wallet. CallInBell never sees your card or bank details.
             If you close the payment window, your business keeps a basic listing and you can pay any time from your dashboard.</p>
         </div>
       </div>
@@ -666,7 +666,7 @@ export function ReviewStep({ data, media, onEdit, paymentsEnabled }: { data: Wiz
       <Controller control={control} name="acceptTerms" render={({ field, fieldState }) => (
         <div className="rounded-xl bg-subtle p-4">
           <FormControlLabel control={<Checkbox checked={field.value} onChange={(e) => field.onChange(e.target.checked)} />}
-            label={<span className="text-sm">I confirm the details are accurate and agree to the Calling Bell Terms of Service, Privacy Policy and Listing Guidelines.</span>} />
+            label={<span className="text-sm">I confirm the details are accurate and agree to the CallInBell Terms of Service, Privacy Policy and Listing Guidelines.</span>} />
           {fieldState.error && <p className="ml-8 text-sm text-danger">{fieldState.error.message}</p>}
         </div>
       )} />

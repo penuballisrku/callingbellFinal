@@ -10,7 +10,7 @@ export interface ParsedSearch {
   query: string;
   /** The place after "in"/"near", as typed. */
   placeText?: string | null;
-  /** The listed city/area the place matched; null when the place isn't listed (e.g. a city not on Calling Bell yet). */
+  /** The listed city/area the place matched; null when the place isn't listed (e.g. a city not on CallInBell yet). */
   place?: SearchPlaceMatch | null;
   categorySlug?: string | null;
   subCategorySlug?: string | null;

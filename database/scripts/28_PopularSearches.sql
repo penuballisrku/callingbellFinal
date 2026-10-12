@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 28_PopularSearches.sql
+   CallInBell - 28_PopularSearches.sql
    "Popular searches" on Explore nearby (/nearby), served by GET /api/places/popular-searches.
 
    * dbo.PopularSearches: one row per suggested search.

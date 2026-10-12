@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 23_TrustSafetyContent.sql
+   CallInBell - 23_TrustSafetyContent.sql
    Content for the "Trust & safety" page (/trust-and-safety): our commitment, safety pillars,
    how business verification works, review standards, safety tips for customers and
    businesses, how to report a problem, FAQs and a closing call to action.
@@ -23,14 +23,14 @@ INSERT INTO #Trust (Code, SectionKey, SortOrder, Eyebrow, Title, Subtitle, Body,
 /* ---------- Hero ---------- */
 (N'TS-HERO', N'Hero', 1, N'Trust & safety',
  N'A local marketplace you can rely on',
- N'Every listing, review and conversation on Calling Bell is built around one idea: customers and businesses should be able to deal with each other confidently. Here is how we keep the platform safe, fair and trustworthy.',
+ N'Every listing, review and conversation on CallInBell is built around one idea: customers and businesses should be able to deal with each other confidently. Here is how we keep the platform safe, fair and trustworthy.',
  NULL, NULL, N'Browse verified businesses', N'/search?verifiedOnly=true'),
 
 /* ---------- Our commitment ---------- */
 (N'TS-COMMITMENT', N'Story', 1, N'Our commitment',
  N'Trust is the foundation of every booking',
  N'Verified businesses. Genuine reviews. Protected data.',
- N'When you invite a professional into your home, visit a clinic or hand over an important job, you need to know who you are dealing with. Calling Bell exists to make that decision easier, so trust is built into every part of the platform rather than added as an afterthought.\nWe review businesses before they appear in search, show a verified badge only when a business has passed our checks, moderate reviews so ratings reflect real experiences, and protect personal information with role-based access, secure sign-in and activity logging.\nTrust also depends on everyone who uses Calling Bell. Our community standards apply equally to customers and businesses, and we act on reports of fraud, abuse, harassment or misleading information.',
+ N'When you invite a professional into your home, visit a clinic or hand over an important job, you need to know who you are dealing with. CallInBell exists to make that decision easier, so trust is built into every part of the platform rather than added as an afterthought.\nWe review businesses before they appear in search, show a verified badge only when a business has passed our checks, moderate reviews so ratings reflect real experiences, and protect personal information with role-based access, secure sign-in and activity logging.\nTrust also depends on everyone who uses CallInBell. Our community standards apply equally to customers and businesses, and we act on reports of fraud, abuse, harassment or misleading information.',
  NULL, NULL, NULL),
 
 /* ---------- Safety pillars ---------- */
@@ -66,7 +66,7 @@ INSERT INTO #Trust (Code, SectionKey, SortOrder, Eyebrow, Title, Subtitle, Body,
 /* ---------- Safety tips ---------- */
 (N'TS-TIP-CUST-VERIFIED', N'TipCustomer', 1, NULL, N'Look for the verified badge',
  N'Prefer verified businesses and read recent reviews before you book.', NULL, N'verified', NULL, NULL),
-(N'TS-TIP-CUST-PLATFORM', N'TipCustomer', 2, NULL, N'Keep conversations on Calling Bell',
+(N'TS-TIP-CUST-PLATFORM', N'TipCustomer', 2, NULL, N'Keep conversations on CallInBell',
  N'Chats, quotations and bookings made on the platform leave a clear record if anything goes wrong.', NULL, N'chat', NULL, NULL),
 (N'TS-TIP-CUST-QUOTE', N'TipCustomer', 3, NULL, N'Agree the price in writing',
  N'Request a quotation and confirm the scope of work before the job starts.', NULL, N'wallet', NULL, NULL),
@@ -84,7 +84,7 @@ INSERT INTO #Trust (Code, SectionKey, SortOrder, Eyebrow, Title, Subtitle, Body,
 /* ---------- Reporting ---------- */
 (N'TS-REPORT', N'Report', 1, N'Something not right?',
  N'Report a problem',
- N'If you see a fake listing, a misleading or abusive review, harassment, fraud or any other misuse of Calling Bell, tell us.',
+ N'If you see a fake listing, a misleading or abusive review, harassment, fraud or any other misuse of CallInBell, tell us.',
  N'Contact our support team with the business name or profile link, a short description of what happened, and screenshots if you have them. Our trust and safety team reviews every report, may contact you for more information, and will take action, which can include removing content, suspending a listing or closing an account.\nIf you are in immediate danger or believe a crime has been committed, contact the local police first by dialling 112.',
  N'campaign', NULL, NULL),
 
@@ -96,11 +96,11 @@ INSERT INTO #Trust (Code, SectionKey, SortOrder, Eyebrow, Title, Subtitle, Body,
 (N'TS-FAQ-CONTACT', N'Faq', 3, NULL, N'Who can see my phone number and email?', NULL,
  N'Only the businesses you choose to contact, by sending an enquiry, requesting a callback or making a booking. Your details are not shown publicly on your reviews.', NULL, NULL, NULL),
 (N'TS-FAQ-DISPUTE', N'Faq', 4, NULL, N'What happens if I have a problem with a booking?', NULL,
- N'Start by messaging the business through Calling Bell; most issues are resolved quickly that way. If that does not work, contact our support team with your booking details and we will help.', NULL, NULL, NULL),
+ N'Start by messaging the business through CallInBell; most issues are resolved quickly that way. If that does not work, contact our support team with your booking details and we will help.', NULL, NULL, NULL),
 
 /* ---------- Closing call to action ---------- */
 (N'TS-CTA', N'Cta', 1, NULL,
- N'Book with confidence on Calling Bell',
+ N'Book with confidence on CallInBell',
  N'Find verified local businesses near you, compare genuine reviews and book in minutes.',
  NULL, NULL, N'List your business free', N'/list-your-business');
 

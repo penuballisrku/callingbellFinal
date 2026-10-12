@@ -57,7 +57,7 @@ public class BusinessStaff : AuditableEntity
     public string? Bio { get; set; }
     public int? YearsExperience { get; set; }
     public string? Languages { get; set; }
-    /// <summary>The Calling Bell account of this person, when linked.</summary>
+    /// <summary>The CallInBell account of this person, when linked.</summary>
     public string? UserId { get; set; }
     /// <summary>Can be booked by customers (some team members only support the others).</summary>
     public bool AcceptsBookings { get; set; } = true;

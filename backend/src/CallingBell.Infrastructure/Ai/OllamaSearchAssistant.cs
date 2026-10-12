@@ -74,13 +74,13 @@ internal sealed class OllamaSearchAssistant(
     private async Task<AiAnswer?> ReplyAsync(string message, string facts, CancellationToken ct)
     {
         const string system =
-            "You are the friendly assistant of Calling Bell, a local services marketplace in India, chatting with a customer. Reply to their " +
-            "message using ONLY the facts provided, which come live from the Calling Bell database. Never invent businesses, prices, ratings, " +
+            "You are the friendly assistant of CallInBell, a local services marketplace in India, chatting with a customer. Reply to their " +
+            "message using ONLY the facts provided, which come live from the CallInBell database. Never invent businesses, prices, ratings, " +
             "phone numbers or places, and never promise a day, time or availability the facts don't state. In 2 to 3 short sentences: show you understood what they need, say what you found, and point out the one " +
             "or two best options by name and why (rating, reviews, price, verified, home visits, availability). The business cards are shown " +
             "below your reply, so don't list them all. If nothing was found, say so kindly and use the facts to suggest what to try. Plain text, " +
             "no markdown, no greeting. Write prices exactly as the facts give them, with their currency (₹ in India).";
-        var prompt = $"Facts from the Calling Bell database:\n{facts}\n\nCustomer's message: \"{Plain(message, 300)}\"";
+        var prompt = $"Facts from the CallInBell database:\n{facts}\n\nCustomer's message: \"{Plain(message, 300)}\"";
         var text = await chat.ChatTextAsync(system, prompt, ct, maxOutputTokens: 160, task: AiTasks.AssistantReply);
         if (text is null) return null;
         text = text.Replace("**", "").Replace("__", "").Trim().Trim('"').Trim();
@@ -101,12 +101,12 @@ internal sealed class OllamaSearchAssistant(
     private async Task<AiAnswer?> AnswerAsync(string question, string facts, CancellationToken ct)
     {
         const string system =
-            "You are the assistant of Calling Bell, a local services marketplace in India. Answer the customer's question using ONLY the " +
-            "facts provided, which come live from the Calling Bell database. Never invent businesses, services, prices, ratings, phone numbers " +
+            "You are the assistant of CallInBell, a local services marketplace in India. Answer the customer's question using ONLY the " +
+            "facts provided, which come live from the CallInBell database. Never invent businesses, services, prices, ratings, phone numbers " +
             "or places. If the facts don't answer the question, say so in one sentence and suggest what they could search for instead. " +
             "Be warm and concise: at most 100 words, plain text (no markdown, no bold), a short numbered list when listing several items. " +
             "Write prices exactly as the facts give them, with their currency (₹ in India).";
-        var prompt = $"Facts from the Calling Bell database:\n{facts}\n\nCustomer's question: \"{Plain(question, 300)}\"";
+        var prompt = $"Facts from the CallInBell database:\n{facts}\n\nCustomer's question: \"{Plain(question, 300)}\"";
         var text = await chat.ChatTextAsync(system, prompt, ct, maxOutputTokens: 220, task: AiTasks.AssistantAnswer);
         if (text is null) return null;
         // Light clean-up: models sometimes add markdown emphasis despite the instruction.

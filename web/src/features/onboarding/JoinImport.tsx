@@ -135,7 +135,7 @@ export function ImportedBanner({ d, filled }: { d: JoinCallingBellBusiness; fill
         {d.rating != null && d.reviewCount ? (
           <span className="inline-flex items-center gap-0.5">
             <StarRounded sx={{ fontSize: 14, color: '#F4A62C' }} />{d.rating.toFixed(1)} · {number(d.reviewCount)} reviews on {d.sourceName}
-            <span className="text-muted">(not copied: Calling Bell reviews start fresh)</span>
+            <span className="text-muted">(not copied: CallInBell reviews start fresh)</span>
           </span>
         ) : null}
         {d.sourceUrl && <a href={d.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 font-semibold hover:underline">View on {d.sourceName}<OpenInNewRounded sx={{ fontSize: 12 }} /></a>}
@@ -151,7 +151,7 @@ const matchLabel: Record<string, string> = {
 };
 
 /**
- * Shown when the place may already be on Calling Bell. A strong match (same place, or same phone / website / location with a similar
+ * Shown when the place may already be on CallInBell. A strong match (same place, or same phone / website / location with a similar
  * name) can't be registered again: the person can view or claim it. Otherwise they may carry on if it's a different business.
  */
 export function DuplicateDialog({ matches, sourceId, onContinue, onClose }: {
@@ -162,7 +162,7 @@ export function DuplicateDialog({ matches, sourceId, onContinue, onClose }: {
   return (
     <>
       <Dialog open={!claiming} onClose={strong ? undefined : onClose} maxWidth="sm" fullWidth aria-labelledby="dup-title">
-        <DialogTitle id="dup-title">{strong ? 'This business is already on Calling Bell' : 'Is this business already on Calling Bell?'}</DialogTitle>
+        <DialogTitle id="dup-title">{strong ? 'This business is already on CallInBell' : 'Is this business already on CallInBell?'}</DialogTitle>
         <DialogContent>
           <p className="mb-3 text-sm text-muted">
             {strong ? 'To avoid duplicate listings, view it or claim it if it’s yours. Our team verifies claims and hands the listing over to you.'

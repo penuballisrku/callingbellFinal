@@ -45,7 +45,7 @@ export default function BusinessWizard({ mode }: { mode: 'register' | 'setup' })
   const serviceTypes = useLookup('ServiceType');
   const socialPlatforms = useLookup('SocialPlatform');
   const payments = usePaymentConfig();
-  // "Join Calling Bell": ?source=google:… / osm:… - the full details come from the API (read from the source on the server).
+  // "Join CallInBell": ?source=google:… / osm:… - the full details come from the API (read from the source on the server).
   const [params] = useSearchParams();
   const source = params.get('source');
   const hint = params.get('hint');
@@ -81,7 +81,7 @@ function loadDraft(mode: string): WizardForm | null {
 }
 
 /**
- * Fills empty fields from the link's query string (?name=&phone=&website=&address=), e.g. from "Join Calling Bell" on a search result.
+ * Fills empty fields from the link's query string (?name=&phone=&website=&address=), e.g. from "Join CallInBell" on a search result.
  * Phone numbers are reduced to 10 digits when they are Indian mobile/landline numbers written with +91 or a leading 0.
  */
 function withPrefill(form: WizardForm, params: URLSearchParams): WizardForm {
@@ -117,7 +117,7 @@ function Wizard({ mode, data, paymentsEnabled, imported }: {
   const queryClient = useQueryClient();
   const { enqueueSnackbar } = useSnackbar();
   const [params] = useSearchParams();
-  // "Join Calling Bell" on a Google Maps / OpenStreetMap result links here with what is known about the business; it only fills
+  // "Join CallInBell" on a Google Maps / OpenStreetMap result links here with what is known about the business; it only fills
   // fields that are still empty, so a saved draft is never overwritten.
   const [draft] = useState(() => loadDraft(mode));
   // An imported place starts from a draft of that same place only; another place's draft is not mixed in.
@@ -428,7 +428,7 @@ function Wizard({ mode, data, paymentsEnabled, imported }: {
 
   const handleServerError = (e: unknown) => {
     if (e instanceof ApiError && e.status === 409 && !/email/i.test(e.message)) {
-      // The business is already on Calling Bell (same place, phone, website or location).
+      // The business is already on CallInBell (same place, phone, website or location).
       setFormError(e.message);
       if (imported?.existingBusinesses.length) setDuplicatesOpen(true);
       return;

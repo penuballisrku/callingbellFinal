@@ -204,6 +204,6 @@ export function useCategories() {
 export function useDocumentTitle(title?: string) {
   useEffect(() => {
     if (document.documentElement.dataset.seoManaged === '1') return;
-    document.title = title ? `${title} · Calling Bell` : 'Calling Bell - Discover. Connect. Book. Grow.';
+    document.title = title ? `${title} · CallInBell` : 'CallInBell - Discover. Connect. Book. Grow.';
   }, [title]);
 }

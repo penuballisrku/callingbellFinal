@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 05_BusinessServices.sql
+   CallInBell - 05_BusinessServices.sql
    Service catalogue for every business, built from realistic per-sub-category templates.
    Prices vary per business (deterministically) to look like independent rate cards.
    Idempotent: unique (BusinessId, Name).

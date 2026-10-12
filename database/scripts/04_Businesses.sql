@@ -1,5 +1,5 @@
 /* =====================================================================================
-   Calling Bell - 04_Businesses.sql
+   CallInBell - 04_Businesses.sql
    Business owners, business listings, working hours, logos, covers and gallery images.
 
    * Owner accounts are created here (business onboarding) with role BusinessOwner;
