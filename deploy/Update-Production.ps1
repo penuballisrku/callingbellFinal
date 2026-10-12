@@ -9,7 +9,12 @@ param([switch]$SqlScripts)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
 
-Push-Location "$repo\web"; npm ci; npm run build; if ($LASTEXITCODE) { throw 'web build failed' }; Pop-Location
+Push-Location "$repo\web"
+# Not npm ci: it deletes node_modules first, which fails half-way (EPERM) while the Vite dev server holds native modules open
+# and leaves the dev server broken. npm install only touches what changed.
+npm install --no-audit --no-fund; if ($LASTEXITCODE) { throw 'npm install failed (a file in node_modules is locked? stop the Vite dev server and retry)' }
+npm run build; if ($LASTEXITCODE) { throw 'web build failed' }
+Pop-Location
 dotnet publish "$repo\backend\src\CallingBell.Api" -c Release -o "$env:TEMP\cb-publish" --nologo
 if ($LASTEXITCODE) { throw 'API publish failed' }
 
