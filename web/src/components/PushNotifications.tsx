@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import { Button, CircularProgress, Switch } from '@mui/material';
 import NotificationsActiveOutlined from '@mui/icons-material/NotificationsActiveOutlined';
 import NotificationsOffOutlined from '@mui/icons-material/NotificationsOffOutlined';
+import LocalOfferOutlined from '@mui/icons-material/LocalOfferOutlined';
+import { api, errorMessage } from '@/lib/api';
+import type { NotificationPreferences } from '@/lib/types';
 import { disablePush, enablePush, getPushState, syncPush, type PushState } from '@/lib/push';
 
 /**
@@ -83,6 +86,40 @@ export function PushNotificationToggle() {
       ) : (
         <Switch checked={on} onChange={() => void toggle()} slotProps={{ input: { 'aria-label': 'Browser notifications' } }} />
       )}
+    </div>
+  );
+}
+
+/**
+ * "Offers near me" for the notification menu: deals from businesses in the person's city, at most one a week. Promotional, so it is off
+ * until they turn it on; it reaches them in the app and, with browser notifications on, as a push.
+ */
+export function OffersToggle() {
+  const queryClient = useQueryClient();
+  const { enqueueSnackbar } = useSnackbar();
+  const key = ['notifications', 'preferences'];
+  const { data } = useQuery({ queryKey: key, queryFn: () => api.get<NotificationPreferences>('/api/notifications/preferences') });
+  const save = useMutation({
+    mutationFn: (offers: boolean) => api.put<NotificationPreferences>('/api/notifications/preferences', { offers }).then((r) => r.data),
+    onSuccess: (prefs) => {
+      queryClient.setQueryData(key, prefs);
+      enqueueSnackbar(prefs.offers ? 'You’ll hear about offers near you, at most once a week' : 'Offers turned off', { variant: prefs.offers ? 'success' : 'info' });
+    },
+    onError: (e) => enqueueSnackbar(errorMessage(e), { variant: 'error' }),
+  });
+  if (!data) return null;
+  return (
+    <div className="flex items-start gap-3 border-b border-line px-4 py-3">
+      <span className={`mt-0.5 flex ${data.offers ? 'text-accent-ink' : 'text-muted'}`} aria-hidden><LocalOfferOutlined fontSize="small" /></span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold">Offers near me</p>
+        <p className="text-xs text-muted">
+          {data.hasCity ? 'Deals from businesses in your city, at most once a week.'
+            : 'Offers are matched to the city on your account, which isn’t set, so none will arrive yet.'}
+        </p>
+      </div>
+      {save.isPending ? <CircularProgress size={20} sx={{ mt: 0.5 }} />
+        : <Switch checked={data.offers} onChange={(e) => save.mutate(e.target.checked)} slotProps={{ input: { 'aria-label': 'Offers near me' } }} />}
     </div>
   );
 }

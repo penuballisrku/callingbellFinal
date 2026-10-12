@@ -43,7 +43,8 @@ export default function CustomerLayout() {
           <div className="flex-1" />
           {/* The links need the full width; below it they are in the menu, so the header never overflows. */}
           <nav className="hidden shrink-0 items-center gap-0.5 xl:flex" aria-label="Main">
-            {nav.map((n) => (
+            {/* Signed out, the "List your business" button takes the place of "For business" (the header has no room for both). */}
+            {nav.filter((n) => user || n.to !== '/list-your-business').map((n) => (
               <NavLink key={n.to} to={n.to} className={({ isActive }) => `inline-flex h-10 items-center whitespace-nowrap rounded-lg px-2.5 text-sm font-medium transition-colors hover:bg-subtle hover:text-ink 2xl:px-3 ${isActive ? 'bg-subtle text-ink' : 'text-muted'}`}>{n.label}</NavLink>
             ))}
           </nav>
@@ -61,7 +62,7 @@ export default function CustomerLayout() {
           ) : (
             <div className="hidden shrink-0 items-center gap-2 sm:flex">
               <Button component={Link} to="/login" color="inherit" sx={{ height: 40, px: 1.5, whiteSpace: 'nowrap' }}>Sign in</Button>
-              <Button component={Link} to="/register" variant="contained" sx={{ height: 40, px: 2, whiteSpace: 'nowrap' }}>Join free</Button>
+              <Button component={Link} to="/register?type=business" variant="contained" sx={{ height: 40, px: 2, whiteSpace: 'nowrap' }}>List<span className="hidden lg:inline">&nbsp;your</span>&nbsp;business</Button>
             </div>
           )}
           <IconButton className="shrink-0 xl:!hidden" onClick={() => setOpen(true)} aria-label="Open menu"><MenuRounded /></IconButton>
@@ -83,7 +84,7 @@ export default function CustomerLayout() {
           <InstallAppButton onStart={() => setOpen(false)} />
         </nav>
         {!user && <div className="mt-6 flex flex-col gap-2">
-          <Button component={Link} to="/register" variant="contained" size="large">Join free</Button>
+          <Button component={Link} to="/register?type=business" variant="contained" size="large">List your business</Button>
           <Button component={Link} to="/login" variant="outlined" size="large">Sign in</Button>
         </div>}
       </Drawer>

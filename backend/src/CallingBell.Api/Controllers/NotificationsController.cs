@@ -29,6 +29,16 @@ public sealed class NotificationsController : ApiControllerBase
         return Done("Notifications turned on for this browser");
     }
 
+    /// <summary>The signed-in person's notification choices (offers near them).</summary>
+    [Authorize, HttpGet("preferences")]
+    public async Task<ActionResult<ApiResponse<NotificationPreferencesDto>>> Preferences(CancellationToken ct) =>
+        Success(await Sender.Send(new GetNotificationPreferencesQuery(), ct));
+
+    /// <summary>Turns offers near them on or off.</summary>
+    [Authorize, HttpPut("preferences")]
+    public async Task<ActionResult<ApiResponse<NotificationPreferencesDto>>> UpdatePreferences(UpdateNotificationPreferencesCommand command, CancellationToken ct) =>
+        Success(await Sender.Send(command, ct));
+
     /// <summary>Stops push notifications to this browser (sign-out, or turned off).</summary>
     [Authorize, HttpPost("devices/unregister")]
     public async Task<ActionResult<ApiResponse<object>>> UnregisterDevice(DeviceTokenRequest request, CancellationToken ct)

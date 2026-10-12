@@ -5,7 +5,7 @@ import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
-  Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Rating as MuiRating, Skeleton, TextField, ToggleButton, ToggleButtonGroup,
+  Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, InputAdornment, MenuItem, Rating as MuiRating, Skeleton, TextField, ToggleButton, ToggleButtonGroup,
 } from '@mui/material';
 import dayjs from 'dayjs';
 import { useSnackbar } from 'notistack';
@@ -128,6 +128,10 @@ export function BookingDialog({ business, open, serviceId, onClose }: { business
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
   const [done, setDone] = useState<string | null>(null);
+  // Accounts made with Google have no mobile number yet: the business needs one to reach the customer.
+  const needsPhone = !useAuth((s) => s.user?.phoneNumber);
+  const [phone, setPhone] = useState('');
+  const phoneValid = /^[6-9]\d{9}$/.test(phone.replace(/\D/g, '').replace(/^(91|0)(?=\d{10}$)/, ''));
 
   useEffect(() => { if (open) { setSelectedService(serviceId ?? business.services[0]?.id ?? ''); setDone(null); setSlot(null); } }, [open, serviceId, business.services]);
   useEffect(() => setSlot(null), [day, selectedService, staffId]);
@@ -154,7 +158,7 @@ export function BookingDialog({ business, open, serviceId, onClose }: { business
   const book = useMutation({
     mutationFn: () => api.post<CreatedReference>('/api/me/bookings', {
       businessId: business.card.id, serviceId: selectedService, scheduledStart: slot, serviceAddress: address || null, notes: notes || null,
-      staffId: staffId || null,
+      staffId: staffId || null, contactPhone: needsPhone ? phone.trim() : null,
     }),
     onSuccess: ({ data }) => {
       setDone(data.reference);
@@ -168,7 +172,7 @@ export function BookingDialog({ business, open, serviceId, onClose }: { business
   });
 
   const needsAddress = service?.type === 'AtHome';
-  const canSubmit = !!slot && (!needsAddress || address.trim().length >= 10);
+  const canSubmit = !!slot && (!needsAddress || address.trim().length >= 10) && (!needsPhone || phoneValid);
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
@@ -239,6 +243,9 @@ export function BookingDialog({ business, open, serviceId, onClose }: { business
 
             {needsAddress && <TextField label="Service address" placeholder="Flat, building, street, area" value={address} onChange={(e) => setAddress(e.target.value)} required
               error={address.length > 0 && address.trim().length < 10} helperText="The professional will visit this address" />}
+            {needsPhone && <TextField label="Mobile number" type="tel" autoComplete="tel" placeholder="98765 43210" value={phone} onChange={(e) => setPhone(e.target.value)} required
+              error={phone.length > 0 && !phoneValid} helperText={phone.length > 0 && !phoneValid ? 'Enter a 10-digit Indian mobile number' : 'So the business can reach you about this booking'}
+              slotProps={{ input: { startAdornment: <InputAdornment position="start">+91</InputAdornment> } }} />}
             <TextField label="Notes for the business (optional)" multiline minRows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
             {service && (
               <div className="flex items-center justify-between rounded-lg bg-canvas px-4 py-3 text-sm">

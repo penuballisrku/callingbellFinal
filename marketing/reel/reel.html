@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Calling Bell Services Reel</title>
+<style>
+  @font-face {
+    font-family: 'CBInter';
+    src: url('assets/inter.woff2') format('woff2');
+    font-weight: 100 900;
+  }
+  html, body { margin: 0; height: 100%; background: #050b16; }
+  body { display: grid; place-items: center; overflow: hidden; }
+  canvas { height: 100vh; width: auto; max-width: 100vw; aspect-ratio: 9 / 16; display: block; }
+  body.render canvas { height: auto; width: 1080px; max-width: none; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1080" height="1920"></canvas>
+<script>
+/*
+ * Calling Bell — services Instagram Reel (1080x1920, 26s).
+ * renderFrame(t) is a pure function of time so render.cjs can export it frame by frame.
+ * Open reel.html?play over http to preview it live.
+ */
+const W = 1080, H = 1920, DUR = 26;
+const FONT = "'CBInter', 'Segoe UI', Roboto, Arial, sans-serif";
+const C = {
+  navy: '#0B1220', navy2: '#021223', amber: '#F4A62C', amberHi: '#FFC562', amberDeep: '#E08A0B',
+  white: '#FFFFFF', muted: '#BAC5D4', faint: '#74839A',
+};
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+// ---------- maths ----------
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const lerp = (a, b, p) => a + (b - a) * p;
+const easeOutCubic = p => 1 - Math.pow(1 - p, 3);
+const easeInCubic = p => p * p * p;
+const easeInOutCubic = p => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
+const easeOutBack = p => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2); };
+const easeOutQuint = p => 1 - Math.pow(1 - p, 5);
+// Damped bell swing, starting at local time 0.
+const ringAngle = lt => (lt < 0 ? 0 : 0.32 * Math.sin(lt * 26) * Math.exp(-lt * 3.2));
+
+function rand(seed) { const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
+
+// ---------- data ----------
+const ICONS = {
+  zap: ['M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z'],
+  wrench: ['M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z'],
+  snowflake: ['M2 12h20', 'M12 2v20', 'm20 16-4-4 4-4', 'm4 8 4 4-4 4', 'm16 4-4 4-4-4', 'm8 20 4-4 4 4'],
+  hammer: ['m15 12-8.373 8.373a1 1 0 1 1-3-3L12 9', 'm18 15 4-4', 'm21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5'],
+  roller: [{ r: [2, 2, 16, 6, 2] }, 'M10 16v-2a2 2 0 0 1 2-2h8a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2', { r: [8, 16, 4, 6, 1] }],
+  sparkles: ['M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z', 'M20 3v4', 'M22 5h-4', 'M4 17v2', 'M5 18H3'],
+  washer: [{ r: [3, 2, 18, 20, 2] }, 'M3 6h18', 'M7 4h.01', 'M10 4h.01', { c: [12, 13.5, 5] }, 'M12 18.5a2.5 2.5 0 0 0 0-5 2.5 2.5 0 0 1 0-5'],
+  house: ['M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8', 'M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'],
+};
+const PATHS = {};
+for (const [k, parts] of Object.entries(ICONS)) {
+  PATHS[k] = parts.map(p => {
+    if (typeof p === 'string') return new Path2D(p);
+    const path = new Path2D();
+    if (p.r) path.roundRect(...p.r);
+    if (p.c) path.arc(p.c[0], p.c[1], p.c[2], 0, Math.PI * 2);
+    return path;
+  });
+}
+
+const CATS = [
+  { name: 'Electricians', icon: 'zap', line: 'Wiring, fittings & fault repairs', chips: ['Wiring', 'Switchboards', 'Inverters'] },
+  { name: 'Plumbers', icon: 'wrench', line: 'Leaks, taps & pipe fittings', chips: ['Leak fixes', 'Taps & showers', 'Drainage'] },
+  { name: 'AC Services', icon: 'snowflake', line: 'Install, service & gas refill', chips: ['Installation', 'Servicing', 'Gas refill'] },
+  { name: 'Carpenters', icon: 'hammer', line: 'Furniture, doors & custom work', chips: ['Furniture', 'Doors', 'Modular'] },
+  { name: 'Painters', icon: 'roller', line: 'Interiors, exteriors & textures', chips: ['Interior', 'Exterior', 'Textures'] },
+  { name: 'Cleaning Services', icon: 'sparkles', line: 'A spotless home, top to bottom', chips: ['Deep clean', 'Kitchen', 'Bathroom'] },
+  { name: 'Appliance Repair', icon: 'washer', line: 'Washers, fridges, microwaves & more', chips: ['Washer', 'Fridge', 'Microwave'] },
+  { name: 'Home Maintenance', icon: 'house', line: 'Regular care for a happy home', chips: ['Inspections', 'Repairs', 'Upkeep'] },
+];
+
+// ---------- timeline ----------
+const T_HEAD = 3.2;            // headline scene
+const T_CATS = 5.0;            // first category
+const CAT_D = 1.8;             // seconds per category
+const T_GRID = T_CATS + CATS.length * CAT_D;   // 19.4
+const T_OUT = 22.6;            // outro
+
+// ---------- primitives ----------
+function font(weight, size) { ctx.font = `${weight} ${size}px ${FONT}`; }
+
+function drawIcon(name, cx, cy, size, color, lw = 2, draw = 1) {
+  if (draw <= 0) return;
+  ctx.save();
+  ctx.translate(cx - size / 2, cy - size / 2);
+  ctx.scale(size / 24, size / 24);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lw;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  if (draw < 1) { ctx.setLineDash([120, 120]); ctx.lineDashOffset = 120 * (1 - easeInOutCubic(draw)); }
+  for (const p of PATHS[name]) ctx.stroke(p);
+  ctx.restore();
+}
+
+// The Calling Bell mark, from web/public/favicon.svg (40x40 units).
+const BELL_TOP = new Path2D(); BELL_TOP.roundRect(18.9, 7.2, 2.2, 3.4, 1.1);
+const BELL_BODY = new Path2D('M20 9.6c-4.5 0-7.5 3.4-7.5 7.7v4.8l-2.1 3.3c-.55.86.07 1.95 1.08 1.95h17.04c1.01 0 1.63-1.09 1.08-1.95l-2.1-3.3v-4.8c0-4.3-3-7.7-7.5-7.7Z');
+const BELL_CLAPPER = new Path2D('M16.7 29.2h6.6a3.3 3.3 0 0 1-6.6 0Z');
+const WAVE1 = new Path2D('M26.6 11.2a7 7 0 0 1 2.7 4.6');
+const WAVE2 = new Path2D('M29.4 8.2a10.8 10.8 0 0 1 3.9 7');
+
+function drawLogo(cx, cy, size, { ring = 0, waves = 1, glow = 1, alpha = 1 } = {}) {
+  if (size <= 0 || alpha <= 0) return;
+  const s = size / 40;
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.translate(cx - 20 * s, cy - 20 * s);
+  ctx.scale(s, s);
+  // tile
+  ctx.save();
+  ctx.shadowColor = `rgba(244,166,44,${0.45 * glow})`;
+  ctx.shadowBlur = 60 * glow * s;
+  const g = ctx.createLinearGradient(0, 0, 40, 40);
+  g.addColorStop(0, '#1A2540'); g.addColorStop(1, C.navy);
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.roundRect(0, 0, 40, 40, 11); ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle = 'rgba(244,166,44,0.35)'; ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.roundRect(0.25, 0.25, 39.5, 39.5, 10.8); ctx.stroke();
+  // bell (swings from the crown)
+  ctx.save();
+  ctx.translate(20, 9); ctx.rotate(ring); ctx.translate(-20, -9);
+  ctx.translate(-0.4, 1.2); ctx.scale(0.92, 0.92);
+  ctx.fillStyle = C.white;
+  ctx.fill(BELL_TOP); ctx.fill(BELL_BODY);
+  ctx.save(); ctx.translate(20, 27); ctx.rotate(ring * 0.8); ctx.translate(-20, -27); ctx.fill(BELL_CLAPPER); ctx.restore();
+  ctx.restore();
+  // sound waves
+  ctx.strokeStyle = C.amber; ctx.lineWidth = 2; ctx.lineCap = 'round';
+  ctx.globalAlpha = alpha * clamp(waves * 2);
+  ctx.stroke(WAVE1);
+  ctx.globalAlpha = alpha * 0.55 * clamp(waves * 2 - 1);
+  ctx.stroke(WAVE2);
+  ctx.restore();
+}
+
+// Text that slides up from behind a mask.
+function revealText(txt, x, y, size, p, color) {
+  if (p <= 0) return;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, y - size * 1.05, W, size * 1.4); ctx.clip();
+  ctx.globalAlpha *= clamp(p * 1.6);
+  ctx.fillStyle = color;
+  ctx.fillText(txt, x, y + (1 - easeOutQuint(clamp(p))) * size * 1.15);
+  ctx.restore();
+}
+
+// "Calling Bell" wordmark: white + amber.
+function drawWordmark(x, y, size, align, p = 1, alpha = 1) {
+  if (p <= 0 || alpha <= 0) return;
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  font(800, size);
+  ctx.letterSpacing = `${-size * 0.03}px`;
+  ctx.textAlign = 'left';
+  const w1 = ctx.measureText('Calling ').width, w2 = ctx.measureText('Bell').width;
+  const x0 = align === 'center' ? x - (w1 + w2) / 2 : x;
+  revealText('Calling ', x0, y, size, p, C.white);
+  revealText('Bell', x0 + w1, y, size, seg(p, 0.15, 1.15), C.amber);
+  ctx.restore();
+}
+
+function fitFont(weight, size, txt, maxW) {
+  font(weight, size);
+  const w = ctx.measureText(txt).width;
+  if (w > maxW) font(weight, Math.floor(size * maxW / w));
+}
+
+// ---------- background ----------
+function drawBackground(t) {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#0E1729'); g.addColorStop(0.55, C.navy); g.addColorStop(1, '#040A15');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+  const blob = (x, y, r, rgb, a) => {
+    const rg = ctx.createRadialGradient(x, y, 0, x, y, r);
+    rg.addColorStop(0, `rgba(${rgb},${a})`); rg.addColorStop(1, `rgba(${rgb},0)`);
+    ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+  };
+  blob(260 + 140 * Math.sin(t * 0.45), 520 + 120 * Math.cos(t * 0.38), 760, '244,166,44', 0.16);
+  blob(860 + 90 * Math.cos(t * 0.5), 1500 + 140 * Math.sin(t * 0.33), 820, '21,112,239', 0.13);
+
+  // drifting dot grid
+  ctx.fillStyle = 'rgba(255,255,255,0.045)';
+  const off = (t * 18) % 60;
+  for (let y = -60 + off; y < H; y += 60)
+    for (let x = 30; x < W; x += 60) { ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2); ctx.fill(); }
+
+  // floating particles
+  for (let i = 0; i < 26; i++) {
+    const sp = 30 + rand(i) * 70;
+    const x = rand(i + 50) * W + Math.sin(t * 0.8 + i) * 18;
+    const y = ((rand(i + 100) * (H + 200) - t * sp) % (H + 200) + H + 200) % (H + 200) - 100;
+    const r = 2 + rand(i + 150) * 4;
+    ctx.fillStyle = `rgba(244,166,44,${0.12 + rand(i + 200) * 0.3})`;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+// Expanding rings that ripple out of the bell.
+function drawRipples(cx, cy, lt, r0, spread, count = 3, lw = 4, maxA = 0.5) {
+  if (lt < 0) return;
+  for (let k = 0; k < count; k++) {
+    const ph = lt * 0.85 - k * 0.28;
+    if (ph < 0 || ph > 1) continue;
+    ctx.strokeStyle = `rgba(244,166,44,${(1 - ph) * maxA})`;
+    ctx.lineWidth = lw * (1 - ph * 0.5);
+    ctx.beginPath(); ctx.arc(cx, cy, r0 + easeOutCubic(ph) * spread, 0, Math.PI * 2); ctx.stroke();
+  }
+}
+
+// ---------- logo choreography (one logo, moves between scenes) ----------
+const HEADER = { x: 118, y: 168, size: 104 };
+const CENTER_INTRO = { x: 540, y: 820, size: 380 };
+const CENTER_OUTRO = { x: 540, y: 760, size: 400 };
+
+function logoState(t) {
+  if (t < 2.75) {
+    const p = easeOutBack(seg(t, 0.1, 0.85));
+    return { x: CENTER_INTRO.x, y: CENTER_INTRO.y, size: CENTER_INTRO.size * p,
+             ring: ringAngle(t - 0.85), waves: seg(t, 0.9, 1.5), glow: 1 };
+  }
+  if (t < T_OUT) {
+    const p = easeInOutCubic(seg(t, 2.75, 3.4));
+    let ring = 0;
+    if (t >= T_CATS && t < T_GRID) ring = ringAngle(((t - T_CATS) % CAT_D) - 0.05) * 0.8;
+    if (t >= T_GRID) ring = ringAngle(t - T_GRID - 0.1) * 0.8;
+    return { x: lerp(CENTER_INTRO.x, HEADER.x, p), y: lerp(CENTER_INTRO.y, HEADER.y, p),
+             size: lerp(CENTER_INTRO.size, HEADER.size, p), ring, waves: 1, glow: lerp(1, 0.5, p) };
+  }
+  const p = easeInOutCubic(seg(t, T_OUT, T_OUT + 0.75));
+  return { x: lerp(HEADER.x, CENTER_OUTRO.x, p), y: lerp(HEADER.y, CENTER_OUTRO.y, p),
+           size: lerp(HEADER.size, CENTER_OUTRO.size, p), ring: ringAngle(t - T_OUT - 0.75),
+           waves: 1, glow: lerp(0.5, 1, p) };
+}
+
+// ---------- scenes ----------
+function sceneIntro(t) {
+  if (t > 3.4) return;
+  drawRipples(CENTER_INTRO.x, CENTER_INTRO.y, t - 0.85, 220, 560, 3, 5, 0.55);
+  const out = easeInCubic(seg(t, 2.6, 3.0));
+  ctx.save();
+  ctx.globalAlpha = 1 - out;
+  ctx.translate(0, -out * 80);
+  drawWordmark(540, 1200, 124, 'center', seg(t, 1.15, 1.75));
+  font(500, 46);
+  ctx.textAlign = 'left';
+  ctx.letterSpacing = '0px';
+  const words = ['Discover.', 'Connect.', 'Book.', 'Grow.'];
+  const widths = words.map(w => ctx.measureText(w + ' ').width);
+  let x = 540 - widths.reduce((a, b) => a + b, 0) / 2 + ctx.measureText(' ').width / 2;
+  words.forEach((w, i) => {
+    revealText(w, x, 1295, 46, seg(t, 1.55 + i * 0.12, 2.0 + i * 0.12), i === 2 ? C.amber : C.muted);
+    x += widths[i];
+  });
+  ctx.restore();
+}
+
+function drawHeader(t) {
+  const a = seg(t, 3.15, 3.55) * (1 - seg(t, T_OUT - 0.25, T_OUT + 0.1));
+  if (a <= 0) return;
+  drawWordmark(HEADER.x + 78, HEADER.y + 20, 56, 'left', seg(t, 3.15, 3.7), a);
+  // category counter
+  const ca = seg(t, T_CATS, T_CATS + 0.3) * (1 - seg(t, T_GRID - 0.2, T_GRID + 0.1));
+  if (ca > 0) {
+    const idx = clamp(Math.floor((t - T_CATS) / CAT_D), 0, CATS.length - 1);
+    ctx.save();
+    ctx.globalAlpha = ca;
+    ctx.letterSpacing = '1px';
+    font(700, 40); ctx.textAlign = 'right';
+    ctx.fillStyle = C.faint; ctx.fillText(' / 08', 962, HEADER.y + 16);
+    const w = ctx.measureText(' / 08').width;
+    ctx.fillStyle = C.amber; ctx.fillText(String(idx + 1).padStart(2, '0'), 962 - w, HEADER.y + 16);
+    ctx.restore();
+  }
+}
+
+function sceneHeadline(t) {
+  if (t < T_HEAD || t > T_CATS + 0.2) return;
+  const out = easeInCubic(seg(t, 4.65, 5.0));
+  ctx.save();
+  ctx.globalAlpha = 1 - out;
+  ctx.translate(-out * 260, 0);
+  ctx.textAlign = 'center';
+  ctx.letterSpacing = '-3px';
+  font(800, 112);
+  revealText('Every home', 540, 820, 112, seg(t, 3.35, 3.85), C.white);
+  revealText('service.', 540, 945, 112, seg(t, 3.45, 3.95), C.white);
+  revealText('One ring away.', 540, 1090, 112, seg(t, 3.65, 4.15), C.amber);
+  ctx.letterSpacing = '0px';
+  font(500, 42);
+  revealText('Trusted local pros, ready when you are', 540, 1210, 42, seg(t, 3.9, 4.35), C.muted);
+  // underline swoosh
+  const u = easeOutCubic(seg(t, 3.95, 4.4));
+  ctx.strokeStyle = C.amber; ctx.lineWidth = 8; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(540 - 200 * u, 1130); ctx.lineTo(540 + 200 * u, 1130); ctx.stroke();
+  ctx.restore();
+}
+
+// Horizontal offset for an element entering/leaving a category slot.
+function slotOffset(lt, delay) {
+  const e = seg(lt, delay, delay + 0.42);
+  const x = seg(lt, CAT_D - 0.34 + delay * 0.5, CAT_D - 0.02 + delay * 0.5);
+  return (1 - easeOutCubic(e)) * W * 0.95 - easeInCubic(x) * W * 1.05;
+}
+
+function drawCategory(cat, i, lt) {
+  const DISC = { x: 540, y: 800, r: 240 };
+  // ghost number
+  ctx.save();
+  ctx.translate(slotOffset(lt, 0.0) * 0.5, 0);
+  font(900, 520); ctx.textAlign = 'center'; ctx.letterSpacing = '-20px';
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 3;
+  ctx.strokeText(String(i + 1).padStart(2, '0'), 540, 1000);
+  ctx.restore();
+
+  // disc + icon
+  ctx.save();
+  ctx.translate(slotOffset(lt, 0.0), 0);
+  const pop = easeOutBack(seg(lt, 0.0, 0.5));
+  const bob = Math.sin(lt * 3.2) * 8;
+  drawRipples(DISC.x, DISC.y, lt * 1.2 - 0.25, DISC.r, 230, 3, 5, 0.45);
+  ctx.translate(DISC.x, DISC.y + bob);
+  ctx.scale(lerp(0.6, 1, pop), lerp(0.6, 1, pop));
+  ctx.save();
+  ctx.shadowColor = 'rgba(244,166,44,0.55)'; ctx.shadowBlur = 90;
+  const rg = ctx.createRadialGradient(-80, -100, 20, 0, 0, DISC.r);
+  rg.addColorStop(0, C.amberHi); rg.addColorStop(0.6, C.amber); rg.addColorStop(1, C.amberDeep);
+  ctx.fillStyle = rg;
+  ctx.beginPath(); ctx.arc(0, 0, DISC.r, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  // glossy rim
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(0, 0, DISC.r - 14, Math.PI * 1.1, Math.PI * 1.6); ctx.stroke();
+  ctx.rotate(Math.sin(lt * 2.4) * 0.05);
+  drawIcon(cat.icon, 0, 0, 250, C.navy, 1.9, seg(lt, 0.12, 0.8));
+  ctx.restore();
+
+  // title
+  ctx.save();
+  ctx.translate(slotOffset(lt, 0.07), 0);
+  ctx.textAlign = 'center'; ctx.letterSpacing = '-3px';
+  fitFont(800, 108, cat.name, 960);
+  revealText(cat.name, 540, 1240, 108, seg(lt, 0.12, 0.6), C.white);
+  ctx.restore();
+
+  ctx.save();
+  ctx.translate(slotOffset(lt, 0.12), 0);
+  ctx.textAlign = 'center'; ctx.letterSpacing = '0px';
+  font(500, 44);
+  revealText(cat.line, 540, 1325, 44, seg(lt, 0.22, 0.7), C.muted);
+  ctx.restore();
+
+  // chips
+  ctx.save();
+  ctx.translate(slotOffset(lt, 0.17), 0);
+  font(600, 36); ctx.letterSpacing = '0px'; ctx.textAlign = 'left';
+  const padX = 34, dot = 22, gap = 22, h = 80;
+  const widths = cat.chips.map(c => ctx.measureText(c).width + padX * 2 + dot);
+  const total = widths.reduce((a, b) => a + b, 0) + gap * (widths.length - 1);
+  let x = 540 - total / 2;
+  cat.chips.forEach((c, k) => {
+    const p = easeOutBack(seg(lt, 0.3 + k * 0.08, 0.7 + k * 0.08));
+    if (p > 0) {
+      ctx.save();
+      const cx = x + widths[k] / 2, cy = 1440;
+      ctx.translate(cx, cy); ctx.scale(p, p); ctx.translate(-cx, -cy);
+      ctx.globalAlpha = clamp(p);
+      ctx.fillStyle = 'rgba(255,255,255,0.07)';
+      ctx.strokeStyle = 'rgba(244,166,44,0.45)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.roundRect(x, cy - h / 2, widths[k], h, h / 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = C.amber;
+      ctx.beginPath(); ctx.arc(x + padX + 5, cy, 7, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = C.white;
+      ctx.fillText(c, x + padX + dot, cy + 13);
+      ctx.restore();
+    }
+    x += widths[k] + gap;
+  });
+  ctx.restore();
+}
+
+// Amber whip that wipes between categories.
+function drawWhip(t) {
+  for (let k = 1; k < CATS.length; k++) {
+    const b = T_CATS + k * CAT_D - 0.02;
+    const q = seg(t, b - 0.26, b + 0.2);
+    if (q <= 0 || q >= 1) continue;
+    const e = easeInOutCubic(q);
+    const cx = lerp(W + 500, -500, e);
+    ctx.save();
+    ctx.translate(cx, H / 2);
+    ctx.transform(1, 0, -0.35, 1, 0, 0);
+    ctx.fillStyle = 'rgba(244,166,44,0.9)';
+    ctx.fillRect(-80, -H, 160, H * 2);
+    ctx.fillStyle = 'rgba(244,166,44,0.35)';
+    ctx.fillRect(130, -H, 46, H * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.fillRect(-140, -H, 20, H * 2);
+    ctx.restore();
+  }
+}
+
+function drawProgress(t) {
+  const a = seg(t, T_CATS, T_CATS + 0.3) * (1 - seg(t, T_GRID - 0.25, T_GRID + 0.05));
+  if (a <= 0) return;
+  const n = CATS.length, gap = 12, w = (880 - gap * (n - 1)) / n, y = 1690;
+  ctx.save();
+  ctx.globalAlpha = a;
+  for (let i = 0; i < n; i++) {
+    const x = 100 + i * (w + gap);
+    const f = clamp((t - T_CATS - i * CAT_D) / CAT_D);
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.beginPath(); ctx.roundRect(x, y, w, 8, 4); ctx.fill();
+    if (f > 0) { ctx.fillStyle = C.amber; ctx.beginPath(); ctx.roundRect(x, y, w * f, 8, 4); ctx.fill(); }
+  }
+  font(600, 34); ctx.textAlign = 'center'; ctx.letterSpacing = '0.5px';
+  ctx.fillStyle = C.faint;
+  ctx.fillText('Book trusted pros near you', 540, 1790);
+  ctx.restore();
+}
+
+function sceneCategories(t) {
+  if (t < T_CATS - 0.1 || t > T_GRID + 0.1) return;
+  for (let i = 0; i < CATS.length; i++) {
+    const lt = t - T_CATS - i * CAT_D;
+    if (lt < 0 || lt > CAT_D) continue;
+    drawCategory(CATS[i], i, lt);
+  }
+  drawWhip(t);
+}
+
+function sceneGrid(t) {
+  const lt = t - T_GRID;
+  if (lt < 0 || t > T_OUT + 0.3) return;
+  const out = seg(t, T_OUT - 0.35, T_OUT + 0.15);
+  ctx.save();
+  ctx.globalAlpha = 1 - easeInCubic(out);
+  ctx.textAlign = 'center'; ctx.letterSpacing = '-2.5px';
+  font(800, 92);
+  revealText('Everything your', 540, 390, 92, seg(lt, 0.05, 0.5), C.white);
+  revealText('home needs.', 540, 495, 92, seg(lt, 0.15, 0.6), C.amber);
+  ctx.restore();
+
+  const cols = 2, tw = 460, th = 250, gx = 40, gy = 36, x0 = 60, y0 = 590;
+  CATS.forEach((cat, i) => {
+    const col = i % cols, row = Math.floor(i / cols);
+    const x = x0 + col * (tw + gx), y = y0 + row * (th + gy);
+    const p = easeOutBack(seg(lt, 0.25 + i * 0.08, 0.75 + i * 0.08));
+    const o = easeInCubic(seg(t, T_OUT - 0.4 + (7 - i) * 0.03, T_OUT + (7 - i) * 0.03));
+    if (p <= 0) return;
+    ctx.save();
+    const cx = x + tw / 2, cy = y + th / 2;
+    const s = lerp(0.5, 1, p) * (1 - o * 0.5);
+    ctx.translate(lerp(cx, 540, o), lerp(cy, 760, o));
+    ctx.scale(s, s);
+    ctx.translate(-cx, -cy);
+    ctx.globalAlpha = clamp(p) * (1 - o);
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(x, y, tw, th, 36); ctx.fill(); ctx.stroke();
+    // icon badge
+    const bx = x + 96, by = y + 92;
+    const rg = ctx.createRadialGradient(bx - 20, by - 25, 5, bx, by, 58);
+    rg.addColorStop(0, C.amberHi); rg.addColorStop(1, C.amber);
+    ctx.fillStyle = rg;
+    ctx.beginPath(); ctx.arc(bx, by, 58, 0, Math.PI * 2); ctx.fill();
+    drawIcon(cat.icon, bx, by, 62, C.navy, 2.1, seg(lt, 0.35 + i * 0.08, 0.95 + i * 0.08));
+    // check mark
+    ctx.fillStyle = 'rgba(244,166,44,0.16)';
+    ctx.beginPath(); ctx.arc(x + tw - 60, y + 60, 24, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = C.amber; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(x + tw - 71, y + 60); ctx.lineTo(x + tw - 63, y + 68); ctx.lineTo(x + tw - 49, y + 52); ctx.stroke();
+    font(700, 40); ctx.textAlign = 'left'; ctx.letterSpacing = '-0.5px';
+    ctx.fillStyle = C.white;
+    ctx.fillText(cat.name, x + 38, y + 208);
+    ctx.restore();
+  });
+}
+
+function sceneOutro(t) {
+  const lt = t - T_OUT;
+  if (lt < 0) return;
+  drawRipples(CENTER_OUTRO.x, CENTER_OUTRO.y, lt - 0.75, 230, 600, 3, 5, 0.5);
+  drawRipples(CENTER_OUTRO.x, CENTER_OUTRO.y, lt - 2.3, 230, 600, 2, 4, 0.3);
+
+  drawWordmark(540, 1120, 128, 'center', seg(lt, 0.85, 1.4));
+  ctx.save();
+  ctx.textAlign = 'center'; ctx.letterSpacing = '0px';
+  font(500, 46);
+  revealText('Discover. Connect. Book. Grow.', 540, 1212, 46, seg(lt, 1.1, 1.6), C.muted);
+  ctx.restore();
+
+  // CTA pill
+  const p = easeOutBack(seg(lt, 1.35, 1.85));
+  if (p > 0) {
+    const pulse = 1 + 0.025 * Math.sin((lt - 1.85) * 5) * seg(lt, 1.85, 2.2);
+    const w = 660, h = 128, cx = 540, cy = 1400;
+    ctx.save();
+    ctx.translate(cx, cy); ctx.scale(p * pulse, p * pulse); ctx.translate(-cx, -cy);
+    ctx.globalAlpha = clamp(p);
+    ctx.shadowColor = 'rgba(244,166,44,0.6)'; ctx.shadowBlur = 50;
+    const g = ctx.createLinearGradient(cx - w / 2, 0, cx + w / 2, 0);
+    g.addColorStop(0, C.amberHi); g.addColorStop(1, C.amber);
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.roundRect(cx - w / 2, cy - h / 2, w, h, h / 2); ctx.fill();
+    ctx.shadowBlur = 0;
+    // shine sweep
+    ctx.save();
+    ctx.clip();
+    const sx = lerp(cx - w, cx + w, seg(lt, 2.1, 2.7));
+    const sg = ctx.createLinearGradient(sx - 90, 0, sx + 90, 0);
+    sg.addColorStop(0, 'rgba(255,255,255,0)'); sg.addColorStop(0.5, 'rgba(255,255,255,0.55)'); sg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = sg; ctx.fillRect(cx - w / 2, cy - h / 2, w, h);
+    ctx.restore();
+    font(800, 52); ctx.textAlign = 'center'; ctx.letterSpacing = '-1px';
+    ctx.fillStyle = C.navy;
+    ctx.fillText('Book a pro today', cx - 36, cy + 18);
+    const tw = ctx.measureText('Book a pro today').width;
+    const ax = cx - 36 + tw / 2 + 56 + Math.sin(lt * 6) * 5;
+    ctx.strokeStyle = C.navy; ctx.lineWidth = 7; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(ax - 18, cy); ctx.lineTo(ax + 18, cy); ctx.moveTo(ax + 4, cy - 15); ctx.lineTo(ax + 19, cy); ctx.lineTo(ax + 4, cy + 15); ctx.stroke();
+    ctx.restore();
+  }
+
+  // service ticker
+  ctx.save();
+  ctx.globalAlpha = seg(lt, 1.8, 2.3);
+  font(600, 34); ctx.textAlign = 'center'; ctx.letterSpacing = '0.5px';
+  ctx.fillStyle = C.faint;
+  ctx.fillText('Electricians  •  Plumbers  •  AC  •  Carpenters', 540, 1560);
+  ctx.fillText('Painters  •  Cleaning  •  Appliances  •  Maintenance', 540, 1612);
+  ctx.restore();
+}
+
+// Soft vignette + short fade from black at the start.
+function drawFinish(t) {
+  const v = ctx.createRadialGradient(540, 960, 600, 540, 960, 1250);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.45)');
+  ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+  const f = 1 - seg(t, 0, 0.35);
+  if (f > 0) { ctx.fillStyle = `rgba(4,8,16,${f})`; ctx.fillRect(0, 0, W, H); }
+}
+
+function renderFrame(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.letterSpacing = '0px';
+  drawBackground(t);
+  sceneIntro(t);
+  sceneHeadline(t);
+  sceneCategories(t);
+  sceneGrid(t);
+  sceneOutro(t);
+  drawHeader(t);
+  drawProgress(t);
+  const L = logoState(t);
+  drawLogo(L.x, L.y, L.size, L);
+  drawFinish(t);
+}
+
+window.REEL = { W, H, DUR, renderFrame };
+window.reelReady = (async () => {
+  await Promise.all([300, 500, 600, 700, 800, 900].map(w => document.fonts.load(`${w} 40px CBInter`)));
+  renderFrame(0);
+  return true;
+})();
+
+const params = new URLSearchParams(location.search);
+if (params.has('render')) document.body.classList.add('render');
+else window.reelReady.then(() => {
+  const start = performance.now();
+  const at = params.has('t') ? parseFloat(params.get('t')) : null;
+  const loop = now => {
+    renderFrame(at ?? ((now - start) / 1000) % DUR);
+    if (at === null) requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+});
+</script>
+</body>
+</html>

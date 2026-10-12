@@ -36,6 +36,15 @@ public sealed class AuthController : ApiControllerBase
     public async Task<ActionResult<ApiResponse<AuthResultDto>>> Register(RegisterCommand command, CancellationToken ct) =>
         Success(await Sender.Send(command, ct), "Account created");
 
+    /// <summary>Which sign-in options are available (the Google client id for the "Sign in with Google" button, or null).</summary>
+    [HttpGet("providers")]
+    public async Task<ActionResult<ApiResponse<AuthProvidersDto>>> Providers(CancellationToken ct) => Success(await Sender.Send(new GetAuthProvidersQuery(), ct));
+
+    /// <summary>Signs in (or signs up as a customer) with the ID token from Google's "Sign in with Google" button.</summary>
+    [HttpPost("google"), EnableRateLimiting("auth")]
+    public async Task<ActionResult<ApiResponse<AuthResultDto>>> Google(GoogleSignInCommand command, CancellationToken ct) =>
+        Success(await Sender.Send(command, ct), "Signed in with Google");
+
     /// <summary>Business sign-up wizard: creates the owner account and the business profile in one transaction.</summary>
     [HttpPost("register-business"), EnableRateLimiting("auth")]
     public async Task<ActionResult<ApiResponse<BusinessRegistrationResultDto>>> RegisterBusiness(RegisterBusinessCommand command, CancellationToken ct) =>

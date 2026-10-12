@@ -211,6 +211,9 @@ public sealed class CreateBookingHandler(IUnitOfWork uow, ICurrentUser user, IRe
 
         var customer = await uow.Repository<ApplicationUser>().QueryNoTracking().Where(u => u.Id == userId)
             .Select(u => new { u.DisplayName, u.PhoneNumber }).FirstAsync(ct);
+        // The business needs a number to reach the customer (accounts made with Google have none until they add one).
+        if (string.IsNullOrWhiteSpace(r.ContactPhone) && string.IsNullOrWhiteSpace(customer.PhoneNumber))
+            throw new ValidationException(new Dictionary<string, string[]> { ["contactPhone"] = ["Add a mobile number so the business can reach you."] });
 
         var booking = new Booking
         {
@@ -219,7 +222,7 @@ public sealed class CreateBookingHandler(IUnitOfWork uow, ICurrentUser user, IRe
             ServiceId = service.Id,
             CustomerUserId = userId,
             CustomerName = customer.DisplayName,
-            CustomerPhone = string.IsNullOrWhiteSpace(r.ContactPhone) ? customer.PhoneNumber ?? string.Empty : r.ContactPhone.Trim(),
+            CustomerPhone = string.IsNullOrWhiteSpace(r.ContactPhone) ? customer.PhoneNumber ?? string.Empty : Phones.Normalize(r.ContactPhone),
             ScheduledStart = start,
             ScheduledEnd = start.AddMinutes(Math.Clamp(service.DurationMinutes, 15, 240)),
             Status = BookingStatuses.Pending,

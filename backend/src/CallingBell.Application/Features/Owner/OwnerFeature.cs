@@ -240,18 +240,39 @@ public sealed class UpdateLeadValidator : AbstractValidator<UpdateLeadCommand>
     }
 }
 
-public sealed class UpdateLeadHandler(IUnitOfWork uow, ICurrentUser user) : IRequestHandler<UpdateLeadCommand, OwnerLeadDto>
+public sealed class UpdateLeadHandler(IUnitOfWork uow, ICurrentUser user, IRealtimeNotifier notifier, INotificationDispatchSignal dispatch)
+    : IRequestHandler<UpdateLeadCommand, OwnerLeadDto>
 {
     public async Task<OwnerLeadDto> Handle(UpdateLeadCommand r, CancellationToken ct)
     {
-        await OwnerAccess.GetOwnedAsync(uow, user, r.BusinessId, ct);
+        var business = await OwnerAccess.GetOwnedAsync(uow, user, r.BusinessId, ct);
         var lead = await uow.Repository<Enquiry>().Query().FirstOrDefaultAsync(e => e.Id == r.LeadId && e.BusinessId == r.BusinessId, ct)
                    ?? throw new NotFoundException("Lead", r.LeadId);
+        var changed = lead.Status != r.Status;
         lead.Status = r.Status;
         if (r.QuotedAmount.HasValue) lead.QuotedAmount = r.QuotedAmount;
         lead.RespondedOn ??= r.Status == EnquiryStatuses.New ? null : DateTimeOffset.UtcNow;
         await uow.SaveChangesAsync(ct);
+
+        // The customer hears what happened to their request (in the app and by push), once per status.
+        if (changed && lead.CustomerUserId is { } customer && LeadUpdate(r.Status, business.Name, lead.EnquiryType) is { } update)
+            await NotificationPublisher.PublishAsync(uow, notifier, customer, update.Title, update.Message, "Lead", "/account?tab=requests", ct,
+                new NotificationRouting(NotificationRoutes.LeadStatus, "Enquiry", lead.Id, $"{NotificationRoutes.LeadStatus}:{lead.Id}:{r.Status}"), dispatch);
+
         return await uow.Repository<Enquiry>().QueryNoTracking().Where(e => e.Id == lead.Id).Select(OwnerProjections.Lead).FirstAsync(ct);
+    }
+
+    private static (string Title, string Message)? LeadUpdate(string status, string businessName, string enquiryType)
+    {
+        var request = enquiryType switch { "Quotation" => "quote request", "Callback" => "callback request", _ => "service request" };
+        return status switch
+        {
+            EnquiryStatuses.Contacted => ("Your request was accepted", $"{businessName} accepted your {request} and will be in touch shortly."),
+            EnquiryStatuses.Quoted => ("You have a quote", $"{businessName} sent you a quote for your {request}. Open it to see the price."),
+            EnquiryStatuses.Converted => ("Your request is confirmed", $"{businessName} confirmed your {request}. Thanks for choosing them on Calling Bell."),
+            EnquiryStatuses.Lost => ("Your request was declined", $"{businessName} can't take your {request} this time. Other businesses nearby can help."),
+            _ => null,
+        };
     }
 }
 

@@ -172,6 +172,8 @@ export interface MyBooking {
   staffName?: string | null; isVideo?: boolean;
 }
 export interface MyEnquiry { id: string; enquiryNumber: string; businessName: string; businessSlug: string; serviceName?: string | null; enquiryType: string; message: string; status: string; quotedAmount?: number | null; createdOn: string; respondedOn?: string | null }
+/** The signed-in person's notification choices; `hasCity`: offers are matched to their city. */
+export interface NotificationPreferences { offers: boolean; hasCity: boolean }
 export interface NotificationItem { id: string; title: string; message: string; notificationType: string; linkUrl?: string | null; isRead: boolean; createdOn: string }
 
 // ---------- Business portal ----------

@@ -38,6 +38,18 @@ public interface ICurrentUser
     string? IpAddress { get; }
 }
 
+/// <summary>Who a Google ID token says the person is (after its signature, audience, issuer and expiry were checked).</summary>
+/// <param name="Subject">Google's stable account id ("sub").</param>
+public sealed record GoogleIdentity(string Subject, string Email, bool EmailVerified, string Name, string? PictureUrl);
+
+/// <summary>"Sign in with Google": checks the ID token the Google button returns (Authentication:Google:ClientId).</summary>
+public interface IGoogleTokenValidator
+{
+    /// <summary>The OAuth web client id; null when Google sign-in isn't configured (the button is then hidden).</summary>
+    string? ClientId { get; }
+    Task<GoogleIdentity> ValidateAsync(string idToken, CancellationToken ct);
+}
+
 public interface IIdentityService
 {
     Task<AuthResultDto> LoginAsync(string email, string password, CancellationToken ct);
@@ -45,6 +57,11 @@ public interface IIdentityService
     Task<AuthResultDto> RegisterAsync(RegisterRequest request, CancellationToken ct);
     /// <summary>Signs in the account registered with this (normalised) mobile number, after its OTP was verified.</summary>
     Task<AuthResultDto> SignInWithPhoneAsync(string phoneNumber, CancellationToken ct);
+    /// <summary>
+    /// Signs in with a verified Google account: the account already linked to it, else the account with the same Google-verified email
+    /// (which gets linked), else a new customer account in <paramref name="citySlug"/>.
+    /// </summary>
+    Task<AuthResultDto> SignInWithGoogleAsync(GoogleIdentity google, string? citySlug, string accountType, CancellationToken ct);
     Task<AuthResultDto> RefreshAsync(string refreshToken, CancellationToken ct);
     Task RevokeAsync(string refreshToken, CancellationToken ct);
     Task<CurrentUserDto> GetCurrentUserAsync(string userId, CancellationToken ct);

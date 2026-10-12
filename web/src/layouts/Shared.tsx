@@ -18,7 +18,7 @@ import { ago, initials } from '@/lib/format';
 import { isAdmin, isOwner, useAuth } from '@/stores/auth';
 import type { NotificationItem } from '@/lib/types';
 import { EmptyState } from '@/components/ui';
-import { PushNotificationToggle, usePushBridge } from '@/components/PushNotifications';
+import { OffersToggle, PushNotificationToggle, usePushBridge } from '@/components/PushNotifications';
 import { disablePush } from '@/lib/push';
 
 /** Brand logo. `light` renders the inverted version for navy surfaces. */
@@ -98,6 +98,7 @@ export function NotificationBell({ dark }: { dark?: boolean }) {
           <Button size="small" disabled={!data?.unreadCount || markRead.isPending} onClick={() => markRead.mutate()}>Mark all read</Button>
         </div>
         <PushNotificationToggle />
+        <OffersToggle />
         <div className="max-h-[420px] overflow-y-auto">
           {!data?.items.length ? <EmptyState title="You're all caught up" message="New leads, bookings and updates will appear here." /> : data.items.map((n) => (
             <button key={n.id} type="button" onClick={() => { setAnchor(null); if (n.linkUrl) navigate(n.linkUrl); }}

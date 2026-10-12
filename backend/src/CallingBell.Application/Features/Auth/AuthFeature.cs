@@ -2,6 +2,7 @@ using CallingBell.Application.Common;
 using CallingBell.Application.Common.Exceptions;
 using CallingBell.Application.Common.Interfaces;
 using CallingBell.Application.Features.Onboarding;
+using CallingBell.Domain.Constants;
 using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -179,6 +180,39 @@ public sealed class VerifyOtpHandler(IIdentityService identity, IPhoneOtpService
         await otp.VerifyAsync(phone, OtpPurpose.SignIn, r.Code.Trim(), ct);
         return new VerifyOtpResultDto(await identity.SignInWithPhoneAsync(phone, ct), null);
     }
+}
+
+// ---------- Google ----------
+/// <summary>Sign-in options the sign-in screens offer; <paramref name="GoogleClientId"/> is null when Google sign-in is off.</summary>
+public sealed record AuthProvidersDto(string? GoogleClientId);
+
+public sealed record GetAuthProvidersQuery : IRequest<AuthProvidersDto>;
+
+public sealed class GetAuthProvidersHandler(IGoogleTokenValidator google) : IRequestHandler<GetAuthProvidersQuery, AuthProvidersDto>
+{
+    public Task<AuthProvidersDto> Handle(GetAuthProvidersQuery r, CancellationToken ct) => Task.FromResult(new AuthProvidersDto(google.ClientId));
+}
+
+/// <summary>
+/// "Sign in with Google": the ID token from Google's button, the city the visitor has selected (for a new account), and the kind of account
+/// wanted: <c>BusinessOwner</c> creates an owner account (or adds the owner role to the person's customer account); default Customer.
+/// </summary>
+public sealed record GoogleSignInCommand(string Credential, string? CitySlug, string? AccountType = null) : IRequest<AuthResultDto>;
+
+public sealed class GoogleSignInValidator : AbstractValidator<GoogleSignInCommand>
+{
+    public GoogleSignInValidator()
+    {
+        RuleFor(x => x.Credential).NotEmpty().MaximumLength(8192);
+        RuleFor(x => x.CitySlug).MaximumLength(120);
+        RuleFor(x => x.AccountType).Must(t => t is null or Roles.Customer or Roles.BusinessOwner).WithMessage("Choose a customer or business account.");
+    }
+}
+
+public sealed class GoogleSignInHandler(IGoogleTokenValidator google, IIdentityService identity) : IRequestHandler<GoogleSignInCommand, AuthResultDto>
+{
+    public async Task<AuthResultDto> Handle(GoogleSignInCommand r, CancellationToken ct) =>
+        await identity.SignInWithGoogleAsync(await google.ValidateAsync(r.Credential, ct), r.CitySlug, r.AccountType ?? Roles.Customer, ct);
 }
 
 // ---------- OTP: sign in ----------

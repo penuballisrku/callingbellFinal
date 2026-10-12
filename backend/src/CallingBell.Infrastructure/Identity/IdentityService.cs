@@ -49,6 +49,55 @@ internal sealed class IdentityService(
         return await IssueTokensAsync(user, ct);
     }
 
+    private const string GoogleProvider = "Google";
+
+    public async Task<AuthResultDto> SignInWithGoogleAsync(GoogleIdentity google, string? citySlug, string accountType, CancellationToken ct)
+    {
+        var owner = accountType == Roles.BusinessOwner;
+        var user = await userManager.FindByLoginAsync(GoogleProvider, google.Subject);
+        if (user is null)
+        {
+            // Only a Google-verified email may claim an existing account (or create one), so nobody can take over someone else's.
+            if (!google.EmailVerified) throw new BadRequestException("Verify your email address with Google first, or sign in another way.");
+            user = await userManager.FindByEmailAsync(google.Email);
+            if (user is null)
+            {
+                var cityId = string.IsNullOrWhiteSpace(citySlug)
+                    ? null
+                    : await db.Cities.Where(c => c.Slug == citySlug).Select(c => (Guid?)c.Id).FirstOrDefaultAsync(ct);
+                user = new ApplicationUser
+                {
+                    UserName = google.Email, Email = google.Email, EmailConfirmed = true, DisplayName = google.Name, AvatarUrl = google.PictureUrl,
+                    UserType = owner ? Roles.BusinessOwner : Roles.Customer, CityId = cityId, IsActive = true,
+                };
+                // No password and no mobile number yet: they sign in with Google, and can add both in account settings.
+                var created = await userManager.CreateAsync(user);
+                if (!created.Succeeded) throw new BadRequestException(created.Errors.First().Description);
+                await userManager.AddToRoleAsync(user, owner ? Roles.BusinessOwner : Roles.Customer);
+            }
+            if (user.IsDeleted) throw new BadRequestException("This account no longer exists.");
+            var linked = await userManager.AddLoginAsync(user, new UserLoginInfo(GoogleProvider, google.Subject, GoogleProvider));
+            if (!linked.Succeeded) throw new BadRequestException(linked.Errors.First().Description);
+        }
+        if (user.IsDeleted) throw new BadRequestException("This account no longer exists.");
+        if (!user.IsActive) throw new ForbiddenAccessException("This account has been deactivated. Please contact support.");
+        if (await userManager.IsLockedOutAsync(user)) throw new ForbiddenAccessException("This account is temporarily locked. Try again later.");
+
+        // "I own a business" with an existing customer account: the same person now lists a business, so add the owner role.
+        if (owner && !await userManager.IsInRoleAsync(user, Roles.BusinessOwner) && !await userManager.IsInRoleAsync(user, Roles.Administrator))
+        {
+            var added = await userManager.AddToRoleAsync(user, Roles.BusinessOwner);
+            if (!added.Succeeded) throw new BadRequestException(added.Errors.First().Description);
+            user.UserType = Roles.BusinessOwner;
+        }
+
+        user.EmailConfirmed = true; // Google vouched for it
+        if (string.IsNullOrEmpty(user.AvatarUrl) && google.PictureUrl is not null) user.AvatarUrl = google.PictureUrl;
+        user.LastLoginOn = DateTimeOffset.UtcNow;
+        await userManager.UpdateAsync(user);
+        return await IssueTokensAsync(user, ct);
+    }
+
     public async Task<AuthResultDto> LoginAsync(string email, string password, CancellationToken ct)
     {
         var user = await userManager.FindByEmailAsync(email);

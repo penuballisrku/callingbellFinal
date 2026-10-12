@@ -10,6 +10,8 @@ public class ApplicationUser : IdentityUser, ISoftDeletable
     public string? AvatarUrl { get; set; }
     public string UserType { get; set; } = "Customer";
     public Guid? CityId { get; set; }
+    /// <summary>Wants push notifications about offers near them (promotional, so off until they turn it on).</summary>
+    public bool ReceiveOffers { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTimeOffset? LastLoginOn { get; set; }
     public string? CreatedBy { get; set; }

@@ -54,6 +54,9 @@ public static class DependencyInjection
 
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.Section));
         services.AddScoped<IIdentityService, IdentityService>();
+        // "Sign in with Google" (off until Authentication:Google:ClientId is set).
+        services.Configure<GoogleSignInOptions>(configuration.GetSection(GoogleSignInOptions.Section));
+        services.AddSingleton<IGoogleTokenValidator, GoogleTokenValidator>();
         services.Configure<OtpOptions>(configuration.GetSection(OtpOptions.Section));
         services.AddScoped<IPhoneOtpService, PhoneOtpService>();
         services.AddSingleton<OtpCodeVault>();
@@ -83,6 +86,8 @@ public static class DependencyInjection
         services.AddSingleton<NotificationDispatchSignal>();
         services.AddSingleton<INotificationDispatchSignal>(sp => sp.GetRequiredService<NotificationDispatchSignal>());
         services.AddHostedService<NotificationDispatcher>();
+        // Booking reminders, subscription expiry and offers, every few minutes.
+        services.AddHostedService<ScheduledNotificationsWorker>();
 
         services.Configure<GeoIpOptions>(configuration.GetSection(GeoIpOptions.Section));
         services.AddSingleton<IGeoLocationService, MaxMindGeoLocationService>();

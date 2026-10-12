@@ -151,6 +151,14 @@ public static class NotificationRoutes
     public const string NewLead = "NEW_LEAD";
     public const string Booking = "BOOKING";
     public const string Otp = "OTP";
+    /// <summary>The day before a confirmed booking (customer).</summary>
+    public const string BookingReminder = "BOOKING_REMINDER";
+    /// <summary>The business answered a customer's enquiry, quote or callback request (customer).</summary>
+    public const string LeadStatus = "LEAD_STATUS";
+    /// <summary>A business's campaign near the customer; only to customers who turned offers on (customer).</summary>
+    public const string Offers = "OFFERS";
+    /// <summary>A paid plan ends soon without a renewal (business owner).</summary>
+    public const string Subscription = "SUBSCRIPTION";
 }
 
 public static class NotificationChannels

@@ -18,7 +18,9 @@ export default defineConfig(({ mode }) => ({
     port: 5173,
     host: mode === 'lan' ? true : undefined,
     // HTTPS tunnels for testing on other devices (camera, microphone and location need HTTPS): VS Code port forwarding, Cloudflare.
-    allowedHosts: ['.devtunnels.ms', '.trycloudflare.com'],
+    // nip.io names this PC by its LAN address (https://192-168-1-9.nip.io:5173 = 192.168.1.9): Google sign-in needs a host name,
+    // never accepting a bare IP address as an origin.
+    allowedHosts: ['.devtunnels.ms', '.trycloudflare.com', '.nip.io'],
     // Transform the shell and the most visited pages as soon as the dev server starts, so the first page load doesn't wait for it.
     warmup: {
       clientFiles: [
