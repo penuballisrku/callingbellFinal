@@ -16,7 +16,14 @@ using System.IO.Compression;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
-var builder = WebApplication.CreateBuilder(args);
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    // As a Windows service the working folder is System32: keep App_Data and appsettings relative to the app.
+    ContentRootPath = Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindowsService() ? AppContext.BaseDirectory : default,
+});
+// Runs as a Windows service in production (no effect under dotnet run).
+builder.Host.UseWindowsService(o => o.ServiceName = "CallingBell");
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
@@ -162,6 +169,27 @@ var app = builder.Build();
 // Simulated payments activate plans without money: never outside development.
 if (!app.Environment.IsDevelopment() && app.Configuration.GetValue<bool>("Payments:Test:Enabled"))
     throw new InvalidOperationException("Payments:Test:Enabled is only allowed in the Development environment.");
+
+// Behind Cloudflare every request arrives from Cloudflare's edge (proxied DNS) or from cloudflared on this machine (tunnel): take the
+// visitor's IP and the https scheme from Cloudflare's headers so rate limits, audit logs and location work per visitor. Trusted only
+// from loopback and Cloudflare's published ranges (Cloudflare:TrustedRanges), so a direct caller can't spoof CF-Connecting-IP.
+if (app.Configuration.GetValue<bool>("Cloudflare:Enabled"))
+{
+    var cloudflareRanges = (app.Configuration.GetSection("Cloudflare:TrustedRanges").Get<string[]>() ?? [])
+        .Select(System.Net.IPNetwork.Parse).ToArray();
+    app.Use((context, next) =>
+    {
+        var remote = context.Connection.RemoteIpAddress;
+        if (remote is { IsIPv4MappedToIPv6: true }) remote = remote.MapToIPv4();
+        if (remote is not null && (System.Net.IPAddress.IsLoopback(remote) || cloudflareRanges.Any(r => r.Contains(remote))))
+        {
+            if (System.Net.IPAddress.TryParse(context.Request.Headers["CF-Connecting-IP"].ToString(), out var visitor))
+                context.Connection.RemoteIpAddress = visitor;
+            if (context.Request.Headers["X-Forwarded-Proto"] == "https") context.Request.Scheme = "https";
+        }
+        return next(context);
+    });
+}
 
 app.UseExceptionHandler();
 app.UseResponseCompression();
