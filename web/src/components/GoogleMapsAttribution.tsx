@@ -7,8 +7,14 @@ import googleMapsLogoWhite from '@/assets/google-maps/GoogleMaps_Logo_White.svg'
  * `.google-maps-attribution` class in index.css; don't restyle it.
  */
 export function GoogleMapsAttribution({ className }: { className?: string }) {
-  return <span translate="no" className={`google-maps-attribution ${className ?? ''}`}>Google Maps</span>;
+  return <span translate="no" onClick={inert} className={`google-maps-attribution cursor-default ${className ?? ''}`}>Google Maps</span>;
 }
+
+/**
+ * The credits are labels, not controls: a click on one never reaches a clickable card around it (which would open the place's
+ * details), and the pointer stays an arrow.
+ */
+const inert = (e: React.MouseEvent) => e.stopPropagation();
 
 /**
  * "Data provided by" and the Google Maps logo, Google's preferred attribution, below results, lists and details that show Google Maps
@@ -17,7 +23,7 @@ export function GoogleMapsAttribution({ className }: { className?: string }) {
  */
 export function GoogleMapsDataCredit({ className }: { className?: string }) {
   return (
-    <span className={`inline-flex items-center ${className ?? ''}`}>
+    <span onClick={inert} className={`inline-flex cursor-default items-center ${className ?? ''}`}>
       <span>Data provided by</span>
       <span className="inline-flex shrink-0 px-[10px] pb-[5px] pt-[10px]">
         <img src={googleMapsLogoGray} alt="Google Maps" width={98} height={18} className="block h-[18px] w-[98px] max-w-none dark:hidden" />
