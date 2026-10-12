@@ -113,6 +113,8 @@ export default function SearchPage() {
     finally { setParsing(false); }
   };
   const submitText = () => {
+    // Nothing typed and no category chosen: show every category to browse.
+    if (!text.trim() && !params.get('category') && !params.get('sub')) { navigate('/categories'); return; }
     if (namesPlace(text)) void parseAndApply(text);
     else update({ q: text.trim() || null });
   };

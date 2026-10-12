@@ -144,6 +144,8 @@ function Hero({ data }: { data?: HomeData }) {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Nothing typed: show every category to browse.
+    if (!q.trim()) { navigate('/categories'); return; }
     // Text naming a place ("lawyers in Nellore") selects that city/area first.
     void resolveSearchHref(q, picked, citySlug, areaId).then((href) => navigate(href));
   };
