@@ -30,6 +30,7 @@ import OwnerMedia from './OwnerMedia';
 import OwnerSettings from './OwnerSettings';
 import { OwnerTeam } from './OwnerTeam';
 import { ChatInbox } from '@/features/chat/Chat';
+import { PushNotificationToggle } from '@/components/PushNotifications';
 import type { ChatUnread } from '@/lib/types';
 import BusinessWizard from '@/features/onboarding/BusinessWizard';
 import { usePresence } from '@/lib/realtime';
@@ -166,6 +167,8 @@ function OwnerMessages() {
   return (
     <>
       <div className="mb-4"><h1 className="text-2xl font-bold tracking-tight">Messages</h1><p className="text-sm text-muted">Chats with customers of {business.name}. Replies are sent instantly.</p></div>
+      {/* So new messages reach the owner when CallInBell is closed (web push); only shown until they turn it on. */}
+      <PushNotificationToggle prompt />
       <ChatInbox role="Business" businessId={business.id} />
     </>
   );

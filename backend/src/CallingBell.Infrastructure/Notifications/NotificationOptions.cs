@@ -10,6 +10,7 @@ public sealed class NotificationOptions
     public const string Section = "Notifications";
 
     public FcmOptions Fcm { get; set; } = new();
+    public WebPushOptions WebPush { get; set; } = new();
     public WhatsAppOptions WhatsApp { get; set; } = new();
     public RcsOptions Rcs { get; set; } = new();
     public SmsOptions Sms { get; set; } = new();
@@ -45,6 +46,26 @@ public sealed class FirebaseWebOptions
     public string? AppId { get; set; }
     /// <summary>Web Push certificate (VAPID) public key from Firebase Console › Cloud Messaging.</summary>
     public string? VapidKey { get; set; }
+}
+
+/// <summary>
+/// Standard Web Push (VAPID), no Firebase: the server signs each push with its own key pair and sends it straight to the browser's push
+/// service (Google, Mozilla, Microsoft, Apple). Free, no account. Generate a P-256 key pair once (both base64url: the 65-byte public
+/// key, the 32-byte private key). Takes precedence over <see cref="FcmOptions"/> for new browser registrations when both are configured.
+/// </summary>
+public sealed class WebPushOptions
+{
+    public bool Enabled { get; set; }
+    /// <summary>VAPID public key (base64url, uncompressed P-256 point). Served to the browser.</summary>
+    public string? PublicKey { get; set; }
+    /// <summary>Secret. VAPID private key (base64url, 32 bytes).</summary>
+    public string? PrivateKey { get; set; }
+    /// <summary>Contact for the push services: a mailto: or https: URL.</summary>
+    public string Subject { get; set; } = "https://www.callinbell.com";
+    /// <summary>How long the push service keeps a message for an offline browser.</summary>
+    public int TimeToLiveSeconds { get; set; } = 86400;
+    /// <summary>Notification icon shown by the browser (path on this site).</summary>
+    public string IconUrl { get; set; } = "/icons/notification-192.png";
 }
 
 public sealed class WhatsAppOptions

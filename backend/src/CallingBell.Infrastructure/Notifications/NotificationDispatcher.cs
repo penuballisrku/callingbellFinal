@@ -145,15 +145,17 @@ internal sealed class DeliveryAckSigner : IDeliveryAckSigner
 }
 
 /// <summary>The Firebase web app's public settings for the browser; null unless web push is fully configured on the server.</summary>
-internal sealed class WebPushClientConfig(IOptions<NotificationOptions> options, GoogleServiceAccountTokens tokens) : IWebPushClientConfig
+/// <summary>Standard Web Push (VAPID) when configured, so browsers subscribe without Firebase; otherwise Firebase; otherwise none.</summary>
+internal sealed class WebPushClientConfig(IOptions<NotificationOptions> options, GoogleServiceAccountTokens tokens, VapidSigner vapid) : IWebPushClientConfig
 {
     public WebPushClientConfigDto? Get()
     {
+        if (vapid is { IsConfigured: true, PublicKey: { } publicKey }) return new WebPushClientConfigDto("vapid", publicKey);
         var o = options.Value.Fcm;
         var w = o.Web;
         if (!o.Enabled || tokens.Account is null || new[] { w.ApiKey, w.ProjectId, w.MessagingSenderId, w.AppId, w.VapidKey }.Any(string.IsNullOrWhiteSpace))
             return null;
-        return new WebPushClientConfigDto(w.ApiKey!, w.AuthDomain ?? $"{w.ProjectId}.firebaseapp.com", w.ProjectId!, w.MessagingSenderId!, w.AppId!, w.VapidKey!);
+        return new WebPushClientConfigDto("fcm", w.VapidKey!, w.ApiKey!, w.AuthDomain ?? $"{w.ProjectId}.firebaseapp.com", w.ProjectId!, w.MessagingSenderId!, w.AppId!);
     }
 }
 

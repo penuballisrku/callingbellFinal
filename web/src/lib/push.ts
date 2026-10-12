@@ -1,11 +1,17 @@
 import { api } from './api';
 
 /**
- * Web push (Firebase Cloud Messaging) for signed-in users: asks the browser's permission (only after a click), gets the FCM token and
- * registers it with the API, which stores it against the user. The Firebase settings come from the API (public identifiers); the server
- * credentials never reach the browser. Firebase's code is only loaded when push is actually used.
+ * Web push for signed-in users: asks the browser's permission (only after a click), subscribes this browser and registers the
+ * subscription with the API, which stores it against the user. Two ways, chosen by the server:
+ *   - "vapid": standard Web Push. The browser subscribes with the site's VAPID public key and the server sends to the browser's push
+ *     service directly. No Firebase, nothing extra to download.
+ *   - "fcm": through Firebase Cloud Messaging (its code is only loaded when push is actually used).
+ * Only public identifiers come from the API; the server's keys never reach the browser.
  */
-export interface WebPushConfig { apiKey: string; authDomain: string; projectId: string; messagingSenderId: string; appId: string; vapidKey: string }
+export interface WebPushConfig {
+  provider: 'vapid' | 'fcm'; vapidKey: string;
+  apiKey?: string | null; authDomain?: string | null; projectId?: string | null; messagingSenderId?: string | null; appId?: string | null;
+}
 
 /** unsupported: this browser can't; unconfigured: the server has no web push; default: not asked yet; denied: blocked; enabled: on. */
 export type PushState = 'unsupported' | 'unconfigured' | 'default' | 'denied' | 'enabled';
@@ -46,12 +52,57 @@ async function firebaseMessaging(config: WebPushConfig) {
   const [{ initializeApp, getApps }, messaging] = await Promise.all([import('firebase/app'), import('firebase/messaging')]);
   if (!(await messaging.isSupported())) return null;
   const app = getApps()[0] ?? initializeApp({
-    apiKey: config.apiKey, authDomain: config.authDomain, projectId: config.projectId, messagingSenderId: config.messagingSenderId, appId: config.appId,
+    apiKey: config.apiKey ?? undefined, authDomain: config.authDomain ?? undefined, projectId: config.projectId ?? undefined,
+    messagingSenderId: config.messagingSenderId ?? undefined, appId: config.appId ?? undefined,
   });
   return { messaging, instance: messaging.getMessaging(app) };
 }
 
+/** The push worker's registration once it is active (subscribing needs an active worker; its scope isn't the page's, so no `ready`). */
+async function activeRegistration(): Promise<ServiceWorkerRegistration> {
+  const registration = await navigator.serviceWorker.register(SW_URL, { scope: SW_SCOPE });
+  const worker = registration.installing ?? registration.waiting;
+  if (!registration.active && worker) {
+    await new Promise<void>((resolve) => {
+      const done = () => { if (worker.state === 'activated' || worker.state === 'redundant') { worker.removeEventListener('statechange', done); resolve(); } };
+      worker.addEventListener('statechange', done);
+      done();
+    });
+  }
+  return registration;
+}
+
+function base64UrlToBytes(value: string): Uint8Array<ArrayBuffer> {
+  const b64 = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
+  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+}
+
+function sameKey(a: ArrayBuffer | null | undefined, b: Uint8Array): boolean {
+  if (!a || a.byteLength !== b.byteLength) return false;
+  const x = new Uint8Array(a);
+  return x.every((v, i) => v === b[i]);
+}
+
+/**
+ * Standard Web Push: this browser's subscription for the site's VAPID key (a new one if there is none, or if it was made for another
+ * key), as the token the API stores: {"endpoint","p256dh","auth"}.
+ */
+async function vapidToken(config: WebPushConfig): Promise<string | null> {
+  const registration = await activeRegistration();
+  const key = base64UrlToBytes(config.vapidKey);
+  let subscription = await registration.pushManager.getSubscription();
+  if (subscription && !sameKey(subscription.options.applicationServerKey, key)) {
+    await subscription.unsubscribe().catch(() => undefined);
+    subscription = null;
+  }
+  subscription ??= await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+  const json = subscription.toJSON();
+  if (!json.endpoint || !json.keys?.p256dh || !json.keys.auth) return null;
+  return JSON.stringify({ endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth });
+}
+
 async function currentToken(config: WebPushConfig): Promise<string | null> {
+  if (config.provider === 'vapid') return vapidToken(config);
   const fb = await firebaseMessaging(config);
   if (!fb) return null;
   const registration = await navigator.serviceWorker.register(SW_URL, { scope: SW_SCOPE });
@@ -66,8 +117,8 @@ function describeBrowser() {
   return { browser, platform };
 }
 
-async function register(token: string) {
-  await api.post('/api/notifications/devices', { token, deviceType: 'WEB', ...describeBrowser() });
+async function register(token: string, config: WebPushConfig) {
+  await api.post('/api/notifications/devices', { token, deviceType: config.provider === 'vapid' ? 'WEBPUSH' : 'WEB', ...describeBrowser() });
   storage.set(TOKEN_KEY, token);
   storage.set(SYNCED_KEY, String(Date.now()));
 }
@@ -81,7 +132,7 @@ export async function enablePush(): Promise<PushState> {
   if (permission !== 'granted') return permission === 'denied' ? 'denied' : 'default';
   const token = await currentToken(config);
   if (!token) return 'unsupported';
-  await register(token);
+  await register(token, config);
   return 'enabled';
 }
 
@@ -96,7 +147,7 @@ export async function syncPush(): Promise<void> {
   const token = await currentToken(config);
   if (!token) return;
   const synced = Number(storage.get(SYNCED_KEY) ?? 0);
-  if (token !== storage.get(TOKEN_KEY) || Date.now() - synced > RESYNC_MS) await register(token);
+  if (token !== storage.get(TOKEN_KEY) || Date.now() - synced > RESYNC_MS) await register(token, config);
 }
 
 /** Stops push to this browser for the signed-in user (before signing out, or when turned off). */
@@ -108,6 +159,12 @@ export async function disablePush(): Promise<void> {
   await api.post('/api/notifications/devices/unregister', { token }).catch(() => undefined);
   const config = await getPushConfig();
   if (!config) return;
+  if (config.provider === 'vapid') {
+    const registration = await navigator.serviceWorker.getRegistration(SW_SCOPE).catch(() => undefined);
+    const subscription = await registration?.pushManager.getSubscription().catch(() => null);
+    await subscription?.unsubscribe().catch(() => undefined);
+    return;
+  }
   const fb = await firebaseMessaging(config).catch(() => null);
   if (fb) await fb.messaging.deleteToken(fb.instance).catch(() => undefined);
 }

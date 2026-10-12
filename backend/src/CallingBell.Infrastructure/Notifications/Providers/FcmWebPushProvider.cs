@@ -34,14 +34,14 @@ internal sealed class FcmWebPushProvider(ApplicationDbContext db, IHttpClientFac
     public async Task<NotificationResult> SendAsync(NotificationMessage message, CancellationToken ct = default)
     {
         if (message.Recipient.UserId is not { } userId) return NotificationResult.Unavailable("NO_USER", "Web push needs a signed-in user.");
-        var devices = await db.NotificationDevices.AsNoTracking().Where(d => d.UserId == userId && d.IsActive)
+        var devices = await db.NotificationDevices.AsNoTracking().Where(d => d.UserId == userId && d.IsActive && d.DeviceType == NotificationDeviceTypes.Web)
             .OrderByDescending(d => d.UpdatedAt).Select(d => new { d.Id, d.Token }).Take(10).ToListAsync(ct);
         if (devices.Count == 0) return NotificationResult.Unavailable("NO_DEVICE", "No browser registered for push notifications.");
 
         var accessToken = await tokens.GetAccessTokenAsync(ct);
         var client = http.CreateClient(HttpClientName);
         var url = $"{O.BaseUrl.TrimEnd('/')}/v1/projects/{ProjectId}/messages:send";
-        var data = Payload(message);
+        var data = WebPushPayload.Build(message, O.IconUrl, signer);
 
         string? firstId = null;
         NotificationResult? lastFailure = null;
@@ -94,22 +94,6 @@ internal sealed class FcmWebPushProvider(ApplicationDbContext db, IHttpClientFac
 
         if (accepted > 0) return NotificationResult.Accepted(firstId, $"{accepted} browser{(accepted == 1 ? "" : "s")}");
         return lastFailure ?? NotificationResult.Failed("FCM_FAILED", "No browser accepted the push.");
-    }
-
-    /// <summary>Everything as strings (FCM data messages); the service worker builds the notification from it.</summary>
-    private Dictionary<string, string> Payload(NotificationMessage m)
-    {
-        var data = new Dictionary<string, string>(m.Data)
-        {
-            ["title"] = m.Title,
-            ["body"] = m.Body,
-            ["url"] = m.Url ?? "/",
-            ["icon"] = O.IconUrl,
-            ["tag"] = m.Data.TryGetValue("leadId", out var lead) ? $"lead-{lead}" : m.Data.TryGetValue("bookingId", out var booking) ? $"booking-{booking}" : m.DeliveryId.ToString("N"),
-            ["deliveryId"] = m.DeliveryId.ToString(),
-            ["ack"] = signer.Sign(m.DeliveryId),
-        };
-        return data;
     }
 
     private static bool IsGoneToken(HttpStatusCode status, FcmError e) =>

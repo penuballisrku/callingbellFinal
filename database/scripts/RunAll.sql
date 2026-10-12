@@ -47,3 +47,4 @@
 :r $(ScriptDir)\32_PlanComparison.sql
 :r $(ScriptDir)\33_NotificationEvents.sql
 :r $(ScriptDir)\34_Rebrand.sql
+:r $(ScriptDir)\35_WebPushVapid.sql

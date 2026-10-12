@@ -67,15 +67,20 @@ public static class DependencyInjection
         var notify = configuration.GetSection(NotificationOptions.Section).Get<NotificationOptions>() ?? new NotificationOptions();
         services.AddHttpClient(FcmWebPushProvider.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(10));
         services.AddHttpClient(GoogleServiceAccountTokens.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(10));
+        // Posts only to browser push services (checked per subscription), never following a redirect elsewhere.
+        services.AddHttpClient(VapidWebPushProvider.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(10))
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         services.AddHttpClient(MetaWhatsAppClient.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(Math.Clamp(notify.WhatsApp.TimeoutSeconds, 2, 30)));
         services.AddHttpClient(ProviderHttp.RcsClient, c => c.Timeout = TimeSpan.FromSeconds(Math.Clamp(notify.Rcs.TimeoutSeconds, 2, 30)));
         services.AddHttpClient(ProviderHttp.SmsClient, c => c.Timeout = TimeSpan.FromSeconds(Math.Clamp(notify.Sms.TimeoutSeconds, 2, 30)));
         services.AddSingleton<GoogleServiceAccountTokens>();
+        services.AddSingleton<VapidSigner>();
         services.AddSingleton<IDeliveryAckSigner, DeliveryAckSigner>();
         services.AddSingleton<CallingBell.Application.Features.Chat.IChatAttachmentSigner, ChatAttachmentSigner>();
         services.Configure<CallingBell.Application.Features.Video.VideoOptions>(configuration.GetSection(CallingBell.Application.Features.Video.VideoOptions.Section));
         services.AddSingleton<IWebPushClientConfig, WebPushClientConfig>();
         services.AddScoped<MetaWhatsAppClient>();
+        services.AddScoped<INotificationProvider, VapidWebPushProvider>();
         services.AddScoped<INotificationProvider, FcmWebPushProvider>();
         services.AddScoped<INotificationProvider, WhatsAppProvider>();
         services.AddScoped<INotificationProvider, WhatsAppAuthenticationProvider>();

@@ -38,13 +38,15 @@ export function usePushState() {
 
 /**
  * "Browser notifications" switch for the notification menu: turning it on asks the browser's permission (from this click) and registers
- * the browser; off unregisters it. Hidden where the browser or the server doesn't support web push.
+ * the browser; off unregisters it. Hidden where the browser or the server doesn't support web push. As a `prompt` (a card on pages
+ * such as the owner's messages) it only shows while notifications aren't on yet, and disappears once they are.
  */
-export function PushNotificationToggle() {
+export function PushNotificationToggle({ prompt = false }: { prompt?: boolean }) {
   const { enqueueSnackbar } = useSnackbar();
   const { state, setState } = usePushState();
   const [busy, setBusy] = useState(false);
   if (state === null || state === 'unsupported' || state === 'unconfigured') return null;
+  if (prompt && state !== 'default' && !busy) return null;
 
   const toggle = async () => {
     setBusy(true);
@@ -56,7 +58,7 @@ export function PushNotificationToggle() {
       } else {
         const next = await enablePush();
         setState(next);
-        if (next === 'enabled') enqueueSnackbar('Browser notifications are on. You’ll hear about new leads and bookings at once.', { variant: 'success' });
+        if (next === 'enabled') enqueueSnackbar('Browser notifications are on. You’ll hear about new messages, leads and bookings at once.', { variant: 'success' });
         else if (next === 'denied') enqueueSnackbar('Notifications are blocked for this site. Allow them in your browser’s site settings.', { variant: 'warning' });
       }
     } catch {
@@ -68,7 +70,7 @@ export function PushNotificationToggle() {
 
   const on = state === 'enabled';
   return (
-    <div className="flex items-start gap-3 border-b border-line bg-subtle/60 px-4 py-3">
+    <div className={`flex items-start gap-3 px-4 py-3 ${prompt ? 'card mb-4' : 'border-b border-line bg-subtle/60'}`}>
       <span className={`mt-0.5 flex ${on ? 'text-success' : 'text-muted'}`} aria-hidden>
         {on ? <NotificationsActiveOutlined fontSize="small" /> : <NotificationsOffOutlined fontSize="small" />}
       </span>
@@ -77,8 +79,8 @@ export function PushNotificationToggle() {
         <p className="text-xs text-muted">
           {state === 'denied'
             ? 'Blocked in this browser. Allow notifications for this site in your browser settings.'
-            : on ? 'On for this browser. New leads and bookings pop up even when this tab is closed.'
-              : 'Get new leads and bookings instantly, even when this tab is closed.'}
+            : on ? 'On for this browser. New messages, leads and bookings pop up even when CallInBell is closed.'
+              : 'Get new messages, leads and bookings instantly, even when CallInBell is closed.'}
         </p>
       </div>
       {state === 'denied' ? null : busy ? <CircularProgress size={20} sx={{ mt: 0.5 }} /> : state === 'default' ? (

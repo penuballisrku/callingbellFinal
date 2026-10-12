@@ -17,6 +17,7 @@ import dayjs from 'dayjs';
 import { api, errorMessage } from '@/lib/api';
 import { ago, time } from '@/lib/format';
 import { useChatEvents, useTypingSignal } from '@/lib/chat';
+import { usePresence } from '@/lib/realtime';
 import { useAuth, isOwner } from '@/stores/auth';
 import type { ChatMessage, ChatUnread, Conversation } from '@/lib/types';
 import { AvailabilityBadge, EmptyState, ErrorState, Img } from '@/components/ui';
@@ -48,6 +49,18 @@ export function ChatThread({ conversation: c, onBack, onClose }: { conversation:
   const typingTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const signalTyping = useTypingSignal(c.id);
   const other = c.myRole === 'Customer' ? c.businessName : c.customerName;
+
+  // The business's availability, live: the owner changing it (or opening / leaving CallInBell) shows here at once. Cached copies of the
+  // conversation are updated too, so reopening the chat doesn't show the old status.
+  const [availability, setAvailability] = useState(c.availabilityStatus ?? null);
+  useEffect(() => setAvailability(c.availabilityStatus ?? null), [c.availabilityStatus]);
+  usePresence(c.myRole === 'Customer' ? [c.businessId] : [], (e) => {
+    if (e.businessId !== c.businessId) return;
+    setAvailability(e.status);
+    const update = (x: Conversation) => (x.businessId === e.businessId ? { ...x, availabilityStatus: e.status } : x);
+    queryClient.setQueriesData<Conversation[]>({ queryKey: ['chat', 'conversations'] }, (list) => list?.map(update));
+    queryClient.setQueryData<Conversation>(['chat', 'start', e.businessId], (x) => (x ? update(x) : x));
+  });
 
   const history = useQuery({
     queryKey: ['chat', 'messages', c.id],
@@ -151,7 +164,7 @@ export function ChatThread({ conversation: c, onBack, onClose }: { conversation:
           </p>
           <p className="truncate text-xs text-muted">
             {typing ? <span className="font-medium text-success">typing…</span>
-              : c.myRole === 'Customer' && c.availabilityStatus ? <AvailabilityBadge status={c.availabilityStatus} compact /> : c.myRole === 'Business' ? 'Customer' : ''}
+              : c.myRole === 'Customer' && availability ? <AvailabilityBadge status={availability} compact /> : c.myRole === 'Business' ? 'Customer' : ''}
           </p>
         </div>
         {c.offersVideoConsultation && (
