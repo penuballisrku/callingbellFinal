@@ -63,14 +63,17 @@ export default function LoginPage() {
       </form>
       <p className="mt-6 text-center text-sm text-muted">New to CallInBell? <Link to="/register" className="font-semibold text-ink underline-offset-2 hover:underline">Create an account</Link></p>
 
-      <div className="mt-8 rounded-xl border border-dashed border-line bg-canvas p-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted">Demo accounts · password CallingBell@2026</p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {demoAccounts.map((a) => (
-            <Button key={a.email} size="small" variant="outlined" onClick={() => { setValue('email', a.email); setValue('password', 'CallingBell@2026'); }}>{a.label}</Button>
-          ))}
+      {/* Development only: Vite replaces import.meta.env.DEV with false in production builds, so this block (and the password) is stripped. */}
+      {import.meta.env.DEV && (
+        <div className="mt-8 rounded-xl border border-dashed border-line bg-canvas p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">Demo accounts · password CallingBell@2026</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {demoAccounts.map((a) => (
+              <Button key={a.email} size="small" variant="outlined" onClick={() => { setValue('email', a.email); setValue('password', 'CallingBell@2026'); }}>{a.label}</Button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </AuthShell>
   );
 }
