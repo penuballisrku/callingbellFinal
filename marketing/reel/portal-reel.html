@@ -1,0 +1,1091 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CallInBell Portal Reel</title>
+<style>
+  @font-face {
+    font-family: 'CBInter';
+    src: url('assets/inter.woff2') format('woff2');
+    font-weight: 100 900;
+  }
+  html, body { margin: 0; height: 100%; background: #050b16; }
+  body { display: grid; place-items: center; overflow: hidden; }
+  canvas { height: 100vh; width: auto; max-width: 100vw; aspect-ratio: 9 / 16; display: block; }
+  body.render canvas { height: auto; width: 1080px; max-width: none; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1080" height="1920"></canvas>
+<script>
+/*
+ * CallInBell — web portal advert, Instagram Reel (1080x1920, 44s).
+ * Intro → hook → ten feature scenes (each with an animated phone mock-up) → recap → brand close with the website.
+ * renderFrame(t) is a pure function of time; render.cjs --page portal exports it frame by frame.
+ * Preview over http: portal-reel.html?play (or ?t=12.5 to hold a frame).
+ */
+const W = 1080, H = 1920, DUR = 44;
+const FONT = "'CBInter', 'Segoe UI', Roboto, Arial, sans-serif";
+const C = {
+  navy: '#0B1220', amber: '#F4A62C', amberHi: '#FFC562', amberDeep: '#E08A0B',
+  white: '#FFFFFF', muted: '#BAC5D4', faint: '#74839A',
+  // phone UI (the portal's light theme)
+  canvas: '#F7F8FA', line: '#E5E7EB', ink: '#161616', ink2: '#344054', gray: '#667085', faintUi: '#98A2B3',
+  success: '#067647', successSoft: '#ECFDF3', accentSoft: '#FEF4E2', accentInk: '#93530A', info: '#1570EF', danger: '#B42318',
+};
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+// ---------- maths ----------
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const lerp = (a, b, p) => a + (b - a) * p;
+const easeOutCubic = p => 1 - Math.pow(1 - p, 3);
+const easeInCubic = p => p * p * p;
+const easeInOutCubic = p => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
+const easeOutBack = p => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2); };
+const easeOutQuint = p => 1 - Math.pow(1 - p, 5);
+const ringAngle = lt => (lt < 0 ? 0 : 0.32 * Math.sin(lt * 26) * Math.exp(-lt * 3.2));
+function rand(seed) { const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
+
+// ---------- icons (Lucide, ISC licence, 24x24) ----------
+const ICONS = {
+  zap: ['M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z'],
+  wrench: ['M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z'],
+  snowflake: ['M2 12h20', 'M12 2v20', 'm20 16-4-4 4-4', 'm4 8 4 4-4 4', 'm16 4-4 4-4-4', 'm8 20 4-4 4 4'],
+  hammer: ['m15 12-8.373 8.373a1 1 0 1 1-3-3L12 9', 'm18 15 4-4', 'm21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5'],
+  roller: [{ r: [2, 2, 16, 6, 2] }, 'M10 16v-2a2 2 0 0 1 2-2h8a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2', { r: [8, 16, 4, 6, 1] }],
+  sparkles: ['M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z', 'M20 3v4', 'M22 5h-4', 'M4 17v2', 'M5 18H3'],
+  washer: [{ r: [3, 2, 18, 20, 2] }, 'M3 6h18', 'M7 4h.01', 'M10 4h.01', { c: [12, 13.5, 5] }, 'M12 18.5a2.5 2.5 0 0 0 0-5 2.5 2.5 0 0 1 0-5'],
+  house: ['M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8', 'M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'],
+  scissors: [{ c: [6, 6, 3] }, 'M8.12 8.12 12 12', 'M20 4 8.12 15.88', { c: [6, 18, 3] }, 'M14.8 14.8 20 20'],
+  book: ['M12 7v14', 'M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z'],
+  search: [{ c: [11, 11, 8] }, 'm21 21-4.3-4.3'],
+  pin: ['M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0', { c: [12, 10, 3] }],
+  bell: ['M10.268 21a2 2 0 0 0 3.464 0', 'M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326'],
+  phone: ['M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384'],
+  chat: ['M7.9 20A9 9 0 1 0 4 16.1L2 22Z'],
+  video: ['m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5', { r: [2, 6, 14, 12, 2] }],
+  check: ['M20 6 9 17l-5-5'],
+  image: [{ r: [3, 3, 18, 18, 2] }, { c: [9, 9, 2] }, 'm21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21'],
+  globe: [{ c: [12, 12, 10] }, 'M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20', 'M2 12h20'],
+  star: ['M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z'],
+  tag: ['M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z', { c: [7.5, 7.5, 0.5] }],
+  trending: ['M22 7 13.5 15.5 8.5 10.5 2 17', 'M16 7h6v6'],
+  calendar: [{ r: [3, 4, 18, 18, 2] }, 'M16 2v4', 'M8 2v4', 'M3 10h18'],
+  clock: [{ c: [12, 12, 10] }, 'M12 6v6l4 2'],
+  store: ['M15 21v-5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5', 'M17.774 10.31a1.12 1.12 0 0 0-1.549 0 2.5 2.5 0 0 1-3.451 0 1.12 1.12 0 0 0-1.548 0 2.5 2.5 0 0 1-3.452 0 1.12 1.12 0 0 0-1.549 0 2.5 2.5 0 0 1-3.77-3.248l2.889-4.184A2 2 0 0 1 7 2h10a2 2 0 0 1 1.653.873l2.895 4.192a2.5 2.5 0 0 1-3.774 3.244', 'M4 10.95V19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8.05'],
+  arrow: ['M5 12h14', 'm12 5 7 7-7 7'],
+};
+const PATHS = {};
+for (const [k, parts] of Object.entries(ICONS)) {
+  PATHS[k] = parts.map(p => {
+    if (typeof p === 'string') return new Path2D(p);
+    const path = new Path2D();
+    if (p.r) path.roundRect(...p.r);
+    if (p.c) path.arc(p.c[0], p.c[1], p.c[2], 0, Math.PI * 2);
+    return path;
+  });
+}
+
+// ---------- timeline ----------
+const T_HOOK = 3.2;
+const T_FEAT = 6.2;
+const FEAT_D = 2.8;
+const N_FEAT = 10;
+const T_RECAP = T_FEAT + N_FEAT * FEAT_D;   // 34.2
+const T_OUT = 37.6;
+
+// ---------- primitives ----------
+function font(weight, size) { ctx.font = `${weight} ${size}px ${FONT}`; }
+
+function drawIcon(name, cx, cy, size, color, lw = 2, draw = 1) {
+  if (draw <= 0) return;
+  ctx.save();
+  ctx.translate(cx - size / 2, cy - size / 2);
+  ctx.scale(size / 24, size / 24);
+  ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  if (draw < 1) { ctx.setLineDash([120, 120]); ctx.lineDashOffset = 120 * (1 - easeInOutCubic(draw)); }
+  for (const p of PATHS[name]) ctx.stroke(p);
+  ctx.restore();
+}
+function fillIcon(name, cx, cy, size, color) {
+  ctx.save();
+  ctx.translate(cx - size / 2, cy - size / 2);
+  ctx.scale(size / 24, size / 24);
+  ctx.fillStyle = color;
+  for (const p of PATHS[name]) ctx.fill(p);
+  ctx.restore();
+}
+
+// The CallInBell mark, from web/public/favicon.svg (40x40 units).
+const BELL_TOP = new Path2D(); BELL_TOP.roundRect(18.9, 7.2, 2.2, 3.4, 1.1);
+const BELL_BODY = new Path2D('M20 9.6c-4.5 0-7.5 3.4-7.5 7.7v4.8l-2.1 3.3c-.55.86.07 1.95 1.08 1.95h17.04c1.01 0 1.63-1.09 1.08-1.95l-2.1-3.3v-4.8c0-4.3-3-7.7-7.5-7.7Z');
+const BELL_CLAPPER = new Path2D('M16.7 29.2h6.6a3.3 3.3 0 0 1-6.6 0Z');
+const WAVE1 = new Path2D('M26.6 11.2a7 7 0 0 1 2.7 4.6');
+const WAVE2 = new Path2D('M29.4 8.2a10.8 10.8 0 0 1 3.9 7');
+
+function drawLogo(cx, cy, size, { ring = 0, waves = 1, glow = 1, alpha = 1 } = {}) {
+  if (size <= 0 || alpha <= 0) return;
+  const s = size / 40;
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.translate(cx - 20 * s, cy - 20 * s);
+  ctx.scale(s, s);
+  ctx.save();
+  if (glow > 0) { ctx.shadowColor = `rgba(244,166,44,${0.45 * glow})`; ctx.shadowBlur = 60 * glow * s; }
+  const g = ctx.createLinearGradient(0, 0, 40, 40);
+  g.addColorStop(0, '#1A2540'); g.addColorStop(1, C.navy);
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.roundRect(0, 0, 40, 40, 11); ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle = 'rgba(244,166,44,0.35)'; ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.roundRect(0.25, 0.25, 39.5, 39.5, 10.8); ctx.stroke();
+  ctx.save();
+  ctx.translate(20, 9); ctx.rotate(ring); ctx.translate(-20, -9);
+  ctx.translate(-0.4, 1.2); ctx.scale(0.92, 0.92);
+  ctx.fillStyle = C.white;
+  ctx.fill(BELL_TOP); ctx.fill(BELL_BODY);
+  ctx.save(); ctx.translate(20, 27); ctx.rotate(ring * 0.8); ctx.translate(-20, -27); ctx.fill(BELL_CLAPPER); ctx.restore();
+  ctx.restore();
+  ctx.strokeStyle = C.amber; ctx.lineWidth = 2; ctx.lineCap = 'round';
+  ctx.globalAlpha = alpha * clamp(waves * 2);
+  ctx.stroke(WAVE1);
+  ctx.globalAlpha = alpha * 0.55 * clamp(waves * 2 - 1);
+  ctx.stroke(WAVE2);
+  ctx.restore();
+}
+
+// Text that slides up from behind a mask.
+function revealText(txt, x, y, size, p, color) {
+  if (p <= 0) return;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(-W, y - size * 1.05, W * 3, size * 1.4); ctx.clip();
+  ctx.globalAlpha *= clamp(p * 1.6);
+  ctx.fillStyle = color;
+  ctx.fillText(txt, x, y + (1 - easeOutQuint(clamp(p))) * size * 1.15);
+  ctx.restore();
+}
+
+function drawWordmark(x, y, size, align, p = 1, alpha = 1, suffix = '') {
+  if (p <= 0 || alpha <= 0) return;
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  font(800, size);
+  ctx.letterSpacing = `${-size * 0.03}px`;
+  ctx.textAlign = 'left';
+  const w1 = ctx.measureText('CallIn').width, w2 = ctx.measureText('Bell').width, w3 = suffix ? ctx.measureText(suffix).width : 0;
+  const x0 = align === 'center' ? x - (w1 + w2 + w3) / 2 : x;
+  revealText('CallIn', x0, y, size, p, C.white);
+  revealText('Bell', x0 + w1, y, size, seg(p, 0.15, 1.15), C.amber);
+  if (suffix) revealText(suffix, x0 + w1 + w2, y, size, seg(p, 0.3, 1.3), C.white);
+  ctx.restore();
+}
+
+function wrap(text, maxW) {
+  const lines = []; let line = '';
+  for (const w of text.split(' ')) {
+    const test = line ? line + ' ' + w : w;
+    if (line && ctx.measureText(test).width > maxW) { lines.push(line); line = w; } else line = test;
+  }
+  lines.push(line);
+  return lines;
+}
+
+// ---------- phone UI kit (local coordinates inside the phone screen) ----------
+const SW = 488, SH = 988, PAD = 24, CW = SW - PAD * 2;
+
+function rr(x, y, w, h, r, fill, stroke, lw = 2) {
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, r);
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.stroke(); }
+}
+function txt(s, x, y, size, weight, color, align = 'left') {
+  font(weight, size); ctx.letterSpacing = '0px'; ctx.textAlign = align; ctx.fillStyle = color; ctx.fillText(s, x, y);
+  return ctx.measureText(s).width;
+}
+function card(x, y, w, h, r = 20, stroke = C.line) {
+  ctx.save();
+  ctx.shadowColor = 'rgba(16,24,40,0.08)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 4;
+  rr(x, y, w, h, r, '#FFFFFF');
+  ctx.restore();
+  rr(x, y, w, h, r, null, stroke);
+}
+function pill(x, y, label, bg, fg, size = 19, dot = null, align = 'left') {
+  font(600, size);
+  const w = ctx.measureText(label).width + 28 + (dot ? 18 : 0), h = size + 18;
+  const x0 = align === 'right' ? x - w : x;
+  rr(x0, y, w, h, h / 2, bg);
+  if (dot) { ctx.fillStyle = dot; ctx.beginPath(); ctx.arc(x0 + 20, y + h / 2, 5, 0, Math.PI * 2); ctx.fill(); }
+  txt(label, x0 + 14 + (dot ? 18 : 0), y + h / 2 + size * 0.36, size, 600, fg);
+  return w;
+}
+function avatar(cx, cy, r, initials, bg, fg = '#FFFFFF') {
+  ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+  txt(initials, cx, cy + r * 0.34, r * 0.82, 700, fg, 'center');
+}
+function stars(x, y, size, value, gap = 4) {
+  for (let i = 0; i < 5; i++) {
+    const cx = x + i * (size + gap) + size / 2;
+    fillIcon('star', cx, y, size, '#E4E7EC');
+    const f = clamp(value - i);
+    if (f > 0) {
+      ctx.save(); ctx.beginPath(); ctx.rect(cx - size / 2, y - size / 2, size * f, size); ctx.clip();
+      fillIcon('star', cx, y, size, C.amber); ctx.restore();
+    }
+  }
+  return 5 * (size + gap);
+}
+function pop(p, cx, cy, fn) {
+  if (p <= 0) return;
+  ctx.save();
+  const s = lerp(0.8, 1, easeOutBack(p));
+  ctx.globalAlpha *= clamp(p * 1.8);
+  ctx.translate(cx, cy); ctx.scale(s, s); ctx.translate(-cx, -cy);
+  fn(); ctx.restore();
+}
+function slide(p, dx, dy, fn) {
+  if (p <= 0) return;
+  ctx.save();
+  const e = 1 - easeOutCubic(p);
+  ctx.globalAlpha *= clamp(p * 1.8);
+  ctx.translate(dx * e, dy * e);
+  fn(); ctx.restore();
+}
+function tap(x, y, lt, at) {
+  const p = seg(lt, at, at + 0.45);
+  if (p <= 0 || p >= 1) return;
+  ctx.save();
+  ctx.fillStyle = `rgba(11,18,32,${0.18 * (1 - p)})`;
+  ctx.beginPath(); ctx.arc(x, y, 18 + 46 * easeOutCubic(p), 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = `rgba(11,18,32,${0.35 * (1 - p)})`;
+  ctx.beginPath(); ctx.arc(x, y, 16, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+function sectionTitle(s, y) { txt(s, PAD, y, 25, 700, C.ink); }
+function bizRow(y, name, meta, initials, color, status, statusColor = C.success, statusBg = C.successSoft) {
+  card(PAD, y, CW, 108, 20);
+  avatar(PAD + 54, y + 54, 32, initials, color);
+  txt(name, PAD + 102, y + 46, 23, 700, C.ink);
+  fillIcon('star', PAD + 111, y + 75, 17, C.amber);
+  txt(meta, PAD + 126, y + 82, 19, 500, C.gray);
+  if (status) pill(PAD + CW - 16, y + 58, status, statusBg, statusColor, 15, statusColor, 'right');
+}
+
+function drawPhone(x, y, w, h, content) {
+  ctx.save();
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 70; ctx.shadowOffsetY = 30;
+  rr(x, y, w, h, 72, '#0E1424');
+  ctx.restore();
+  rr(x, y, w, h, 72, null, '#2B3652', 4);
+  rr(x - 5, y + 220, 6, 90, 3, '#2B3652');
+  rr(w + x - 1, y + 260, 6, 130, 3, '#2B3652');
+  // screen
+  const sx = x + 16, sy = y + 16;
+  ctx.save();
+  ctx.beginPath(); ctx.roundRect(sx, sy, SW, SH, 58); ctx.clip();
+  ctx.translate(sx, sy);
+  ctx.fillStyle = C.canvas; ctx.fillRect(0, 0, SW, SH);
+  content();
+  // status bar + app bar stay on top of the content
+  ctx.fillStyle = 'rgba(247,248,250,0.96)'; ctx.fillRect(0, 0, SW, 124);
+  txt('9:41', 52, 40, 21, 700, C.ink);
+  for (let i = 0; i < 4; i++) rr(SW - 128 + i * 9, 36 - i * 4, 6, 8 + i * 4, 1.5, C.ink);
+  rr(SW - 78, 24, 38, 18, 5, null, C.ink, 2); rr(SW - 75, 27, 28, 12, 3, C.ink); rr(SW - 38, 30, 3, 7, 1, C.ink);
+  drawLogo(PAD + 22, 90, 44, { glow: 0 });
+  const w1 = txt('CallIn', PAD + 54, 99, 25, 800, C.ink);
+  txt('Bell', PAD + 54 + w1, 99, 25, 800, C.amberDeep);
+  avatar(SW - PAD - 22, 90, 22, 'VM', '#E4E9F2', C.ink2);
+  ctx.fillStyle = C.line; ctx.fillRect(0, 123, SW, 1.5);
+  ctx.restore();
+  rr(x + w / 2 - 62, y + 30, 124, 36, 18, '#000000');
+  ctx.restore();
+}
+
+// ---------- the ten phone screens (lt = seconds into the feature) ----------
+const SCREENS = {
+  discovery(lt) {
+    card(PAD, 142, CW, 68, 34);
+    drawIcon('search', PAD + 38, 176, 26, C.gray, 2.2);
+    txt('Search businesses or services', PAD + 66, 184, 21, 500, C.faintUi);
+    drawIcon('pin', PAD + 12, 240, 22, C.amberDeep, 2.2);
+    txt('Banjara Hills, Hyderabad', PAD + 32, 248, 20, 600, C.ink2);
+    sectionTitle('Popular categories', 300);
+    const cats = [['zap', 'Electricians'], ['wrench', 'Plumbers'], ['snowflake', 'AC Repair'], ['hammer', 'Carpenters'], ['roller', 'Painters'],
+                  ['sparkles', 'Cleaning'], ['washer', 'Appliances'], ['scissors', 'Salons'], ['book', 'Tutors']];
+    const tw = (CW - 32) / 3, th = 128;
+    cats.forEach(([icon, label], i) => {
+      const x = PAD + (i % 3) * (tw + 16), y = 322 + Math.floor(i / 3) * (th + 14);
+      pop(seg(lt, 0.25 + i * 0.06, 0.6 + i * 0.06), x + tw / 2, y + th / 2, () => {
+        const sel = i === 0 && lt > 1.55;
+        card(x, y, tw, th, 18, sel ? C.amber : C.line);
+        ctx.fillStyle = C.accentSoft; ctx.beginPath(); ctx.arc(x + tw / 2, y + 50, 30, 0, Math.PI * 2); ctx.fill();
+        drawIcon(icon, x + tw / 2, y + 50, 30, C.accentInk, 2);
+        txt(label, x + tw / 2, y + 108, 18, 600, C.ink, 'center');
+      });
+    });
+    tap(PAD + tw / 2, 372, lt, 1.4);
+    sectionTitle('Electricians near you', 790);
+    slide(seg(lt, 1.7, 2.1), 0, 40, () => bizRow(808, 'Sharma Electricals', '4.8 · 1.2 km away', 'SE', C.navy, 'Open now'));
+  },
+
+  aiSearch(lt) {
+    const query = 'AC repair near me, open now';
+    const n = Math.floor(query.length * seg(lt, 0.25, 1.05));
+    card(PAD, 142, CW, 68, 34, C.amber);
+    rr(PAD, 142, CW, 68, 34, null, C.amber, 3);
+    drawIcon('search', PAD + 38, 176, 26, C.ink2, 2.2);
+    const tw = txt(query.slice(0, n), PAD + 66, 184, 21, 500, C.ink);
+    if (lt < 1.2 && Math.floor(lt * 4) % 2 === 0) { ctx.fillStyle = C.ink; ctx.fillRect(PAD + 68 + tw, 164, 2, 26); }
+    const g = ctx.createLinearGradient(SW - 110, 0, SW - 40, 0); g.addColorStop(0, C.amberHi); g.addColorStop(1, C.amber);
+    rr(SW - PAD - 82, 156, 70, 40, 20, g);
+    drawIcon('sparkles', SW - PAD - 60, 176, 20, C.navy, 2.2);
+    txt('AI', SW - PAD - 42, 184, 19, 800, C.navy);
+
+    slide(seg(lt, 1.1, 1.4), 0, 16, () => {
+      drawIcon('sparkles', PAD + 12, 252, 20, C.amberDeep, 2);
+      txt('AI understood your request', PAD + 32, 259, 19, 600, C.gray);
+    });
+    let x = PAD;
+    ['AC Repair', 'Near you', 'Open now'].forEach((c, i) => {
+      font(600, 19);
+      const w = ctx.measureText(c).width + 28;
+      pop(seg(lt, 1.2 + i * 0.1, 1.5 + i * 0.1), x + w / 2, 300, () => pill(x, 281, c, C.accentSoft, C.accentInk, 19));
+      x += w + 12;
+    });
+    sectionTitle('Best matches for you', 375);
+    const res = [['CoolAir AC Services', '4.9 · 0.8 km away', 'CA', '#1570EF'],
+                 ['Hyderabad Cooling Experts', '4.7 · 1.5 km away', 'HC', '#067647'],
+                 ['Arctic Home Services', '4.6 · 2.3 km away', 'AH', '#7A5AF8']];
+    res.forEach((r, i) => slide(seg(lt, 1.5 + i * 0.12, 1.9 + i * 0.12), 0, 50, () => bizRow(396 + i * 124, ...r, 'Open now')));
+    slide(seg(lt, 2.0, 2.4), 0, 30, () => {
+      rr(PAD, 788, CW, 110, 20, C.accentSoft);
+      drawIcon('sparkles', PAD + 34, 830, 24, C.accentInk, 2);
+      txt('Describe what you need in your', PAD + 60, 828, 19, 600, C.accentInk);
+      txt('own words, and AI does the rest.', PAD + 60, 856, 19, 600, C.accentInk);
+    });
+  },
+
+  location(lt) {
+    card(PAD, 142, CW, 64, 32);
+    drawIcon('pin', PAD + 34, 174, 24, C.amberDeep, 2.2);
+    txt('Banjara Hills, Hyderabad', PAD + 58, 181, 21, 600, C.ink);
+    txt('Change', SW - PAD - 22, 181, 19, 700, C.amberDeep, 'right');
+    // map
+    ctx.save();
+    ctx.beginPath(); ctx.roundRect(PAD, 222, CW, 520, 24); ctx.clip();
+    ctx.fillStyle = '#E9EEF3'; ctx.fillRect(PAD, 222, CW, 520);
+    ctx.fillStyle = '#D6EAD8'; ctx.beginPath(); ctx.roundRect(PAD + 280, 250, 150, 130, 18); ctx.fill();
+    ctx.fillStyle = '#CFE3F5'; ctx.beginPath(); ctx.ellipse(PAD + 70, 650, 110, 70, 0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#FFFFFF'; ctx.lineCap = 'round';
+    [[0, 330, 440, 290, 20], [0, 560, 440, 610, 20], [150, 222, 120, 742, 18], [330, 222, 360, 742, 14], [0, 450, 440, 440, 10], [240, 222, 260, 742, 8]]
+      .forEach(([x1, y1, x2, y2, w]) => { ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(PAD + x1, y1); ctx.lineTo(PAD + x2, y2); ctx.stroke(); });
+    const ux = PAD + 220, uy = 480;
+    ctx.setLineDash([10, 8]); ctx.strokeStyle = 'rgba(244,166,44,0.8)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(ux, uy, 190 * easeOutCubic(seg(lt, 0.3, 0.9)), 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(244,166,44,0.08)'; ctx.beginPath(); ctx.arc(ux, uy, 190 * easeOutCubic(seg(lt, 0.3, 0.9)), 0, Math.PI * 2); ctx.fill();
+    const ph = (lt * 0.9) % 1;
+    ctx.fillStyle = `rgba(21,112,239,${0.3 * (1 - ph)})`; ctx.beginPath(); ctx.arc(ux, uy, 16 + ph * 50, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(ux, uy, 17, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = C.info; ctx.beginPath(); ctx.arc(ux, uy, 11, 0, Math.PI * 2); ctx.fill();
+    const pins = [[90, 300], [330, 410], [140, 560], [300, 600], [380, 300], [60, 450]];
+    pins.forEach(([px, py], i) => {
+      const p = seg(lt, 0.5 + i * 0.09, 0.85 + i * 0.09);
+      if (p <= 0) return;
+      const x = PAD + px, y = py - (1 - easeOutBack(p)) * 70;
+      ctx.save(); ctx.globalAlpha = clamp(p * 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.beginPath(); ctx.ellipse(x, py + 2, 10, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = i === 1 ? C.navy : C.amber;
+      ctx.beginPath(); ctx.arc(x, y - 34, 20, Math.PI * 0.82, Math.PI * 2.18); ctx.lineTo(x, y); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(x, y - 34, 7.5, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    });
+    pop(seg(lt, 1.35, 1.7), PAD + 330, 330, () => {
+      card(PAD + 196, 300, 236, 64, 14);
+      txt('Sharma Electricals', PAD + 212, 326, 17, 700, C.ink);
+      txt('1.2 km · Open now', PAD + 212, 350, 16, 500, C.success);
+    });
+    ctx.restore();
+    slide(seg(lt, 1.0, 1.4), 0, 120, () => {
+      card(PAD, 762, CW, 196, 24);
+      rr(SW / 2 - 30, 776, 60, 6, 3, C.line);
+      txt('12 businesses within 3 km', PAD + 22, 826, 24, 800, C.ink);
+      txt('Sorted by distance from you', PAD + 22, 856, 19, 500, C.gray);
+      let x = PAD + 22;
+      [['Electricians', 4], ['Plumbers', 3], ['Salons', 5]].forEach(([c, n]) => {
+        x += pill(x, 884, `${c} · ${n}`, C.canvas, C.ink2, 17) + 10;
+      });
+    });
+  },
+
+  listing(lt) {
+    pop(seg(lt, 0.2, 0.55), SW / 2, 240, () => {
+      ctx.save();
+      ctx.beginPath(); ctx.roundRect(PAD, 140, CW, 190, 24); ctx.clip();
+      const g = ctx.createLinearGradient(PAD, 140, PAD + CW, 330); g.addColorStop(0, '#1A2540'); g.addColorStop(1, C.navy);
+      ctx.fillStyle = g; ctx.fillRect(PAD, 140, CW, 190);
+      [[380, 170, 90], [300, 330, 70], [80, 150, 40]].forEach(([x, y, r]) => { ctx.fillStyle = 'rgba(244,166,44,0.25)'; ctx.beginPath(); ctx.arc(PAD + x, y, r, 0, Math.PI * 2); ctx.fill(); });
+      drawIcon('zap', PAD + 380, 236, 70, 'rgba(255,255,255,0.85)', 1.6);
+      ctx.restore();
+      pill(PAD + 18, 158, 'Verified', 'rgba(236,253,243,0.95)', C.success, 16, C.success);
+    });
+    pop(seg(lt, 0.35, 0.7), PAD + 74, 330, () => {
+      ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(PAD + 74, 330, 50, 0, Math.PI * 2); ctx.fill();
+      avatar(PAD + 74, 330, 44, 'SE', C.amber, C.navy);
+    });
+    slide(seg(lt, 0.45, 0.85), 0, 24, () => {
+      txt('Sharma Electricals', PAD, 422, 31, 800, C.ink);
+      txt('Electricians · Banjara Hills, Hyderabad', PAD, 456, 19, 500, C.gray);
+      const sw = stars(PAD, 490, 22, 4.8 * seg(lt, 0.7, 1.3));
+      txt('4.8', PAD + sw + 6, 498, 21, 800, C.ink);
+      txt('(126 reviews)', PAD + sw + 46, 498, 19, 500, C.gray);
+      let x = PAD;
+      x += pill(x, 520, 'Open now', C.successSoft, C.success, 16, C.success) + 10;
+      pill(x, 520, 'Available for call', C.accentSoft, C.accentInk, 16, C.amberDeep);
+    });
+    slide(seg(lt, 0.8, 1.15), 0, 24, () => {
+      rr(PAD, 582, 128, 62, 16, '#FFFFFF', C.line);
+      drawIcon('phone', PAD + 38, 613, 20, C.ink2, 2.2); txt('Call', PAD + 58, 620, 19, 700, C.ink);
+      rr(PAD + 140, 582, 128, 62, 16, '#FFFFFF', C.line);
+      drawIcon('chat', PAD + 178, 613, 20, C.ink2, 2.2); txt('Chat', PAD + 198, 620, 19, 700, C.ink);
+      rr(PAD + 280, 582, CW - 280, 62, 16, C.amber);
+      txt('Book now', PAD + 280 + (CW - 280) / 2, 620, 20, 800, C.navy, 'center');
+    });
+    sectionTitle('Services', 696);
+    const svc = [['Fan installation', '₹249'], ['Switchboard repair', '₹199'], ['Full house wiring check', '₹799'], ['Inverter installation', '₹499']];
+    slide(seg(lt, 1.15, 1.45), 0, 40, () => card(PAD, 714, CW, 4 * 64 + 8, 20));
+    svc.forEach(([s, p], i) => slide(seg(lt, 1.2 + i * 0.1, 1.55 + i * 0.1), 30, 0, () => {
+      const y = 718 + i * 64;
+      if (i) { ctx.fillStyle = C.line; ctx.fillRect(PAD + 20, y, CW - 40, 1.5); }
+      txt(s, PAD + 22, y + 40, 20, 600, C.ink);
+      txt(p, PAD + CW - 22, y + 40, 20, 800, C.ink, 'right');
+    }));
+  },
+
+  leads(lt) {
+    txt('Business dashboard', PAD, 168, 19, 600, C.gray);
+    txt('Good morning, Ravi', PAD, 204, 29, 800, C.ink);
+    const kpis = [['New leads today', 12, C.amberDeep], ['Bookings today', 5, C.success]];
+    kpis.forEach(([label, n, col], i) => pop(seg(lt, 0.2 + i * 0.1, 0.55 + i * 0.1), PAD + i * 228 + 106, 290, () => {
+      card(PAD + i * 228, 228, 212, 124, 20);
+      txt(label, PAD + i * 228 + 20, 264, 18, 600, C.gray);
+      txt(String(Math.round(n * easeOutCubic(seg(lt, 0.4, 1.4)))), PAD + i * 228 + 20, 324, 44, 800, C.ink);
+      drawIcon('trending', PAD + i * 228 + 180, 310, 26, col, 2.4);
+    }));
+    pop(seg(lt, 0.35, 0.7), SW / 2, 460, () => {
+      card(PAD, 370, CW, 190, 20);
+      txt('Leads this week', PAD + 20, 404, 19, 700, C.ink);
+      const hs = [0.38, 0.52, 0.45, 0.66, 0.58, 0.8, 1];
+      hs.forEach((v, i) => {
+        const bw = 36, gap = (CW - 40 - 7 * bw) / 6, x = PAD + 20 + i * (bw + gap);
+        const h = 100 * v * easeOutCubic(seg(lt, 0.5 + i * 0.05, 1.1 + i * 0.05));
+        rr(x, 528 - h, bw, Math.max(h, 0.1), 8, i === 6 ? C.amber : '#FCD9A0');
+        txt('MTWTFSS'[i], x + bw / 2, 552, 15, 600, C.gray, 'center');
+      });
+    });
+    sectionTitle('Latest leads', 606);
+    const leads = [['New enquiry: Split AC service', 'Jubilee Hills · just now', true],
+                   ['Quote request: Kitchen deep clean', 'Madhapur · 5 min ago', false],
+                   ['Callback request: Wiring check', 'Kondapur · 12 min ago', false]];
+    leads.forEach(([t, s, isNew], i) => slide(seg(lt, 1.0 + i * 0.22, 1.4 + i * 0.22), 300, 0, () => {
+      const y = 626 + i * 112;
+      card(PAD, y, CW, 98, 18, isNew ? C.amber : C.line);
+      ctx.fillStyle = C.accentSoft; ctx.beginPath(); ctx.arc(PAD + 46, y + 49, 26, 0, Math.PI * 2); ctx.fill();
+      drawIcon('bell', PAD + 46, y + 49, 24, C.accentInk, 2.2);
+      txt(t, PAD + 86, y + 44, 18, 700, C.ink);
+      txt(s, PAD + 86, y + 72, 16, 500, C.gray);
+      if (isNew) pill(PAD + CW - 14, y + 58, 'New', C.amber, C.navy, 14, null, 'right');
+    }));
+  },
+
+  booking(lt) {
+    card(PAD, 142, CW, 96, 20);
+    avatar(PAD + 50, 190, 30, 'CA', C.info);
+    txt('CoolAir AC Services', PAD + 94, 182, 22, 700, C.ink);
+    txt('Split AC service · 45 min', PAD + 94, 210, 18, 500, C.gray);
+    sectionTitle('Choose a date', 290);
+    const days = [['Tue', 13], ['Wed', 14], ['Thu', 15], ['Fri', 16], ['Sat', 17]];
+    const dw = 76, dg = (CW - 5 * dw) / 4;
+    days.forEach(([d, n], i) => {
+      const x = PAD + i * (dw + dg), sel = i === 1 && lt > 0.75;
+      rr(x, 308, dw, 92, 18, sel ? C.navy : '#FFFFFF', sel ? null : C.line);
+      txt(d, x + dw / 2, 342, 17, 600, sel ? C.muted : C.gray, 'center');
+      txt(String(n), x + dw / 2, 380, 26, 800, sel ? '#FFFFFF' : C.ink, 'center');
+    });
+    tap(PAD + dw + dg + dw / 2, 354, lt, 0.55);
+    sectionTitle('Choose a time', 452);
+    const slots = ['9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM'];
+    const taken = new Set([1, 5]);
+    const sw = (CW - 24) / 3;
+    slots.forEach((s, i) => {
+      const x = PAD + (i % 3) * (sw + 12), y = 470 + Math.floor(i / 3) * 72, sel = i === 2 && lt > 1.15;
+      pop(seg(lt, 0.7 + i * 0.03, 0.95 + i * 0.03), x + sw / 2, y + 30, () => {
+        rr(x, y, sw, 60, 14, sel ? C.amber : taken.has(i) ? '#F2F4F7' : '#FFFFFF', sel || taken.has(i) ? null : C.line);
+        txt(s, x + sw / 2, y + 38, 18, sel ? 800 : 600, sel ? C.navy : taken.has(i) ? C.faintUi : C.ink, 'center');
+      });
+    });
+    tap(PAD + 2 * (sw + 12) + sw / 2, 500, lt, 0.95);
+    rr(PAD, 712, CW, 74, 37, C.navy);
+    txt('Confirm booking', SW / 2, 757, 22, 800, '#FFFFFF', 'center');
+    tap(SW / 2, 749, lt, 1.4);
+    // confirmation sheet
+    const p = seg(lt, 1.65, 2.0);
+    if (p > 0) {
+      ctx.fillStyle = `rgba(11,18,32,${0.35 * p})`; ctx.fillRect(0, 0, SW, SH);
+      slide(p, 0, 420, () => {
+        rr(0, 520, SW, 480, 36, '#FFFFFF');
+        ctx.fillStyle = C.successSoft; ctx.beginPath(); ctx.arc(SW / 2, 620, 58, 0, Math.PI * 2); ctx.fill();
+        drawIcon('check', SW / 2, 620, 56, C.success, 3, seg(lt, 1.85, 2.2));
+        txt('Booking confirmed!', SW / 2, 726, 31, 800, C.ink, 'center');
+        txt('Wed, 14 Oct · 11:00 AM', SW / 2, 764, 21, 600, C.ink2, 'center');
+        txt('CoolAir AC Services will see you then.', SW / 2, 800, 19, 500, C.gray, 'center');
+      });
+    }
+  },
+
+  availability(lt) {
+    txt('Available right now', PAD, 186, 29, 800, C.ink);
+    const blink = 0.5 + 0.5 * Math.sin(lt * 7);
+    rr(SW - PAD - 84, 158, 84, 38, 19, C.successSoft);
+    ctx.fillStyle = `rgba(6,118,71,${0.4 + 0.6 * blink})`; ctx.beginPath(); ctx.arc(SW - PAD - 62, 177, 6, 0, Math.PI * 2); ctx.fill();
+    txt('LIVE', SW - PAD - 48, 184, 17, 800, C.success);
+    let x = PAD;
+    ['Online', 'Call', 'Chat', 'Video'].forEach((c, i) => {
+      x += pill(x, 214, c, i === 0 ? C.navy : '#FFFFFF', i === 0 ? '#FFFFFF' : C.ink2, 17) + 10;
+    });
+    const flip = seg(lt, 1.45, 1.75);
+    const rows = [
+      ['Sharma Electricals', 'Electrician · 1.2 km', 'SE', C.navy, 'Online now', C.success, C.successSoft, [1, 1, 0]],
+      ['Glow Beauty Salon', 'Salon · 0.9 km', 'GB', '#C11574', 'Available for call', C.accentInk, C.accentSoft, [1, 0, 0]],
+      flip > 0.5 ? ['Dr. Mehta Clinic', 'Clinic · 2.0 km', 'DM', '#1570EF', 'Online now', C.success, C.successSoft, [1, 1, 1]]
+                 : ['Dr. Mehta Clinic', 'Clinic · 2.0 km', 'DM', '#1570EF', 'Busy · back at 4 PM', C.danger, '#FEF3F2', [0, 0, 0]],
+      ['QuickFix Plumbing', 'Plumber · 1.8 km', 'QP', '#067647', 'Available for chat', C.info, '#EFF8FF', [0, 1, 0]],
+    ];
+    rows.forEach(([name, meta, ini, col, status, sc, sb, ch], i) => slide(seg(lt, 0.25 + i * 0.12, 0.65 + i * 0.12), 0, 50, () => {
+      const y = 286 + i * 160;
+      const glow = i === 2 ? Math.sin(flip * Math.PI) : 0;
+      card(PAD, y, CW, 144, 20, glow > 0.05 ? C.success : C.line);
+      avatar(PAD + 52, y + 52, 30, ini, col);
+      txt(name, PAD + 98, y + 46, 22, 700, C.ink);
+      txt(meta, PAD + 98, y + 74, 17, 500, C.gray);
+      const pulse = 0.55 + 0.45 * Math.sin(lt * 6 + i);
+      ctx.save(); ctx.globalAlpha *= i === 2 ? lerp(1, 0.3, Math.sin(flip * Math.PI)) : 1;
+      pill(PAD + 20, y + 96, status, sb, sc, 16, sc);
+      ctx.restore();
+      ctx.fillStyle = sc; ctx.globalAlpha = 0.25 * pulse;
+      ctx.beginPath(); ctx.arc(PAD + 40, y + 113, 11, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+      ['phone', 'chat', 'video'].forEach((ic, k) => {
+        const cx = PAD + CW - 120 + k * 44, on = ch[k];
+        ctx.fillStyle = on ? C.successSoft : '#F2F4F7'; ctx.beginPath(); ctx.arc(cx, y + 113, 17, 0, Math.PI * 2); ctx.fill();
+        drawIcon(ic, cx, y + 113, 18, on ? C.success : C.faintUi, 2.2);
+      });
+    }));
+  },
+
+  reviews(lt) {
+    pop(seg(lt, 0.15, 0.5), SW / 2, 240, () => {
+      card(PAD, 142, CW, 210, 22);
+      txt('4.8', PAD + 26, 236, 72, 800, C.ink);
+      stars(PAD + 28, 270, 20, 4.8 * seg(lt, 0.3, 0.9), 3);
+      txt('126 reviews', PAD + 28, 316, 18, 500, C.gray);
+      [0.84, 0.11, 0.03, 0.01, 0.01].forEach((v, i) => {
+        const y = 180 + i * 32, x = PAD + 200;
+        txt(String(5 - i), x, y + 7, 16, 700, C.gray);
+        rr(x + 20, y - 4, 200, 10, 5, '#F2F4F7');
+        rr(x + 20, y - 4, Math.max(200 * v * easeOutCubic(seg(lt, 0.4 + i * 0.05, 1.0 + i * 0.05)), 0.1), 10, 5, C.amber);
+      });
+    });
+    slide(seg(lt, 0.7, 1.1), 0, 50, () => {
+      card(PAD, 372, CW, 196, 20);
+      avatar(PAD + 46, 418, 26, 'PR', '#7A5AF8');
+      txt('Priya Reddy', PAD + 84, 412, 20, 700, C.ink);
+      stars(PAD + 84, 432, 16, 5, 3);
+      txt('2 days ago', PAD + CW - 20, 412, 16, 500, C.faintUi, 'right');
+      txt('Arrived on time and fixed the wiring', PAD + 22, 490, 19, 500, C.ink2);
+      txt('quickly. Highly recommended!', PAD + 22, 518, 19, 500, C.ink2);
+    });
+    slide(seg(lt, 1.15, 1.5), 40, 0, () => {
+      rr(PAD + 40, 584, CW - 40, 112, 18, C.accentSoft);
+      txt('Reply from Sharma Electricals', PAD + 62, 624, 17, 700, C.accentInk);
+      txt('Thank you, Priya! We are glad', PAD + 62, 656, 18, 500, C.ink2);
+      txt('we could help.', PAD + 62, 682, 18, 500, C.ink2);
+    });
+    slide(seg(lt, 1.5, 1.9), 0, 50, () => {
+      card(PAD, 716, CW, 186, 20);
+      avatar(PAD + 46, 762, 26, 'AK', '#067647');
+      txt('Arjun Kumar', PAD + 84, 756, 20, 700, C.ink);
+      stars(PAD + 84, 776, 16, 4, 3);
+      txt('1 week ago', PAD + CW - 20, 756, 16, 500, C.faintUi, 'right');
+      txt('Great service at a fair price. The', PAD + 22, 834, 19, 500, C.ink2);
+      txt('team was polite and professional.', PAD + 22, 862, 19, 500, C.ink2);
+    });
+  },
+
+  offers(lt) {
+    txt('Offers near you', PAD, 186, 29, 800, C.ink);
+    txt('Hand-picked deals from local businesses', PAD, 218, 18, 500, C.gray);
+    const coupons = [
+      ['20%', 'OFF', 'First AC service', 'CoolAir AC Services', 'COOL20', C.amber, C.navy],
+      ['₹150', 'OFF', 'Home deep cleaning', 'SparkleHome Cleaners', 'CLEAN150', C.navy, C.amber],
+      ['FREE', 'VISIT', 'Plumbing inspection', 'QuickFix Plumbing', 'FIXFREE', '#067647', '#FFFFFF'],
+    ];
+    coupons.forEach(([big, small, title, biz, code, bg, fg], i) => slide(seg(lt, 0.3 + i * 0.18, 0.7 + i * 0.18), 320, 0, () => {
+      const y = 246 + i * 222, h = 196, lw = 150;
+      ctx.save();
+      ctx.shadowColor = 'rgba(16,24,40,0.10)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 4;
+      rr(PAD, y, CW, h, 22, '#FFFFFF');
+      ctx.restore();
+      ctx.save(); ctx.beginPath(); ctx.roundRect(PAD, y, CW, h, 22); ctx.clip();
+      ctx.fillStyle = bg; ctx.fillRect(PAD, y, lw, h); ctx.restore();
+      txt(big, PAD + lw / 2, y + 100, big.length > 3 ? 40 : 46, 900, fg, 'center');
+      txt(small, PAD + lw / 2, y + 134, 20, 800, fg, 'center');
+      ctx.fillStyle = C.canvas;
+      ctx.beginPath(); ctx.arc(PAD + lw, y, 14, 0, Math.PI * 2); ctx.arc(PAD + lw, y + h, 14, 0, Math.PI * 2); ctx.fill();
+      ctx.setLineDash([6, 6]); ctx.strokeStyle = C.line; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(PAD + lw, y + 18); ctx.lineTo(PAD + lw, y + h - 18); ctx.stroke(); ctx.setLineDash([]);
+      txt(title, PAD + lw + 22, y + 52, 21, 800, C.ink);
+      txt(biz, PAD + lw + 22, y + 80, 17, 500, C.gray);
+      const applied = i === 0 && lt > 1.85;
+      ctx.setLineDash(applied ? [] : [5, 4]);
+      rr(PAD + lw + 22, y + 108, 150, 44, 10, applied ? C.successSoft : C.accentSoft, applied ? C.success : C.amberDeep, 2);
+      ctx.setLineDash([]);
+      txt(applied ? 'Applied' : code, PAD + lw + 97, y + 137, 17, 800, applied ? C.success : C.accentInk, 'center');
+      if (i === 1) pill(PAD + CW - 16, y + h - 46, 'Sponsored', '#F2F4F7', C.gray, 13, null, 'right');
+    }));
+    tap(PAD + 150 + 97, 246 + 130, lt, 1.6);
+  },
+
+  register(lt) {
+    txt('List your business', PAD, 186, 29, 800, C.ink);
+    const step = Math.min(4, 1 + Math.floor(seg(lt, 0.25, 1.75) * 4));
+    txt(`Step ${step} of 4`, PAD, 218, 18, 600, C.gray);
+    const labels = ['Details', 'Services', 'Photos', 'Plan'];
+    const gap = (CW - 60) / 3;
+    labels.forEach((l, i) => {
+      const cx = PAD + 30 + i * gap, done = i + 1 < step || lt > 1.9, cur = i + 1 === step && !done;
+      if (i < 3) {
+        rr(cx + 22, 263, gap - 44, 4, 2, C.line);
+        const f = clamp(step - 1 - i + (lt > 1.9 ? 1 : 0));
+        if (f > 0) rr(cx + 22, 263, (gap - 44) * f, 4, 2, C.amber);
+      }
+      ctx.fillStyle = done ? C.amber : '#FFFFFF'; ctx.beginPath(); ctx.arc(cx, 265, 22, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = done ? C.amber : cur ? C.navy : C.line; ctx.lineWidth = 3; ctx.stroke();
+      if (done) drawIcon('check', cx, 265, 22, C.navy, 3.2);
+      else txt(String(i + 1), cx, 272, 19, 800, cur ? C.navy : C.faintUi, 'center');
+      txt(l, cx, 312, 15, 600, cur || done ? C.ink : C.faintUi, 'center');
+    });
+    card(PAD, 338, CW, 384, 20);
+    const fields = [['Business name', 'Sharma Electricals', 0.3], ['Category', 'Electricians', 0.65], ['City', 'Hyderabad', 0.95], ['Phone', '+91 98765 43210', 1.2]];
+    fields.forEach(([label, value, at], i) => {
+      const y = 362 + i * 88;
+      txt(label, PAD + 22, y + 14, 16, 600, C.gray);
+      const active = lt > at && lt < at + 0.4;
+      rr(PAD + 22, y + 26, CW - 44, 50, 12, '#FFFFFF', active ? C.amber : C.line, active ? 2.5 : 2);
+      const n = Math.floor(value.length * seg(lt, at, at + 0.3));
+      txt(value.slice(0, n), PAD + 40, y + 59, 19, 600, C.ink);
+    });
+    sectionTitle('Photos and logo', 768);
+    const thumbs = [['#1A2540', C.amber], [C.amber, C.navy], ['#D6EAD8', '#067647']];
+    thumbs.forEach(([bg, fg], i) => {
+      const x = PAD + i * ((CW - 24) / 3 + 12), w = (CW - 24) / 3, filled = lt > 1.3 + i * 0.12;
+      rr(x, 788, w, 108, 16, filled ? bg : '#FFFFFF', filled ? null : C.line);
+      if (!filled) { ctx.setLineDash([6, 5]); rr(x, 788, w, 108, 16, null, C.faintUi); ctx.setLineDash([]); }
+      drawIcon(i === 0 ? 'store' : 'image', x + w / 2, 842, 36, filled ? fg : C.faintUi, 2);
+    });
+    const p = seg(lt, 1.95, 2.3);
+    if (p > 0) {
+      ctx.fillStyle = `rgba(247,248,250,${p})`; ctx.fillRect(0, 124, SW, SH);
+      pop(p, SW / 2, 520, () => {
+        for (let i = 0; i < 28; i++) {
+          const a = Math.PI * (1.05 + rand(i) * 0.9), d = 90 + rand(i + 9) * 130 * easeOutCubic(seg(lt, 1.95, 2.6));
+          ctx.fillStyle = [C.amber, C.navy, C.info, C.success][i % 4];
+          ctx.fillRect(SW / 2 + Math.cos(a) * d, 470 + Math.sin(a) * d, 9, 14);
+        }
+        ctx.fillStyle = C.amber; ctx.beginPath(); ctx.arc(SW / 2, 470, 62, 0, Math.PI * 2); ctx.fill();
+        drawIcon('store', SW / 2, 470, 58, C.navy, 2.2);
+        txt('Your business is live!', SW / 2, 590, 30, 800, C.ink, 'center');
+        txt('Customers near you can now find', SW / 2, 630, 20, 500, C.gray, 'center');
+        txt('and book Sharma Electricals.', SW / 2, 658, 20, 500, C.gray, 'center');
+      });
+    }
+  },
+};
+
+const FEATURES = [
+  { tag: 'For customers', icon: 'search', title: 'Discover local businesses', line: 'Browse trusted electricians, plumbers, salons and more in your area.', screen: SCREENS.discovery },
+  { tag: 'For customers', icon: 'sparkles', title: 'AI-powered search', line: 'Just type what you need, and our AI finds the right business for you.', screen: SCREENS.aiSearch },
+  { tag: 'For customers', icon: 'pin', title: 'Services near you', line: 'See trusted businesses around your location, sorted by distance.', screen: SCREENS.location },
+  { tag: 'For customers', icon: 'store', title: 'Detailed business listings', line: 'Compare services, prices, photos and ratings in one place.', screen: SCREENS.listing },
+  { tag: 'For businesses', icon: 'trending', title: 'Get quality leads', line: 'Receive enquiries, quote requests and callbacks the moment they arrive.', screen: SCREENS.leads },
+  { tag: 'For customers', icon: 'calendar', title: 'Book online in seconds', line: 'Pick a date and a time slot, and your booking is confirmed instantly.', screen: SCREENS.booking },
+  { tag: 'For customers', icon: 'clock', title: 'Real-time availability', line: 'Know who is open, online or free to take your call right now.', screen: SCREENS.availability },
+  { tag: 'For customers', icon: 'star', title: 'Genuine customer reviews', line: 'Read honest ratings and reviews before you decide.', screen: SCREENS.reviews },
+  { tag: 'For customers', icon: 'tag', title: 'Exclusive local offers', line: 'Save more with special deals from businesses near you.', screen: SCREENS.offers },
+  { tag: 'For businesses', icon: 'store', title: 'Register your business', line: 'Create your business listing in a few simple steps and start growing.', screen: SCREENS.register },
+];
+
+// ---------- background ----------
+function drawBackground(t) {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#0E1729'); g.addColorStop(0.55, C.navy); g.addColorStop(1, '#040A15');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  const blob = (x, y, r, rgb, a) => {
+    const rg = ctx.createRadialGradient(x, y, 0, x, y, r);
+    rg.addColorStop(0, `rgba(${rgb},${a})`); rg.addColorStop(1, `rgba(${rgb},0)`);
+    ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+  };
+  blob(260 + 140 * Math.sin(t * 0.45), 520 + 120 * Math.cos(t * 0.38), 760, '244,166,44', 0.16);
+  blob(860 + 90 * Math.cos(t * 0.5), 1500 + 140 * Math.sin(t * 0.33), 820, '21,112,239', 0.13);
+  ctx.fillStyle = 'rgba(255,255,255,0.045)';
+  const off = (t * 18) % 60;
+  for (let y = -60 + off; y < H; y += 60)
+    for (let x = 30; x < W; x += 60) { ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2); ctx.fill(); }
+  for (let i = 0; i < 26; i++) {
+    const sp = 30 + rand(i) * 70;
+    const x = rand(i + 50) * W + Math.sin(t * 0.8 + i) * 18;
+    const y = ((rand(i + 100) * (H + 200) - t * sp) % (H + 200) + H + 200) % (H + 200) - 100;
+    ctx.fillStyle = `rgba(244,166,44,${0.12 + rand(i + 200) * 0.3})`;
+    ctx.beginPath(); ctx.arc(x, y, 2 + rand(i + 150) * 4, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+function drawRipples(cx, cy, lt, r0, spread, count = 3, lw = 4, maxA = 0.5) {
+  if (lt < 0) return;
+  for (let k = 0; k < count; k++) {
+    const ph = lt * 0.85 - k * 0.28;
+    if (ph < 0 || ph > 1) continue;
+    ctx.strokeStyle = `rgba(244,166,44,${(1 - ph) * maxA})`;
+    ctx.lineWidth = lw * (1 - ph * 0.5);
+    ctx.beginPath(); ctx.arc(cx, cy, r0 + easeOutCubic(ph) * spread, 0, Math.PI * 2); ctx.stroke();
+  }
+}
+
+// ---------- logo choreography ----------
+const HEADER = { x: 118, y: 168, size: 104 };
+const CENTER_INTRO = { x: 540, y: 820, size: 380 };
+const CENTER_OUTRO = { x: 540, y: 560, size: 300 };
+
+function logoState(t) {
+  if (t < 2.75) {
+    const p = easeOutBack(seg(t, 0.1, 0.85));
+    return { x: CENTER_INTRO.x, y: CENTER_INTRO.y, size: CENTER_INTRO.size * p, ring: ringAngle(t - 0.85), waves: seg(t, 0.9, 1.5), glow: 1 };
+  }
+  if (t < T_OUT) {
+    const p = easeInOutCubic(seg(t, 2.75, 3.4));
+    let ring = 0;
+    if (t >= T_FEAT && t < T_RECAP) ring = ringAngle(((t - T_FEAT) % FEAT_D) - 0.05) * 0.8;
+    if (t >= T_RECAP) ring = ringAngle(t - T_RECAP - 0.1) * 0.8;
+    return { x: lerp(CENTER_INTRO.x, HEADER.x, p), y: lerp(CENTER_INTRO.y, HEADER.y, p), size: lerp(CENTER_INTRO.size, HEADER.size, p), ring, waves: 1, glow: lerp(1, 0.5, p) };
+  }
+  const p = easeInOutCubic(seg(t, T_OUT, T_OUT + 0.75));
+  return { x: lerp(HEADER.x, CENTER_OUTRO.x, p), y: lerp(HEADER.y, CENTER_OUTRO.y, p), size: lerp(HEADER.size, CENTER_OUTRO.size, p),
+           ring: ringAngle(t - T_OUT - 0.75), waves: 1, glow: lerp(0.5, 1, p) };
+}
+
+// ---------- scenes ----------
+function sceneIntro(t) {
+  if (t > 3.4) return;
+  drawRipples(CENTER_INTRO.x, CENTER_INTRO.y, t - 0.85, 220, 560, 3, 5, 0.55);
+  const out = easeInCubic(seg(t, 2.6, 3.0));
+  ctx.save();
+  ctx.globalAlpha = 1 - out; ctx.translate(0, -out * 80);
+  drawWordmark(540, 1200, 124, 'center', seg(t, 1.15, 1.75));
+  font(500, 46); ctx.textAlign = 'center'; ctx.letterSpacing = '0px';
+  revealText('Your local business network', 540, 1295, 46, seg(t, 1.55, 2.05), C.muted);
+  ctx.restore();
+}
+
+function sceneHook(t) {
+  if (t < T_HOOK || t > T_FEAT + 0.2) return;
+  const out = easeInCubic(seg(t, T_FEAT - 0.35, T_FEAT));
+  ctx.save();
+  ctx.globalAlpha = 1 - out; ctx.translate(-out * 260, 0);
+  ctx.textAlign = 'center'; ctx.letterSpacing = '-3px';
+  font(800, 100);
+  revealText('Need a trusted', 540, 760, 100, seg(t, 3.35, 3.85), C.white);
+  revealText('local business?', 540, 870, 100, seg(t, 3.45, 3.95), C.white);
+  font(800, 84); ctx.letterSpacing = '-2px';
+  revealText('CallInBell connects', 540, 1030, 84, seg(t, 3.9, 4.4), C.amber);
+  revealText('you in seconds.', 540, 1124, 84, seg(t, 4.0, 4.5), C.amber);
+  ctx.letterSpacing = '0px'; font(500, 40);
+  revealText('Discover, compare and book the best', 540, 1240, 40, seg(t, 4.4, 4.85), C.muted);
+  revealText('businesses around you, all in one place.', 540, 1292, 40, seg(t, 4.5, 4.95), C.muted);
+  // floating category chips
+  const chips = [['zap', 'Electricians', 170, 1470], ['wrench', 'Plumbers', 560, 1430], ['scissors', 'Salons', 880, 1500],
+                 ['snowflake', 'AC Repair', 300, 1590], ['book', 'Tutors', 720, 1600]];
+  chips.forEach(([icon, label, x, y], i) => {
+    const p = easeOutBack(seg(t, 4.6 + i * 0.08, 5.0 + i * 0.08));
+    if (p <= 0) return;
+    ctx.save();
+    ctx.translate(x, y + Math.sin(t * 2 + i) * 8); ctx.scale(p, p);
+    font(600, 32);
+    const w = ctx.measureText(label).width + 100;
+    rr(-w / 2, -36, w, 72, 36, 'rgba(255,255,255,0.07)', 'rgba(244,166,44,0.45)');
+    drawIcon(icon, -w / 2 + 40, 0, 30, C.amber, 2.2);
+    ctx.fillStyle = C.white; ctx.textAlign = 'left'; ctx.fillText(label, -w / 2 + 68, 11);
+    ctx.restore();
+  });
+  ctx.restore();
+}
+
+function drawHeader(t) {
+  const a = seg(t, 3.15, 3.55) * (1 - seg(t, T_OUT - 0.25, T_OUT + 0.1));
+  if (a <= 0) return;
+  drawWordmark(HEADER.x + 78, HEADER.y + 20, 56, 'left', seg(t, 3.15, 3.7), a);
+  const ca = seg(t, T_FEAT, T_FEAT + 0.3) * (1 - seg(t, T_RECAP - 0.2, T_RECAP + 0.1));
+  if (ca > 0) {
+    const idx = clamp(Math.floor((t - T_FEAT) / FEAT_D), 0, N_FEAT - 1);
+    ctx.save();
+    ctx.globalAlpha = ca; ctx.letterSpacing = '1px';
+    font(700, 40); ctx.textAlign = 'right';
+    ctx.fillStyle = C.faint; ctx.fillText(' / 10', 962, HEADER.y + 16);
+    const w = ctx.measureText(' / 10').width;
+    ctx.fillStyle = C.amber; ctx.fillText(String(idx + 1).padStart(2, '0'), 962 - w, HEADER.y + 16);
+    ctx.restore();
+  }
+}
+
+function slotOffset(lt, delay) {
+  const e = seg(lt, delay, delay + 0.42);
+  const x = seg(lt, FEAT_D - 0.34 + delay * 0.5, FEAT_D - 0.02 + delay * 0.5);
+  return (1 - easeOutCubic(e)) * W * 0.95 - easeInCubic(x) * W * 1.05;
+}
+
+function drawFeature(f, lt) {
+  // tag pill with the feature icon
+  ctx.save();
+  ctx.translate(slotOffset(lt, 0), 0);
+  font(700, 26); ctx.letterSpacing = '3px';
+  const label = f.tag.toUpperCase();
+  const tw = ctx.measureText(label).width + 104;
+  const biz = f.tag === 'For businesses';
+  rr(540 - tw / 2, 252, tw, 64, 32, biz ? C.amber : 'rgba(244,166,44,0.12)', biz ? null : 'rgba(244,166,44,0.6)');
+  drawIcon(f.icon, 540 - tw / 2 + 42, 284, 28, biz ? C.navy : C.amber, 2.2);
+  ctx.fillStyle = biz ? C.navy : C.amber; ctx.textAlign = 'left';
+  ctx.fillText(label, 540 - tw / 2 + 70, 293);
+  ctx.restore();
+
+  // headline + supporting sentence
+  ctx.save();
+  ctx.translate(slotOffset(lt, 0.05), 0);
+  ctx.textAlign = 'center'; ctx.letterSpacing = '-2px'; font(800, 78);
+  const head = wrap(f.title, 960);
+  head.forEach((l, i) => revealText(l, 540, 410 + i * 88, 78, seg(lt, 0.1 + i * 0.06, 0.55 + i * 0.06), C.white));
+  ctx.restore();
+  ctx.save();
+  ctx.translate(slotOffset(lt, 0.1), 0);
+  ctx.textAlign = 'center'; ctx.letterSpacing = '0px'; font(500, 38);
+  const lines = wrap(f.line, 900);
+  const y0 = 410 + (head.length - 1) * 88 + 74;
+  lines.forEach((l, i) => revealText(l, 540, y0 + i * 50, 38, seg(lt, 0.22 + i * 0.06, 0.65 + i * 0.06), C.muted));
+  ctx.restore();
+
+  // phone
+  ctx.save();
+  ctx.translate(slotOffset(lt, 0.12), (1 - easeOutCubic(seg(lt, 0.05, 0.6))) * 140);
+  drawPhone(280, 732, 520, 1020, () => f.screen(lt));
+  ctx.restore();
+}
+
+function drawWhip(t) {
+  for (let k = 1; k < N_FEAT; k++) {
+    const b = T_FEAT + k * FEAT_D - 0.02;
+    const q = seg(t, b - 0.26, b + 0.2);
+    if (q <= 0 || q >= 1) continue;
+    const cx = lerp(W + 500, -500, easeInOutCubic(q));
+    ctx.save();
+    ctx.translate(cx, H / 2); ctx.transform(1, 0, -0.35, 1, 0, 0);
+    ctx.fillStyle = 'rgba(244,166,44,0.9)'; ctx.fillRect(-80, -H, 160, H * 2);
+    ctx.fillStyle = 'rgba(244,166,44,0.35)'; ctx.fillRect(130, -H, 46, H * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(-140, -H, 20, H * 2);
+    ctx.restore();
+  }
+}
+
+function drawProgress(t) {
+  const a = seg(t, T_FEAT, T_FEAT + 0.3) * (1 - seg(t, T_RECAP - 0.25, T_RECAP + 0.05));
+  if (a <= 0) return;
+  const gap = 10, w = (880 - gap * (N_FEAT - 1)) / N_FEAT, y = 1816;
+  ctx.save(); ctx.globalAlpha = a;
+  for (let i = 0; i < N_FEAT; i++) {
+    const x = 100 + i * (w + gap), f = clamp((t - T_FEAT - i * FEAT_D) / FEAT_D);
+    rr(x, y, w, 8, 4, 'rgba(255,255,255,0.12)');
+    if (f > 0) rr(x, y, w * f, 8, 4, C.amber);
+  }
+  ctx.restore();
+}
+
+function sceneFeatures(t) {
+  if (t < T_FEAT - 0.1 || t > T_RECAP + 0.1) return;
+  for (let i = 0; i < N_FEAT; i++) {
+    const lt = t - T_FEAT - i * FEAT_D;
+    if (lt >= 0 && lt <= FEAT_D) drawFeature(FEATURES[i], lt);
+  }
+  drawWhip(t);
+}
+
+function sceneRecap(t) {
+  const lt = t - T_RECAP;
+  if (lt < 0 || t > T_OUT + 0.3) return;
+  const out = seg(t, T_OUT - 0.35, T_OUT + 0.1);
+  ctx.save();
+  ctx.globalAlpha = 1 - easeInCubic(out);
+  ctx.translate(0, -easeInCubic(out) * 80);
+  ctx.textAlign = 'center'; ctx.letterSpacing = '-2.5px'; font(800, 88);
+  revealText('One platform.', 540, 400, 88, seg(lt, 0.05, 0.5), C.white);
+  revealText('Two ways to win.', 540, 500, 88, seg(lt, 0.15, 0.6), C.amber);
+  const cards = [
+    ['For customers', 'search', ['Find trusted local businesses', 'Search with AI in plain words', 'Check live availability', 'Book online in seconds', 'Read reviews and save with offers']],
+    ['For businesses', 'trending', ['Get discovered by nearby customers', 'Receive leads and enquiries instantly', 'Take online bookings', 'Show your availability in real time', 'Promote offers and grow faster']],
+  ];
+  cards.forEach(([title, icon, items], c) => {
+    const y = 590 + c * 590, p = seg(lt, 0.3 + c * 0.25, 0.75 + c * 0.25);
+    slide(p, 0, 80, () => {
+      rr(60, y, 960, 550, 40, 'rgba(255,255,255,0.06)', c ? 'rgba(244,166,44,0.55)' : 'rgba(255,255,255,0.12)');
+      ctx.fillStyle = C.amber; ctx.beginPath(); ctx.arc(140, y + 84, 40, 0, Math.PI * 2); ctx.fill();
+      drawIcon(icon, 140, y + 84, 40, C.navy, 2.4);
+      txt(title, 204, y + 100, 52, 800, C.white);
+      items.forEach((it, i) => {
+        const iy = y + 180 + i * 76, ip = seg(lt, 0.5 + c * 0.25 + i * 0.07, 0.8 + c * 0.25 + i * 0.07);
+        if (ip <= 0) return;
+        ctx.save(); ctx.globalAlpha *= clamp(ip * 1.5); ctx.translate((1 - easeOutCubic(ip)) * 40, 0);
+        ctx.fillStyle = 'rgba(244,166,44,0.16)'; ctx.beginPath(); ctx.arc(130, iy, 22, 0, Math.PI * 2); ctx.fill();
+        drawIcon('check', 130, iy, 24, C.amber, 3);
+        txt(it, 176, iy + 13, 38, 500, '#E2E8F0');
+        ctx.restore();
+      });
+    });
+  });
+  ctx.restore();
+}
+
+function sceneOutro(t) {
+  const lt = t - T_OUT;
+  if (lt < 0) return;
+  drawRipples(CENTER_OUTRO.x, CENTER_OUTRO.y, lt - 0.75, 180, 520, 3, 5, 0.5);
+  drawRipples(CENTER_OUTRO.x, CENTER_OUTRO.y, lt - 3.0, 180, 520, 2, 4, 0.3);
+
+  // brand message: "CallInBell – Discover. Connect. Book. Grow."
+  drawWordmark(540, 860, 112, 'center', seg(lt, 0.8, 1.35), 1, ' –');
+  ctx.save();
+  ctx.textAlign = 'left'; ctx.letterSpacing = '-1px'; font(700, 60);
+  const words = ['Discover.', 'Connect.', 'Book.', 'Grow.'];
+  const space = ctx.measureText(' ').width;
+  const widths = words.map(w => ctx.measureText(w).width);
+  let x = 540 - (widths.reduce((a, b) => a + b, 0) + space * 3) / 2;
+  words.forEach((w, i) => {
+    revealText(w, x, 960, 60, seg(lt, 1.15 + i * 0.12, 1.6 + i * 0.12), i % 2 ? C.amber : C.white);
+    x += widths[i] + space;
+  });
+  ctx.restore();
+
+  ctx.save();
+  ctx.textAlign = 'center'; ctx.letterSpacing = '0px'; font(500, 40);
+  revealText('Find a business or list yours today at', 540, 1120, 40, seg(lt, 1.7, 2.1), C.muted);
+  ctx.restore();
+
+  // website pill
+  const p = easeOutBack(seg(lt, 1.9, 2.4));
+  if (p > 0) {
+    const pulse = 1 + 0.022 * Math.sin((lt - 2.4) * 5) * seg(lt, 2.4, 2.8);
+    const w = 820, h = 150, cx = 540, cy = 1250;
+    ctx.save();
+    ctx.translate(cx, cy); ctx.scale(p * pulse, p * pulse); ctx.translate(-cx, -cy);
+    ctx.globalAlpha = clamp(p);
+    ctx.shadowColor = 'rgba(244,166,44,0.6)'; ctx.shadowBlur = 60;
+    const g = ctx.createLinearGradient(cx - w / 2, 0, cx + w / 2, 0);
+    g.addColorStop(0, C.amberHi); g.addColorStop(1, C.amber);
+    rr(cx - w / 2, cy - h / 2, w, h, h / 2, g);
+    ctx.shadowBlur = 0;
+    ctx.save();
+    ctx.beginPath(); ctx.roundRect(cx - w / 2, cy - h / 2, w, h, h / 2); ctx.clip();
+    const sx = lerp(cx - w, cx + w, seg(lt, 2.7, 3.4));
+    const sg = ctx.createLinearGradient(sx - 100, 0, sx + 100, 0);
+    sg.addColorStop(0, 'rgba(255,255,255,0)'); sg.addColorStop(0.5, 'rgba(255,255,255,0.55)'); sg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = sg; ctx.fillRect(cx - w / 2, cy - h / 2, w, h);
+    ctx.restore();
+    font(800, 66); ctx.letterSpacing = '-1px';
+    const tw = ctx.measureText('www.callinbell.com').width;
+    drawIcon('globe', cx - tw / 2 - 18, cy, 52, C.navy, 2.2);
+    ctx.textAlign = 'left'; ctx.fillStyle = C.navy;
+    ctx.fillText('www.callinbell.com', cx - tw / 2 + 24, cy + 24);
+    ctx.restore();
+  }
+
+  // two calls to action
+  const cta = [['Find a business', 'search', 300], ['List your business', 'store', 780]];
+  cta.forEach(([label, icon, cx], i) => {
+    const q = easeOutBack(seg(lt, 2.5 + i * 0.12, 2.9 + i * 0.12));
+    if (q <= 0) return;
+    ctx.save();
+    ctx.translate(cx, 1430); ctx.scale(q, q);
+    font(700, 34); ctx.letterSpacing = '0px';
+    const w = ctx.measureText(label).width + 110;
+    rr(-w / 2, -44, w, 88, 44, 'rgba(255,255,255,0.07)', 'rgba(244,166,44,0.55)');
+    drawIcon(icon, -w / 2 + 44, 0, 32, C.amber, 2.2);
+    ctx.fillStyle = C.white; ctx.textAlign = 'left'; ctx.fillText(label, -w / 2 + 76, 12);
+    ctx.restore();
+  });
+
+  // feature ticker
+  ctx.save();
+  ctx.globalAlpha = seg(lt, 2.8, 3.3);
+  font(600, 32); ctx.letterSpacing = '0.5px'; ctx.textAlign = 'left';
+  const items = ['Local discovery', 'AI search', 'Near you', 'Listings', 'Leads', 'Online booking', 'Live availability', 'Reviews', 'Offers', 'Business sign-up'];
+  const strip = items.join('   •   ') + '   •   ';
+  const sw = ctx.measureText(strip).width;
+  const off = (lt * 90) % sw;
+  ctx.beginPath(); ctx.rect(0, 1560, W, 80); ctx.clip();
+  ctx.fillStyle = C.faint;
+  for (let x = -off; x < W; x += sw) ctx.fillText(strip, x, 1610);
+  ctx.restore();
+}
+
+function drawFinish(t) {
+  const v = ctx.createRadialGradient(540, 960, 600, 540, 960, 1250);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.4)');
+  ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+  const f = 1 - seg(t, 0, 0.35);
+  if (f > 0) { ctx.fillStyle = `rgba(4,8,16,${f})`; ctx.fillRect(0, 0, W, H); }
+}
+
+function renderFrame(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1; ctx.letterSpacing = '0px'; ctx.setLineDash([]);
+  drawBackground(t);
+  sceneIntro(t);
+  sceneHook(t);
+  sceneFeatures(t);
+  sceneRecap(t);
+  sceneOutro(t);
+  drawHeader(t);
+  drawProgress(t);
+  const L = logoState(t);
+  drawLogo(L.x, L.y, L.size, L);
+  drawFinish(t);
+}
+
+window.REEL = { W, H, DUR, renderFrame };
+window.reelReady = (async () => {
+  await Promise.all([400, 500, 600, 700, 800, 900].map(w => document.fonts.load(`${w} 40px CBInter`)));
+  renderFrame(0);
+  return true;
+})();
+
+const params = new URLSearchParams(location.search);
+if (params.has('render')) document.body.classList.add('render');
+else window.reelReady.then(() => {
+  const start = performance.now();
+  const at = params.has('t') ? parseFloat(params.get('t')) : null;
+  const loop = now => {
+    renderFrame(at ?? ((now - start) / 1000) % DUR);
+    if (at === null) requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+});
+</script>
+</body>
+</html>

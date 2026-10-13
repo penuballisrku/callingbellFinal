@@ -20,14 +20,14 @@
         try {
           var saved = JSON.parse(localStorage.getItem('cb-theme') || '{}');
           var s = saved.state || {};
-          // Dark is the default; v0 stored "system" as the old default.
-          var mode = !s.mode || ((saved.version || 0) < 1 && s.mode === 'system') ? 'dark' : s.mode;
+          // Light is the default (stores/theme.ts DEFAULT_MODE); v0 stored "system" as the old default.
+          var mode = !s.mode || ((saved.version || 0) < 1 && s.mode === 'system') ? 'light' : s.mode;
           var dark = mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
           document.documentElement.dataset.theme = dark ? 'dark' : 'light';
           // Paint the canvas colour immediately, before any stylesheet has loaded.
           document.documentElement.style.backgroundColor = dark ? '#080C14' : '#F7F8FA';
           document.documentElement.dataset.accent = s.accent || 'amber';
-        } catch (e) { document.documentElement.dataset.theme = 'dark'; }
+        } catch (e) { document.documentElement.dataset.theme = 'light'; }
         // The server renders each page's content into #root for crawlers (data-prerendered). Browsers running this script hide it
         // until React renders the real page over it, so visitors don't see an unstyled version flash first. If the app hasn't
         // started after 8 seconds (a script failed to load), the content is shown after all.

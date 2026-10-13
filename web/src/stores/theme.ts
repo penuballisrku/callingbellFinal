@@ -21,15 +21,18 @@ interface ThemeState {
   setAccent: (accent: AccentTheme) => void;
 }
 
-/** Dark is the default experience; users can switch to Light or Auto (follow the device). */
-export const DEFAULT_MODE: ThemeMode = 'dark';
+/**
+ * Light is the default experience (the brand palette: white surfaces, #F7F8FA canvas, navy header bands and footer, amber accent);
+ * users can switch to Dark or Auto (follow the device), and their choice is kept.
+ */
+export const DEFAULT_MODE: ThemeMode = 'light';
 
 // The storage key and version are also read by the pre-paint script in index.html - keep them in sync.
 export const useThemeSettings = create<ThemeState>()(
   persist((set) => ({ mode: DEFAULT_MODE, accent: 'amber', setMode: (mode) => set({ mode }), setAccent: (accent) => set({ accent }) }), {
     name: 'cb-theme',
     version: 1,
-    // v0 defaulted to "system"; move those devices to the new dark default.
+    // v0 defaulted to "system"; move those devices to the current default.
     migrate: (persisted, version) => {
       const state = persisted as Partial<ThemeState>;
       return version < 1 && state.mode === 'system' ? { ...state, mode: DEFAULT_MODE } : state;

@@ -66,9 +66,13 @@ export default function RegisterPage() {
   return (
     <AuthShell title={type === 'BusinessOwner' ? 'List your business' : 'Create your account'}
       subtitle={type === 'BusinessOwner' ? 'Create your business account, then set up your business profile.' : 'Save favourites, book services and track requests.'}>
-      <ToggleButtonGroup exclusive fullWidth size="small" value={type} aria-label="Account type" sx={{ mb: 3 }}
+      {/* Both choices on one line at every width (a long label used to wrap on phones, making the two tabs uneven). */}
+      <ToggleButtonGroup exclusive fullWidth size="small" value={type} aria-label="Account type"
+        sx={{ mb: 3, '& .MuiToggleButton-root': { whiteSpace: 'nowrap', px: 1, fontSize: { xs: 13, sm: 14 } } }}
         onChange={(_, v: AccountType | null) => { if (v) choose(v); }}>
-        <ToggleButton value="Customer">I'm looking for services</ToggleButton>
+        <ToggleButton value="Customer" aria-label="I'm looking for services">
+          <span className="sm:hidden">Find services</span><span className="hidden sm:inline">I'm looking for services</span>
+        </ToggleButton>
         <ToggleButton value="BusinessOwner">I own a business</ToggleButton>
       </ToggleButtonGroup>
       {noOwnerAccess && type === 'BusinessOwner' && (

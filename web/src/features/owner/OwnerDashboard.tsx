@@ -111,7 +111,8 @@ export default function OwnerDashboard() {
             </div>
           </Panel>
 
-          <div className="grid gap-6 lg:grid-cols-2">
+          {/* items-start: a short list isn't stretched to the longer one's height (a tall empty card). */}
+          <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
             <Panel title="Recent leads" action={<Button size="small" component={Link} to="/owner/leads">View all</Button>} noPad>
               {isLoading ? <div className="p-5"><Skeleton height={200} /></div> : !data!.recentLeads.length ? <EmptyState title="No leads yet" message="Leads from your profile and search will appear here." /> : (
                 <ul className="divide-y divide-line">

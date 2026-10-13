@@ -228,7 +228,7 @@ export default function BusinessPage() {
                 {c.acceptsOnlineBooking && <Button fullWidth variant="contained" size="large" startIcon={<EventAvailableRounded />} onClick={() => requireLogin(() => setBooking({}))}>Book an appointment</Button>}
                 <div className="space-y-2.5 border-t border-line pt-3">
                   {b.phoneNumber && <Row icon={<CallRounded fontSize="small" />}>{b.phoneNumber}</Row>}
-                  {b.email && <Row icon={<MailOutlineRounded fontSize="small" />}><a href={`mailto:${b.email}`} className="break-all hover:underline">{b.email}</a></Row>}
+                  {b.email && <Row icon={<MailOutlineRounded fontSize="small" />}><a href={`mailto:${b.email}`} title={b.email} className="block min-w-0 truncate hover:underline">{b.email}</a></Row>}
                   {b.website && <Row icon={<LanguageOutlined fontSize="small" />}><a href={b.website} target="_blank" rel="noopener" className="break-all hover:underline">{b.website.replace(/^https?:\/\//, '')}</a></Row>}
                   {b.socialLinks?.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 pt-1" aria-label="Social media">

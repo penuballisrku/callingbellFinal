@@ -39,7 +39,8 @@ export function usePresence(businessIds: string[], onChange: (e: AvailabilityEve
     const ids = key.split(',');
     let active = true;
     let conn: HubConnection | null = null;
-    const listener = (e: AvailabilityEvent) => handler.current(e);
+    // Returns nothing: SignalR treats a returned value as a reply to the server and logs an error.
+    const listener = (e: AvailabilityEvent) => { handler.current(e); };
     const watch = async () => {
       if (active && conn?.state === 'Connected') await conn.invoke('Watch', ids).catch(() => undefined);
     };

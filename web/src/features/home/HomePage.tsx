@@ -71,9 +71,12 @@ export default function HomePage() {
             subtitle={categoryTree ? `Trusted professionals across ${number(categoryTree.reduce((n, c) => n + c.subCategories.length, 0))} services in ${categoryTree.length} categories` : 'Trusted professionals for every local need'}
             action={<Link to="/categories" className="hidden items-center gap-1 text-sm font-semibold sm:inline-flex">All categories <ArrowForwardRounded sx={{ fontSize: 18 }} /></Link>} />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-            {isLoading ? Array.from({ length: 12 }, (_, i) => <Skeleton key={i} variant="rounded" height={168} />) : popularSubs.map((c, i) => (
-              // 12 cards (whole rows at 2/3/4 columns) below lg, 18 (three rows of six) on desktop.
-              <Link key={c.id} to={`/search?sub=${c.slug}`} className={`group card overflow-hidden transition-colors hover:border-line-strong ${i >= 12 ? 'hidden lg:block' : ''}`}>
+            {isLoading ? Array.from({ length: 18 }, (_, i) => (
+              <Skeleton key={i} variant="rounded" height={168} className={i >= 12 ? 'hidden lg:block' : i >= 8 ? 'hidden sm:block' : undefined} />
+            )) : popularSubs.map((c, i) => (
+              // Whole rows: 8 on phones (2 columns), 12 at 3/4 columns, 18 (three rows of six) on desktop.
+              <Link key={c.id} to={`/search?sub=${c.slug}`}
+                className={`group card overflow-hidden transition-colors hover:border-line-strong ${i >= 12 ? 'hidden lg:block' : i >= 8 ? 'hidden sm:block' : ''}`}>
                 <Img src={c.imageUrl} alt={c.altText ?? c.name} aspect="16/10" rounded="rounded-none" className="w-full" fallbackText={c.name} />
                 <div className="flex items-center gap-2.5 p-3">
                   <Img src={c.iconUrl} alt="" className="h-8 w-8 shrink-0 p-1" rounded="rounded-lg" fit="contain" fallbackText={c.name} />
@@ -85,20 +88,14 @@ export default function HomePage() {
               </Link>
             ))}
           </div>
-          {categoryTree && (
-            <nav aria-label="Browse by category" className="mt-5 flex flex-wrap gap-2">
-              {categoryTree.map((c) => (
-                <Link key={c.id} to={`/categories/${c.slug}`}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface py-1 pl-1.5 pr-3 text-[13px] font-medium text-ink-2 transition-colors hover:border-line-strong hover:text-ink">
-                  <Img src={c.iconUrl} alt="" className="h-5 w-5 p-0.5" rounded="rounded-full" fit="contain" fallbackText={c.name} />
-                  {c.name}
-                </Link>
-              ))}
-              <Link to="/categories" className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-[13px] font-semibold text-ink-2 hover:text-accent-ink">
-                All categories <ArrowForwardRounded sx={{ fontSize: 16 }} />
-              </Link>
-            </nav>
-          )}
+          {/* One clear way on to every category (the grid above shows the most popular), visible on every screen size. */}
+          <div className="mt-5 flex justify-center">
+            <Link to="/categories"
+              className="inline-flex h-11 items-center gap-2 rounded-full border border-line bg-surface px-5 text-sm font-semibold text-ink transition-colors hover:border-line-strong">
+              Browse all {categoryTree ? `${number(categoryTree.length)} categories` : 'categories'}
+              <ArrowForwardRounded sx={{ fontSize: 18 }} />
+            </Link>
+          </div>
         </section>
 
         <PillarsSection />
@@ -167,7 +164,7 @@ function Hero({ data }: { data?: HomeData }) {
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.12em] text-accent">Discover. Connect. Book. Grow.</p>
           <h1 className="mt-3 text-[34px] font-extrabold leading-[1.08] tracking-[-0.035em] sm:text-5xl lg:text-[56px]">
-            Looking for <span className="text-accent">trusted</span> local services?
+            Find Local Services <span className="text-accent">Near You</span>
           </h1>
           <p className="mt-4 max-w-xl text-base text-on-navy-muted md:text-lg">Find pros who are available right now. Compare verified businesses, see live availability, request quotes and book in minutes.</p>
 
@@ -182,14 +179,21 @@ function Hero({ data }: { data?: HomeData }) {
               </SearchSuggest>
               <VoiceSearchButton onText={(t) => setQ(t)} submit size="medium" />
             </div>
-            <div className="min-w-0 sm:w-56 sm:shrink-0"><CitySelect size="medium" fullWidth height={48} /></div>
+            {/* text-ink: the hero's white text must not carry into this white field (the place name was invisible in light mode). */}
+            <div className="min-w-0 text-ink sm:w-56 sm:shrink-0"><CitySelect size="medium" fullWidth height={48} /></div>
             <Button type="submit" variant="contained" color="secondary" size="large" sx={{ height: 48, px: 3, flexShrink: 0 }}>Search</Button>
           </form>
-          <button type="button" onClick={() => openAssistant(q)}
-            className="group mt-3 inline-flex items-center gap-1.5 text-left text-sm text-on-navy-muted transition-colors hover:text-white">
-            <span className="cb-ai-spark text-accent"><AutoAwesomeRounded sx={{ fontSize: 16 }} /></span>
-            Not sure what to search for? <span className="font-semibold text-on-navy underline-offset-2 group-hover:underline">Describe it to our AI assistant</span>
-          </button>
+          {/* The AI assistant, clearly visible under the search: same animated look as the header's Ask AI. */}
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+            <button type="button" onClick={() => openAssistant(q)} aria-label="Ask the AI search assistant"
+              className="cb-ai-btn inline-flex h-10 items-center gap-2 rounded-full border border-[color-mix(in_srgb,var(--cb-accent)_55%,transparent)] bg-white/5 py-1 pl-1 pr-4 text-sm font-semibold text-white hover:border-accent hover:bg-white/10 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--cb-ring)]">
+              <span className="grid h-8 w-8 place-items-center rounded-full bg-accent text-on-accent">
+                <span className="cb-ai-spark"><AutoAwesomeRounded sx={{ fontSize: 17 }} /></span>
+              </span>
+              Ask AI
+            </button>
+            <span className="text-sm text-on-navy-muted">Not sure what to search for? Describe it in your own words.</span>
+          </div>
 
           <div className="mt-4 flex min-h-[34px] flex-wrap gap-2">
             {quickSearches.map((s) => (
@@ -406,7 +410,8 @@ function ServiceCard({ service: s }: { service: PopularService | NearbyService }
       <span aria-hidden className="absolute inset-x-0 top-0 z-10 h-[3px]" style={{ background: `linear-gradient(90deg, ${color}, ${color}33)` }} />
       <div className="relative">
         <div className="overflow-hidden">
-          <Img src={s.imageUrl} alt={s.altText ?? s.name} aspect="16/10" rounded="rounded-none" fallbackText={s.name}
+          {/* A wide, short band: the stored artwork is a soft pattern, so a tall frame read as an empty box. */}
+          <Img src={s.imageUrl} alt={s.altText ?? s.name} aspect="5/2" rounded="rounded-none" fallbackText={s.name}
             className="w-full transition-transform duration-300 ease-out group-hover:scale-[1.04] motion-reduce:transition-none motion-reduce:group-hover:scale-100" />
         </div>
         <span aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2" style={{ background: `linear-gradient(to top, ${color}1f, transparent)` }} />

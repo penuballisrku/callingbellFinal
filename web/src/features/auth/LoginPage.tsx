@@ -59,7 +59,7 @@ export default function LoginPage() {
         <TextField label="Password" type={show ? 'text' : 'password'} autoComplete="current-password" {...register('password')}
           error={!!errors.password} helperText={errors.password?.message}
           slotProps={{ input: { endAdornment: <InputAdornment position="end"><IconButton onClick={() => setShow((s) => !s)} edge="end" aria-label={show ? 'Hide password' : 'Show password'}>{show ? <VisibilityOffOutlined /> : <VisibilityOutlined />}</IconButton></InputAdornment> } }} />
-        <Button type="submit" variant="outlined" size="large" fullWidth disabled={isSubmitting}>{isSubmitting ? 'Signing in…' : 'Sign in with email'}</Button>
+        <Button type="submit" variant="contained" disableElevation size="large" fullWidth disabled={isSubmitting}>{isSubmitting ? 'Signing in…' : 'Sign in with email'}</Button>
       </form>
       <p className="mt-6 text-center text-sm text-muted">New to CallInBell? <Link to="/register" className="font-semibold text-ink underline-offset-2 hover:underline">Create an account</Link></p>
 

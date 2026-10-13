@@ -12,6 +12,7 @@ import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import WhatsApp from '@mui/icons-material/WhatsApp';
 import StarRounded from '@mui/icons-material/StarRounded';
 import { LogoMark } from '@/components/Logo';
+import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 import { Link, useSearchParams } from 'react-router';
 import { api } from '@/lib/api';
 import { number } from '@/lib/format';
@@ -362,11 +363,25 @@ type PlaceDetails = ReturnType<typeof usePlaceDetails>;
  * Highlighted invitation for the owner of a place that isn't on CallInBell to list it, with the sign-up pre-filled from what is known.
  * Accent-tinted so it stands out from the card's own details and actions.
  */
-export function ClaimBusinessBanner({ place, className }: {
+export function ClaimBusinessBanner({ place, className, compact = false }: {
   place: { name: string; phone?: string | null; website?: string | null; address?: string | null; sourceId?: string | null }; className?: string;
+  /** One quiet line for result lists (the full banner, repeated on every result, crowded the list); the detail views keep the banner. */
+  compact?: boolean;
 }) {
   // The search the result came from suggests the category when the map's own is vague.
   const [search] = useSearchParams();
+  if (compact) {
+    return (
+      <p className={`flex flex-wrap items-center gap-x-1.5 text-xs text-muted ${className ?? ''}`}>
+        <span aria-hidden className="inline-flex"><LogoMark size={14} /></span>
+        <span>Own this business?</span>
+        <Link to={joinHref(place, joinHint(search))} className="inline-flex items-center gap-0.5 font-semibold text-accent-ink hover:underline"
+          aria-label={`Join CallInBell as the owner of ${place.name}`}>
+          List it free on CallInBell <ArrowForwardRounded sx={{ fontSize: 14 }} />
+        </Link>
+      </p>
+    );
+  }
   return (
     <div className={`flex flex-col gap-3 rounded-xl border border-[color-mix(in_srgb,var(--cb-accent)_45%,transparent)] bg-accent-soft p-3 sm:flex-row sm:items-center ${className ?? ''}`}>
       <span aria-hidden className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-surface shadow-[var(--cb-shadow-xs)]"><LogoMark size={22} /></span>
@@ -551,7 +566,7 @@ function PlaceCard({ p, source, onSelect }: { p: ExternalPlace; source: 'ai' | '
         </div>
       </div>
       <PlaceActions p={p} d={d} source={source} />
-      <ClaimBusinessBanner className="mt-3" place={{ name: p.name, phone: d.phone, website: d.website, address: p.address, sourceId: p.id }} />
+      <ClaimBusinessBanner compact className="mt-3" place={{ name: p.name, phone: d.phone, website: d.website, address: p.address, sourceId: p.id }} />
       <p className="mt-1 flex flex-wrap items-center gap-x-1 text-xs text-muted">
         {source === 'google' || d.fromGoogle
           ? <>{source === 'ai' && <span>Place from OpenStreetMap ·</span>}<GoogleMapsDataCredit /></>
