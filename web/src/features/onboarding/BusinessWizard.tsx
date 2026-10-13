@@ -325,7 +325,8 @@ function Wizard({ mode, data, paymentsEnabled, imported }: {
   const runPayment = async (businessId: string, code: string, cycle: string, gstin: string) => {
     for (;;) {
       patchTask('payment', { status: 'active', detail: 'Complete the payment in the Razorpay window' });
-      const outcome = await payForPlan(businessId, { planCode: code, billingCycle: cycle, gstin });
+      // The Review step already required the terms (Terms, Privacy, Cancellation and Refund policies) to be accepted.
+      const outcome = await payForPlan(businessId, { planCode: code, billingCycle: cycle, gstin, acceptTerms: true });
       if (outcome.status === 'paid') {
         patchTask('payment', { status: 'done', detail: `${outcome.result.planName} plan active · invoice ${outcome.result.invoiceNumber} · paid by ${outcome.result.paymentMethod}` });
         void queryClient.invalidateQueries({ queryKey: ['owner'] });

@@ -22,6 +22,7 @@ import { CityAutocomplete } from '@/components/CityAutocomplete';
 import { useCityAreas } from '@/lib/hooks';
 import { emptyService, type StepKey, type WizardForm } from './schema';
 import { asksForGstin, priceBreakdown, taxLabel } from '@/lib/payments';
+import { PolicyList } from '@/lib/legal';
 import { PhoneVerification, phoneDigits } from '@/features/auth/otp';
 import { ImportedPhotos, type ImportedPhotosState } from './JoinImport';
 import { api } from '@/lib/api';
@@ -495,6 +496,8 @@ export function PaymentStep({ data, paymentsEnabled, onChangePlan }: { data: Wiz
           <div className="font-semibold">Secure payment with Razorpay</div>
           <p className="mt-0.5 text-muted">Pay by UPI, debit or credit card, net banking or wallet. CallInBell never sees your card or bank details.
             If you close the payment window, your business keeps a basic listing and you can pay any time from your dashboard.</p>
+          <p className="mt-2 text-muted">Plans don&apos;t renew automatically. See <PolicyList policies={['cancellation', 'refund']} /> for cancellations,
+            failed or duplicate payments and refunds.</p>
         </div>
       </div>
     </div>
@@ -666,7 +669,10 @@ export function ReviewStep({ data, media, onEdit, paymentsEnabled }: { data: Wiz
       <Controller control={control} name="acceptTerms" render={({ field, fieldState }) => (
         <div className="rounded-xl bg-subtle p-4">
           <FormControlLabel control={<Checkbox checked={field.value} onChange={(e) => field.onChange(e.target.checked)} />}
-            label={<span className="text-sm">I confirm the details are accurate and agree to the CallInBell Terms of Service, Privacy Policy and Listing Guidelines.</span>} />
+            label={<span className="text-sm">
+              I confirm the details are accurate and agree to <PolicyList policies={['terms', 'privacy']} />, and, for a paid plan,
+              {' '}<PolicyList policies={['cancellation', 'refund']} />.
+            </span>} />
           {fieldState.error && <p className="ml-8 text-sm text-danger">{fieldState.error.message}</p>}
         </div>
       )} />

@@ -209,13 +209,14 @@ public sealed class OwnerController : ApiControllerBase
 
     // ---------- Plan payments (Razorpay) ----------
 
-    public sealed record PlanOrderRequest(string PlanCode, string BillingCycle, string? Gstin);
+    /// <param name="AcceptTerms">The owner ticked that they accept the Terms, Cancellation and Refund policies (required).</param>
+    public sealed record PlanOrderRequest(string PlanCode, string BillingCycle, string? Gstin, bool AcceptTerms = false);
     public sealed record VerifyPaymentRequest(string GatewayOrderId, string GatewayPaymentId, string Signature);
     public sealed record CheckoutOutcomeRequest(string Outcome, string? Reason);
 
     [HttpPost("businesses/{id:guid}/payments/orders")]
     public async Task<ActionResult<ApiResponse<CheckoutOrderDto>>> CreatePlanOrder(Guid id, PlanOrderRequest request, CancellationToken ct) =>
-        Success(await Sender.Send(new CreatePlanOrderCommand(id, request.PlanCode, request.BillingCycle, request.Gstin), ct));
+        Success(await Sender.Send(new CreatePlanOrderCommand(id, request.PlanCode, request.BillingCycle, request.Gstin, request.AcceptTerms), ct));
 
     [HttpPost("businesses/{id:guid}/payments/orders/{orderId:guid}/verify")]
     public async Task<ActionResult<ApiResponse<PaymentResultDto>>> VerifyPayment(Guid id, Guid orderId, VerifyPaymentRequest request, CancellationToken ct) =>

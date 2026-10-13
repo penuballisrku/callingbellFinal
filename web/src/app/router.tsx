@@ -4,6 +4,7 @@ import { Button } from '@mui/material';
 import CustomerLayout from '@/layouts/CustomerLayout';
 import { RequireAuth } from '@/features/auth/RequireAuth';
 import { EmptyState } from '@/components/ui';
+import { POLICIES } from '@/lib/legal';
 
 const page = (loader: () => Promise<{ default: React.ComponentType }>) => async () => ({ Component: (await loader()).default });
 
@@ -91,6 +92,11 @@ export const router = createBrowserRouter([
       { path: 'about', lazy: page(() => import('@/features/about/AboutPage')) },
       { path: 'trust-and-safety', lazy: page(() => import('@/features/about/TrustSafetyPage')) },
       { path: 'support', lazy: page(() => import('@/features/about/ContactSupportPage')) },
+      // Legal pages: one component; the text comes from the database.
+      ...(['terms', 'privacy', 'cancellation', 'refund'] as const).map((policy) => ({
+        path: POLICIES[policy].path.slice(1),
+        lazy: page(() => import('@/features/legal/LegalPage').then((m) => ({ default: () => <m.default policy={policy} /> }))),
+      })),
       { path: 'login', lazy: page(() => import('@/features/auth/LoginPage')) },
       { path: 'register', lazy: page(() => import('@/features/auth/RegisterPage')) },
       // Video consultations: full screen, for the two people in the call.

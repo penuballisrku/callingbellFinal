@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField } from '@mui/material';
+import { Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, TextField } from '@mui/material';
+import { PolicyList } from '@/lib/legal';
 import CheckCircleRounded from '@mui/icons-material/CheckCircleRounded';
 import LockOutlined from '@mui/icons-material/LockOutlined';
 import { date, moneyPrecise } from '@/lib/format';
@@ -18,7 +19,9 @@ export function PlanCheckoutDialog({ businessId, plan, cycle, open, onClose }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paid, setPaid] = useState<PaymentResult | null>(null);
-  useEffect(() => { if (open) { setError(null); setPaid(null); setBusy(false); } }, [open]);
+  // Accepting the Terms, Cancellation and Refund policies is required before paying (the server records the version accepted).
+  const [accepted, setAccepted] = useState(false);
+  useEffect(() => { if (open) { setError(null); setPaid(null); setBusy(false); setAccepted(false); } }, [open]);
   if (!plan) return null;
 
   // The plan is priced for the business's country (GET /api/plans?business=), as the server will charge it.
@@ -29,7 +32,7 @@ export function PlanCheckoutDialog({ businessId, plan, cycle, open, onClose }: {
   const pay = async () => {
     setBusy(true);
     setError(null);
-    const outcome = await payForPlan(businessId, { planCode: plan.code, billingCycle: cycle, gstin: gstin || null });
+    const outcome = await payForPlan(businessId, { planCode: plan.code, billingCycle: cycle, gstin: gstin || null, acceptTerms: accepted });
     setBusy(false);
     if (outcome.status === 'paid') {
       setPaid(outcome.result);
@@ -72,11 +75,14 @@ export function PlanCheckoutDialog({ businessId, plan, cycle, open, onClose }: {
                 helperText={gstinError ?? 'Printed on your tax invoice'} slotProps={{ htmlInput: { maxLength: 15 } }} />
             </div>}
             {error && <p className="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger" role="alert">{error}</p>}
-            <p className="mt-3 flex items-start gap-2 text-xs text-muted"><LockOutlined sx={{ fontSize: 14, mt: '1px' }} />Secure payment by Razorpay: UPI, cards, net banking or wallets. Your plan activates as soon as the payment is confirmed.</p>
+            <p className="mt-3 flex items-start gap-2 text-xs text-muted"><LockOutlined sx={{ fontSize: 14, mt: '1px' }} />Secure payment by Razorpay: UPI, cards, net banking or wallets. Your plan activates as soon as the payment is confirmed and does not renew automatically.</p>
+            <FormControlLabel sx={{ mt: 1.5, alignItems: 'flex-start', mr: 0 }}
+              control={<Checkbox checked={accepted} onChange={(e) => setAccepted(e.target.checked)} size="small" sx={{ mt: -0.5 }} />}
+              label={<span className="text-sm text-ink-2">I agree to <PolicyList policies={['terms', 'cancellation', 'refund']} />.</span>} />
           </DialogContent>
           <DialogActions>
             <Button onClick={onClose} disabled={busy} color="inherit">Cancel</Button>
-            <Button variant="contained" color="secondary" onClick={() => void pay()} disabled={busy || !!gstinError}>
+            <Button variant="contained" color="secondary" onClick={() => void pay()} disabled={busy || !!gstinError || !accepted}>
               {busy ? 'Waiting for payment…' : `Pay ${moneyPrecise(total, plan)}`}
             </Button>
           </DialogActions>

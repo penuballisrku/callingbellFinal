@@ -44,6 +44,10 @@ public sealed class SeoMetadataService(ISender sender, IUnitOfWork uow, IOptions
         ["/about"] = ("About CallInBell", "About CallInBell, the real-time local business network for discovering, contacting and booking local businesses.", "About"),
         ["/trust-and-safety"] = ("Trust and safety", "How CallInBell verifies businesses, moderates reviews and keeps customers and businesses safe.", "TrustSafety"),
         ["/support"] = ("Contact support", "Get help with CallInBell: contact support, find answers and report a problem.", "ContactSupport"),
+        ["/terms"] = ("Terms and Conditions", "CallInBell Terms and Conditions: how the platform works, plan fees and payments, cancellations, refunds, disputes and grievance redressal.", "Legal-Terms"),
+        ["/privacy"] = ("Privacy Policy", "How CallInBell collects, uses, shares and protects personal data, and how to access, correct or delete yours.", "Legal-Privacy"),
+        ["/cancellation-policy"] = ("Cancellation Policy", "How to cancel bookings, requests and paid plans on CallInBell, and what happens to payments.", "Legal-Cancellation"),
+        ["/refund-policy"] = ("Refund Policy", "When CallInBell refunds payments, failed and duplicate payments, how to request a refund and how long it takes.", "Legal-Refund"),
     };
 
     private SeoOptions O => options.Value;
@@ -281,25 +285,30 @@ public sealed class SeoMetadataService(ISender sender, IUnitOfWork uow, IOptions
     {
         var (title, description, key) = StaticPages[path];
         string? heading = null, summary = null;
+        List<SeoSection>? sections = null;
         if (key is not null)
         {
             try
             {
-                // The page's own hero text from the database, written without a particular visitor's country.
+                // The page's own hero (legal pages: intro) text from the database, written without a particular visitor's country.
                 var page = await sender.Send(new GetMarketingPageQuery(key), ct);
-                if (page.Blocks.FirstOrDefault(b => b.Section == "Hero") is { } hero)
+                if (page.Blocks.FirstOrDefault(b => b.Section is "Hero" or "Intro") is { } hero)
                 {
                     heading = Neutral(hero.Title);
                     summary = hero.Subtitle is null ? null : Neutral(hero.Subtitle);
                     if (summary is not null) description = SeoText.Clamp(summary, SeoText.MaxDescription);
                 }
+                // Legal pages: the whole policy, with the company details already filled in.
+                var parts = page.Blocks.Where(b => b.Section == "Section" && !string.IsNullOrWhiteSpace(b.Body))
+                    .Select(b => new SeoSection(b.Eyebrow ?? b.Code.ToLowerInvariant(), b.Title, b.Body!)).ToList();
+                if (parts.Count > 0) sections = parts;
             }
             catch (NotFoundException) { /* no content rows: the fixed text stands */ }
         }
         var crumbs = new List<SeoLink> { new("Home", "/"), new(title, path) };
         var doc = new SeoDocument($"{title} | {O.SiteName}", description, SeoPaths.Absolute(O.SiteUrl, path), Index, O.Language, "website",
             DefaultImage(), title, crumbs, [SchemaOrg.Serialize(SchemaOrg.Breadcrumbs(crumbs, O.SiteUrl))]);
-        return new SeoPage(SeoPageKind.Static, 200, doc, new SeoPageContent(heading ?? title, summary ?? description, [], []));
+        return new SeoPage(SeoPageKind.Static, 200, doc, new SeoPageContent(heading ?? title, summary ?? description, [], [], Sections: sections));
     }
 
     private static string Neutral(string text)

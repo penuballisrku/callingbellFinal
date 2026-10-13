@@ -73,7 +73,11 @@ export type CheckoutOutcome =
  * Buys a plan: creates the order on our server, opens Razorpay Checkout, then verifies the payment server-side
  * (the plan only activates after the server has confirmed the payment with Razorpay).
  */
-export async function payForPlan(businessId: string, plan: { planCode: string; billingCycle: string; gstin?: string | null }): Promise<CheckoutOutcome> {
+/**
+ * `acceptTerms`: the owner ticked that they accept the Terms and Conditions, Cancellation Policy and Refund Policy; the server refuses
+ * an order without it and records the version they accepted.
+ */
+export async function payForPlan(businessId: string, plan: { planCode: string; billingCycle: string; gstin?: string | null; acceptTerms: boolean }): Promise<CheckoutOutcome> {
   let order: CheckoutOrder;
   try {
     // Razorpay's script loads alongside the order, unless the server is known to use simulated test payments.

@@ -8,6 +8,7 @@ import PeopleAltOutlined from '@mui/icons-material/PeopleAltOutlined';
 import RateReviewOutlined from '@mui/icons-material/RateReviewOutlined';
 import CampaignOutlined from '@mui/icons-material/CampaignOutlined';
 import WorkspacePremiumOutlined from '@mui/icons-material/WorkspacePremiumOutlined';
+import GavelOutlined from '@mui/icons-material/GavelOutlined';
 import { api } from '@/lib/api';
 import type { AdminDashboard as Dashboard } from '@/lib/types';
 import { PortalLayout } from '@/layouts/PortalLayout';
@@ -15,6 +16,7 @@ import AdminDashboard from './AdminDashboard';
 import { AdminBusinessDetail, AdminBusinesses } from './AdminBusinesses';
 import { AdminCategories, AdminCities } from './AdminCatalog';
 import { AdminAds, AdminReviews, AdminSubscriptions, AdminUsers } from './AdminPeople';
+import { AdminLegal } from './AdminLegal';
 
 export default function AdminPortal() {
   const { data } = useQuery({ queryKey: ['admin', 'dashboard'], queryFn: () => api.get<Dashboard>('/api/admin/dashboard'), staleTime: 60_000 });
@@ -28,6 +30,7 @@ export default function AdminPortal() {
     { to: '/admin/reviews', label: 'Review moderation', icon: <RateReviewOutlined fontSize="small" />, badge: a?.flaggedReviews },
     { to: '/admin/advertisements', label: 'Advertisements', icon: <CampaignOutlined fontSize="small" />, badge: a?.pendingAds },
     { to: '/admin/subscriptions', label: 'Subscriptions', icon: <WorkspacePremiumOutlined fontSize="small" /> },
+    { to: '/admin/legal', label: 'Legal & policies', icon: <GavelOutlined fontSize="small" /> },
   ];
 
   return (
@@ -42,6 +45,7 @@ export default function AdminPortal() {
         <Route path="reviews" element={<AdminReviews />} />
         <Route path="advertisements" element={<AdminAds />} />
         <Route path="subscriptions" element={<AdminSubscriptions />} />
+        <Route path="legal" element={<AdminLegal />} />
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Route>
     </Routes>

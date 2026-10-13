@@ -13,6 +13,7 @@ import { useCity } from '@/stores/city';
 import type { AuthResult } from '@/lib/types';
 import { AuthShell } from './LoginPage';
 import { GoogleSignIn } from './GoogleSignIn';
+import { PolicyList } from '@/lib/legal';
 
 type AccountType = 'Customer' | 'BusinessOwner';
 
@@ -140,6 +141,7 @@ function PasswordSignUp({ accountType, onSignedIn }: { accountType: AccountType;
         slotProps={{ input: { endAdornment: visibility } }} />
       <TextField label="Confirm password" type={show ? 'text' : 'password'} autoComplete="new-password" {...register('confirmPassword')}
         error={!!errors.confirmPassword} helperText={errors.confirmPassword?.message} />
+      <p className="text-xs leading-5 text-muted">By creating an account you agree to <PolicyList policies={['terms', 'privacy']} />.</p>
       <Button type="submit" variant="contained" size="large" fullWidth disabled={isSubmitting}>{isSubmitting ? 'Creating account…' : accountType === 'BusinessOwner' ? 'Create business account' : 'Create account'}</Button>
     </form>
   );

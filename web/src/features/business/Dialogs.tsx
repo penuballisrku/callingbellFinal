@@ -12,6 +12,7 @@ import { useSnackbar } from 'notistack';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { money } from '@/lib/format';
 import { useAuth } from '@/stores/auth';
+import { PolicyList } from '@/lib/legal';
 import type { BusinessDetail, CreatedReference, Review, Slot, TeamMember } from '@/lib/types';
 
 const phone = z.string().trim().regex(/^(\+91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}$/, 'Enter a valid 10-digit mobile number');
@@ -253,6 +254,11 @@ export function BookingDialog({ business, open, serviceId, onClose }: { business
                 <span className="text-base font-bold">{money(service.price)}</span>
               </div>
             )}
+            {/* No payment is taken on CallInBell for a booking: the customer pays the business, whose own terms apply. */}
+            <p className="text-xs leading-5 text-muted">
+              You pay the business directly; prices shown are set by the business. By requesting a booking you agree to{' '}
+              <PolicyList policies={['terms', 'cancellation']} />.
+            </p>
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 2.5 }}>
             <Button onClick={onClose} color="inherit">Cancel</Button>

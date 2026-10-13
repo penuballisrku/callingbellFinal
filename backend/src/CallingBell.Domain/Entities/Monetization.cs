@@ -198,6 +198,9 @@ public class PaymentOrder : AuditableEntity
     public string Status { get; set; } = "Created";
     public string? FailureReason { get; set; }
     public string? Gstin { get; set; }
+    /// <summary>The version (effective date) of the Terms, Cancellation and Refund policies the business accepted before paying.</summary>
+    public string? TermsVersion { get; set; }
+    public DateTimeOffset? TermsAcceptedAt { get; set; }
     public DateTimeOffset? PaidOn { get; set; }
     public Guid? SubscriptionId { get; set; }
     public string? InvoiceNumber { get; set; }

@@ -138,6 +138,12 @@ public sealed class LlmsTxtService(IUnitOfWork uow, IOptions<SeoOptions> options
         sb.AppendLine($"- [Trust and safety]({Url("/trust-and-safety")})");
         sb.AppendLine($"- [Contact support]({Url("/support")})").AppendLine();
 
+        sb.AppendLine("## Policies").AppendLine();
+        sb.AppendLine($"- [Terms and Conditions]({Url("/terms")}): platform rules, plan fees and payments, disputes and grievance redressal");
+        sb.AppendLine($"- [Privacy Policy]({Url("/privacy")})");
+        sb.AppendLine($"- [Cancellation Policy]({Url("/cancellation-policy")})");
+        sb.AppendLine($"- [Refund Policy]({Url("/refund-policy")})").AppendLine();
+
         if (businesses is null)
         {
             sb.AppendLine("## Optional").AppendLine();

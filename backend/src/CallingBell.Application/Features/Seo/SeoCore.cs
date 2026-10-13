@@ -66,8 +66,13 @@ public enum SeoPageKind { Home, Business, Category, Location, Static, Search, Pr
 /// The visible, data-backed parts every SEO page shows (in the server-rendered HTML and in the React page alike): a factual summary,
 /// questions and answers, and internal links.
 /// </summary>
+/// <param name="Sections">Long-form pages (the legal policies): their full text, so crawlers and payment-gateway website checks that
+/// don't run JavaScript read the whole policy.</param>
 public sealed record SeoPageContent(string? Heading, string? Summary, IReadOnlyList<SeoFaq> Faq, IReadOnlyList<SeoLinkGroup> Links,
-    DateTimeOffset? UpdatedOn = null);
+    DateTimeOffset? UpdatedOn = null, IReadOnlyList<SeoSection>? Sections = null);
+
+/// <summary>A heading and its text ("\n" between paragraphs; lines starting "- " are list items).</summary>
+public sealed record SeoSection(string Id, string Heading, string Body);
 
 /// <summary>A resolved public URL: what to answer (status, redirect) and what to say about it.</summary>
 public sealed record SeoPage(SeoPageKind Kind, int StatusCode, SeoDocument Document, SeoPageContent Content, string? RedirectTo = null)

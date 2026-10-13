@@ -22,7 +22,8 @@ public sealed class SitemapService(IUnitOfWork uow, IOptions<SeoOptions> options
     /// <summary>Under the protocol's 50,000-URL limit per file.</summary>
     public const int PerFile = 45_000;
     private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(30);
-    private static readonly string[] StaticPaths = ["/", "/categories", "/list-your-business", "/pricing", "/about", "/trust-and-safety", "/support"];
+    private static readonly string[] StaticPaths =
+        ["/", "/categories", "/list-your-business", "/pricing", "/about", "/trust-and-safety", "/support", "/terms", "/privacy", "/cancellation-policy", "/refund-policy"];
 
     private SeoOptions O => options.Value;
 

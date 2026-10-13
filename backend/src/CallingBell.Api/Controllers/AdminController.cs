@@ -1,5 +1,6 @@
 using CallingBell.Application.Common.Models;
 using CallingBell.Application.Features.Admin;
+using CallingBell.Application.Features.Content;
 using CallingBell.Application.Features.Owner;
 using CallingBell.Domain.Constants;
 using Microsoft.AspNetCore.Authorization;
@@ -101,4 +102,14 @@ public sealed class AdminController : ApiControllerBase
     [Authorize(Policy = Permissions.SubscriptionsManage), HttpGet("subscriptions")]
     public async Task<ActionResult<ApiResponse<AdminSubscriptionsDto>>> Subscriptions([FromQuery] GetAdminSubscriptionsQuery query, CancellationToken ct) =>
         Success(await Sender.Send(query, ct));
+
+    // ---------- Legal & policies: the company details filled into the Terms, Privacy, Cancellation and Refund pages ----------
+
+    [HttpGet("legal-settings")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<LegalSettingDto>>>> LegalSettings(CancellationToken ct) =>
+        Success(await Sender.Send(new GetLegalSettingsQuery(), ct));
+
+    [HttpPut("legal-settings")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<LegalSettingDto>>>> UpdateLegalSettings(Dictionary<string, string?> values, CancellationToken ct) =>
+        Success(await Sender.Send(new UpdateLegalSettingsCommand(values), ct), "Legal details saved");
 }

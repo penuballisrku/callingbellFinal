@@ -7,6 +7,7 @@ import { moneyExact } from '@/lib/format';
 import { useDocumentTitle, usePlans } from '@/lib/hooks';
 import { taxNote } from '@/lib/payments';
 import type { Plan } from '@/lib/types';
+import { PolicyList } from '@/lib/legal';
 import { ErrorState, Img } from '@/components/ui';
 
 /** Plan cards side by side: a few plans are centred at a comfortable width; up to five fill the row. */
@@ -130,6 +131,13 @@ export default function PricingPage() {
         </section>
       )}
       {data && <p className="mt-8 text-center text-sm text-muted">Every plan includes a verified business profile and customer reviews.</p>}
+      {/* What payment gateways and the e-commerce rules expect next to prices: renewal, cancellation and refund terms, one click away. */}
+      {data && (
+        <p className="mx-auto mt-3 max-w-2xl text-center text-xs leading-5 text-muted">
+          Prices are in your local currency{data.some((p) => p.taxRate > 0) ? ', with tax added at checkout' : ''}. Paid plans don&apos;t renew
+          automatically. Payments are processed securely by Razorpay. See <PolicyList policies={['terms', 'cancellation', 'refund']} />.
+        </p>
+      )}
     </div>
   );
 }

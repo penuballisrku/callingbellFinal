@@ -65,10 +65,51 @@ public sealed class SeoHtmlRenderer(Microsoft.Extensions.Options.IOptions<SeoOpt
         {
             sb.Append("<h1 class=\"text-3xl font-bold\">").Append(E(page.Content.Heading ?? page.Document.Title)).Append("</h1>");
             if (page.Content.Summary is { } s) sb.Append("<p class=\"mt-3 max-w-3xl text-ink-2\">").Append(E(s)).Append("</p>");
+            if (page.Content.Sections is { Count: > 0 } sections) Sections(sb, sections);
             Links(sb, page.Content.Links);
             Faq(sb, page.Content.Faq);
         }
         return sb.Append("</main>").ToString();
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex Numbered = new(@"^(\d+)\.\s+", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>
+    /// Long-form text (the legal policies): a heading per section, paragraphs, "- " lines as a bulleted list, "1. " lines as a numbered
+    /// list, and "### " lines as sub-headings (the same rules as the React page).
+    /// </summary>
+    private static void Sections(StringBuilder sb, IReadOnlyList<SeoSection> sections)
+    {
+        foreach (var section in sections)
+        {
+            sb.Append("<section id=\"").Append(E(section.Id)).Append("\" class=\"mt-8 max-w-3xl\"><h2 class=\"text-xl font-semibold\">")
+                .Append(E(section.Heading)).Append("</h2>");
+            string? list = null;
+            void Close() { if (list is not null) sb.Append("</").Append(list).Append('>'); list = null; }
+            foreach (var raw in section.Body.Split('\n'))
+            {
+                var line = raw.Trim();
+                if (line.Length == 0) continue;
+                var numbered = Numbered.Match(line);
+                var kind = line.StartsWith("- ", StringComparison.Ordinal) ? "ul" : numbered.Success ? "ol" : null;
+                if (kind is null)
+                {
+                    Close();
+                    if (line.StartsWith("### ", StringComparison.Ordinal)) sb.Append("<h3 class=\"mt-4 font-semibold\">").Append(E(line[4..])).Append("</h3>");
+                    else sb.Append("<p class=\"mt-2\">").Append(E(line)).Append("</p>");
+                    continue;
+                }
+                if (list != kind)
+                {
+                    Close();
+                    sb.Append('<').Append(kind).Append(kind == "ol" ? $" start=\"{numbered.Groups[1].Value}\"" : "").Append(" class=\"mt-2 pl-5\">");
+                    list = kind;
+                }
+                sb.Append("<li>").Append(E(kind == "ul" ? line[2..] : line[numbered.Length..])).Append("</li>");
+            }
+            Close();
+            sb.Append("</section>");
+        }
     }
 
     private static void BusinessBody(StringBuilder sb, BusinessDetailDto b, SeoPageContent content)

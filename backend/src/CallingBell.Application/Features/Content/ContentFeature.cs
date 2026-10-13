@@ -25,7 +25,7 @@ public sealed record MarketingPageDto(string PageKey, IReadOnlyList<ContentBlock
 /// <param name="Country">ISO country code of the place being browsed: blocks with a photo for that country show it instead of their own.</param>
 public sealed record GetMarketingPageQuery(string PageKey, string? Country = null) : IRequest<MarketingPageDto>;
 
-public sealed class GetMarketingPageHandler(IUnitOfWork uow) : IRequestHandler<GetMarketingPageQuery, MarketingPageDto>
+public sealed class GetMarketingPageHandler(IUnitOfWork uow, LegalSettings legal) : IRequestHandler<GetMarketingPageQuery, MarketingPageDto>
 {
     public async Task<MarketingPageDto> Handle(GetMarketingPageQuery request, CancellationToken ct)
     {
@@ -47,6 +47,17 @@ public sealed class GetMarketingPageHandler(IUnitOfWork uow) : IRequestHandler<G
             .ToListAsync(ct);
 
         if (blocks.Count == 0) throw new NotFoundException("Page", request.PageKey);
+
+        // Legal pages: company details come from the legal settings ({LegalName}, {GrievanceEmail}…), and the page also gets the settings
+        // that are filled in (SectionKey "Setting", Code = key, Title = value, Subtitle = label) for its contact card and effective date.
+        if (request.PageKey.StartsWith(LegalText.PagePrefix, StringComparison.Ordinal))
+        {
+            var values = await legal.GetAsync(ct);
+            blocks = blocks.Select(b => b with { Title = LegalText.Fill(b.Title, values)!, Subtitle = LegalText.Fill(b.Subtitle, values), Body = LegalText.Fill(b.Body, values) })
+                .Concat(LegalText.Keys.Where(k => values.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v))
+                    .Select(k => new ContentBlockDto(k, "Setting", null, values[k].Trim(), null, null, null, null, null, null, null, null, null, null, null, null, null, null)))
+                .ToList();
+        }
 
         if (request.Country is { Length: 2 } code)
         {

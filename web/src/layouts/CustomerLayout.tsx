@@ -14,6 +14,7 @@ import { MessagesButton } from '@/features/chat/Chat';
 import { AskAiButton, SearchAssistant } from '@/features/assistant/SearchAssistant';
 import { useAssistant } from '@/features/assistant/store';
 import { InstallAppButton, InstallPrompt } from '@/components/InstallApp';
+import { POLICIES, POLICY_KEYS } from '@/lib/legal';
 
 const nav = [
   { to: '/categories', label: 'Categories' },
@@ -128,7 +129,10 @@ function Footer() {
       <div className="border-t border-navy-line">
         <div className="container-page flex flex-col gap-2 py-5 text-xs sm:flex-row sm:justify-between">
           <span>© {new Date().getFullYear()} CallInBell</span>
-          <span>Privacy · Terms · Grievance officer</span>
+          <nav aria-label="Legal" className="flex flex-wrap gap-x-4 gap-y-1.5">
+            {POLICY_KEYS.map((key) => <Link key={key} to={POLICIES[key].path} className="transition-colors hover:text-white">{POLICIES[key].label}</Link>)}
+            <Link to="/terms#grievance" className="transition-colors hover:text-white">Grievance Officer</Link>
+          </nav>
         </div>
       </div>
     </footer>

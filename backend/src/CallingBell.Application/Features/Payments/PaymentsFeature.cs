@@ -31,7 +31,8 @@ public sealed record PaymentResultDto(Guid OrderId, string OrderNumber, string S
 
 public sealed record GetPaymentConfigQuery : IRequest<PaymentConfigDto>;
 
-public sealed record CreatePlanOrderCommand(Guid BusinessId, string PlanCode, string BillingCycle, string? Gstin) : IRequest<CheckoutOrderDto>;
+/// <param name="AcceptTerms">The owner accepted the Terms, Cancellation and Refund policies; required, and recorded with their version.</param>
+public sealed record CreatePlanOrderCommand(Guid BusinessId, string PlanCode, string BillingCycle, string? Gstin, bool AcceptTerms = false) : IRequest<CheckoutOrderDto>;
 
 public sealed record VerifyPlanPaymentCommand(Guid BusinessId, Guid OrderId, string GatewayOrderId, string GatewayPaymentId, string Signature)
     : IRequest<PaymentResultDto>;
@@ -78,10 +79,12 @@ public sealed class CreatePlanOrderValidator : AbstractValidator<CreatePlanOrder
         RuleFor(x => x.BillingCycle).Must(c => c is "Monthly" or "Annual").WithMessage("Billing cycle must be Monthly or Annual.");
         RuleFor(x => x.Gstin).Must(g => Gstin.IsMatch(g!.Trim().ToUpperInvariant())).When(x => !string.IsNullOrWhiteSpace(x.Gstin))
             .WithMessage("Enter a valid 15-character GSTIN, e.g. 29ABCDE1234F1Z5.");
+        RuleFor(x => x.AcceptTerms).Equal(true).WithMessage("Please accept the Terms and Conditions, Cancellation Policy and Refund Policy to continue.");
     }
 }
 
-public sealed class CreatePlanOrderHandler(IUnitOfWork uow, ICurrentUser user, IPaymentGateway gateway, CountryPricingService pricing)
+public sealed class CreatePlanOrderHandler(IUnitOfWork uow, ICurrentUser user, IPaymentGateway gateway, CountryPricingService pricing,
+    Content.LegalSettings legal)
     : IRequestHandler<CreatePlanOrderCommand, CheckoutOrderDto>
 {
     public async Task<CheckoutOrderDto> Handle(CreatePlanOrderCommand r, CancellationToken ct)
@@ -102,7 +105,9 @@ public sealed class CreatePlanOrderHandler(IUnitOfWork uow, ICurrentUser user, I
         {
             OrderNumber = References.New("ORD"), BusinessId = business.Id, PlanId = plan.Id, BillingCycle = r.BillingCycle,
             Amount = subtotal, TaxAmount = tax, TotalAmount = total, Currency = country.CurrencyCode, Gateway = gateway.Name,
-            Status = PaymentOrderStatuses.Created, Gstin = string.IsNullOrWhiteSpace(r.Gstin) ? null : r.Gstin.Trim().ToUpperInvariant()
+            Status = PaymentOrderStatuses.Created, Gstin = string.IsNullOrWhiteSpace(r.Gstin) ? null : r.Gstin.Trim().ToUpperInvariant(),
+            // Which policies the owner agreed to, and when: the version in force now applies to this purchase.
+            TermsVersion = await legal.TermsVersionAsync(ct), TermsAcceptedAt = DateTimeOffset.UtcNow,
         };
         uow.Repository<PaymentOrder>().Add(order);
         await uow.SaveChangesAsync(ct);
