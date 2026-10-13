@@ -302,7 +302,12 @@ public sealed class SeoMetadataService(ISender sender, IUnitOfWork uow, IOptions
         return new SeoPage(SeoPageKind.Static, 200, doc, new SeoPageContent(heading ?? title, summary ?? description, [], []));
     }
 
-    private static string Neutral(string text) => text.Replace("{country's}", "your country's").Replace("{country}", "your country");
+    private static string Neutral(string text)
+    {
+        var s = text.Replace("{country's}", "your country's").Replace("{country}", "your country");
+        // A heading that starts with the placeholder ("{country's} real-time network…") starts a sentence.
+        return s.StartsWith("your ", StringComparison.Ordinal) ? "Y" + s[1..] : s;
+    }
 
     // ---------------- Search, errors, redirects ----------------
 

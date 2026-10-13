@@ -58,6 +58,20 @@ public sealed class SitemapService(IUnitOfWork uow, IOptions<SeoOptions> options
         return null;
     }
 
+    /// <summary>The newest change among a file's pages, for the index's lastmod (a constant "today" would teach crawlers to ignore it).</summary>
+    public async Task<DateTimeOffset?> LastModifiedAsync(string file, CancellationToken ct) =>
+        (await EntriesAsync(file, ct))?.Max(e => e.LastModified);
+
+    /// <summary>Every sitemap URL whose page changed after <paramref name="since"/> (for IndexNow): businesses, categories and places.</summary>
+    public async Task<IReadOnlyList<string>> ChangedSinceAsync(DateTimeOffset since, CancellationToken ct)
+    {
+        var urls = new List<string>();
+        foreach (var file in await FilesAsync(ct))
+            if (await EntriesAsync(file, ct) is { } entries)
+                urls.AddRange(entries.Where(e => e.LastModified > since).Select(e => e.Location));
+        return urls.Distinct().ToList();
+    }
+
     /// <summary>Listed businesses that are not a later duplicate (same name and phone in the same city) of an earlier listing.</summary>
     private IQueryable<Business> CanonicalBusinesses()
     {
@@ -82,11 +96,13 @@ public sealed class SitemapService(IUnitOfWork uow, IOptions<SeoOptions> options
     /// </summary>
     private Task<List<SitemapEntry>> LocationsAsync(CancellationToken ct) => cache.GetOrCreateAsync("sitemap|locations", Lifetime, async () =>
     {
-        var groups = await uow.Repository<Business>().QueryNoTracking().Listed().Where(b => b.CityRef != null)
+        // Only active cities and areas: their pages exist. A business left in a switched-off city (its page answers 404) is still listed
+        // through its business page and categories, but its city must not be sent to crawlers.
+        var groups = await uow.Repository<Business>().QueryNoTracking().Listed().Where(b => b.CityRef != null && b.CityRef.IsActive)
             .GroupBy(b => new
             {
                 b.CityRef!.State.CountryCode, StateSlug = b.CityRef.State.Slug, CitySlug = b.CityRef.Slug,
-                AreaSlug = b.AreaRef != null ? b.AreaRef.Slug : null, SubSlug = b.SubCategory != null ? b.SubCategory.Slug : null,
+                AreaSlug = b.AreaRef != null && b.AreaRef.IsActive ? b.AreaRef.Slug : null, SubSlug = b.SubCategory != null ? b.SubCategory.Slug : null,
             })
             .Select(g => new { g.Key, Count = g.Count(), Modified = g.Max(b => b.ModifiedOn ?? b.CreatedOn) })
             .ToListAsync(ct);
@@ -123,19 +139,22 @@ public sealed class SitemapService(IUnitOfWork uow, IOptions<SeoOptions> options
     private static readonly XmlWriterSettings Xml = new() { Encoding = new UTF8Encoding(false), Indent = false, Async = false };
     private const string Ns = "http://www.sitemaps.org/schemas/sitemap/0.9";
 
-    /// <summary>A sitemap index listing the sitemap files.</summary>
-    public string IndexXml(IEnumerable<string> files, DateTimeOffset? lastModified = null)
+    /// <summary>A sitemap index listing the sitemap files, each with the newest change among its pages when known.</summary>
+    public string IndexXml(IEnumerable<string> files, DateTimeOffset? lastModified = null) =>
+        IndexXml(files.Select(f => (f, lastModified)));
+
+    public string IndexXml(IEnumerable<(string File, DateTimeOffset? LastModified)> files)
     {
         var sb = new StringBuilder();
         using (var w = XmlWriter.Create(new StringWriterUtf8(sb), Xml))
         {
             w.WriteStartDocument();
             w.WriteStartElement("sitemapindex", Ns);
-            foreach (var f in files)
+            foreach (var (f, lastModified) in files)
             {
                 w.WriteStartElement("sitemap", Ns);
                 w.WriteElementString("loc", Ns, SeoPaths.Absolute(O.SiteUrl, $"/{f}.xml"));
-                if (lastModified is { } m) w.WriteElementString("lastmod", Ns, m.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+                if (lastModified is { } m) w.WriteElementString("lastmod", Ns, m.ToUniversalTime().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
                 w.WriteEndElement();
             }
             w.WriteEndElement();

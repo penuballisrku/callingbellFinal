@@ -164,6 +164,9 @@ builder.Services.AddHostedService<StartupWarmup>();
 builder.Services.Configure<CallingBell.Application.Features.Seo.SeoOptions>(builder.Configuration.GetSection(CallingBell.Application.Features.Seo.SeoOptions.Section));
 builder.Services.AddSingleton<CallingBell.Api.Seo.SeoHtmlRenderer>();
 
+// HTTP to HTTPS is a permanent move (308, not the default 307), so search engines index only the https:// address.
+builder.Services.AddHttpsRedirection(o => o.RedirectStatusCode = StatusCodes.Status308PermanentRedirect);
+
 var app = builder.Build();
 
 // Simulated payments activate plans without money: never outside development.
@@ -188,6 +191,21 @@ if (app.Configuration.GetValue<bool>("Cloudflare:Enabled"))
             if (context.Request.Headers["X-Forwarded-Proto"] == "https") context.Request.Scheme = "https";
         }
         return next(context);
+    });
+}
+
+// One address for search engines: the bare domain (callinbell.com) moves permanently to the canonical host of Seo:SiteUrl
+// (www.callinbell.com) with the same path and query, so its pages never compete with themselves as duplicates.
+if (!app.Environment.IsDevelopment() && Uri.TryCreate(app.Configuration["Seo:SiteUrl"], UriKind.Absolute, out var canonicalSite)
+    && canonicalSite.Host.StartsWith("www.", StringComparison.OrdinalIgnoreCase))
+{
+    var apexHost = canonicalSite.Host[4..];
+    app.Use((context, next) =>
+    {
+        if (!string.Equals(context.Request.Host.Host, apexHost, StringComparison.OrdinalIgnoreCase)) return next(context);
+        context.Response.StatusCode = StatusCodes.Status301MovedPermanently;
+        context.Response.Headers.Location = $"{canonicalSite.Scheme}://{canonicalSite.Authority}{context.Request.PathBase}{context.Request.Path}{context.Request.QueryString}";
+        return Task.CompletedTask;
     });
 }
 

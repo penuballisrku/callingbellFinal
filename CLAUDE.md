@@ -136,6 +136,10 @@ python backend/tests/seo-smoke/seo_smoke.py   # needs the API running
     continues the route.
   - OTP goes WhatsApp (authentication template) → SMS (`PhoneOtpService`, `/api/auth/request-otp` and `/api/auth/verify-otp`).
 - **SEO:** `Features/Seo` builds pages, schema.org data and sitemaps; it serves `/robots.txt`, `/sitemap*.xml` and `/api/seo`.
+  - AI search: `/llms.txt` and `/llms-full.txt` (`LlmsTxtService`, from the database); `robots.txt` names the search and AI crawlers.
+  - IndexNow (Bing, which feeds ChatGPT search and Copilot): `IndexNowWorker` sends changed sitemap URLs; key served at `/indexnow.txt`.
+    Off until `Seo:IndexNow:Enabled` and `Seo:IndexNow:Key` are set. Search Console / Bing codes: `Seo:GoogleSiteVerification`,
+    `Seo:BingSiteVerification`. Outside development the bare domain 301s to the `Seo:SiteUrl` host and HTTP to HTTPS is a 308.
 - **Payments:** Razorpay checkout and webhook (`Features/Payments`, `Infrastructure/Payments`).
 
 ## Secrets and configuration

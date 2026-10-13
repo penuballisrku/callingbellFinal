@@ -22,6 +22,7 @@ public static class DependencyInjection
         services.AddSingleton<Features.Seo.SeoCache>();
         services.AddScoped<Features.Seo.ISeoMetadataService, Features.Seo.SeoMetadataService>();
         services.AddScoped<Features.Seo.SitemapService>();
+        services.AddScoped<Features.Seo.LlmsTxtService>();
         services.AddScoped<Common.CountryPricingService>();
         services.AddScoped<Features.Onboarding.BusinessDuplicateFinder>();
         services.AddScoped<Features.Chat.ChatMessenger>();

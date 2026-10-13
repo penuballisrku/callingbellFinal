@@ -21,6 +21,27 @@ public sealed class SeoOptions
     public string[] SameAs { get; set; } = [];
     /// <summary>A location / category page is indexable only with at least this many listed businesses (no thin pages).</summary>
     public int MinBusinessesForIndex { get; set; } = 1;
+    /// <summary>Google Search Console's HTML-tag verification code (the content of its google-site-verification meta tag).</summary>
+    public string? GoogleSiteVerification { get; set; }
+    /// <summary>Bing Webmaster Tools' verification code (msvalidate.01). Bing's index also feeds ChatGPT search and Copilot.</summary>
+    public string? BingSiteVerification { get; set; }
+    public IndexNowOptions IndexNow { get; set; } = new();
+}
+
+/// <summary>
+/// IndexNow (indexnow.org): tells Bing, Yandex, Seznam and Naver within minutes which public pages changed, instead of waiting for a
+/// crawl. The key is public by design: it is served at /indexnow.txt so the engines can check that the site owns it.
+/// </summary>
+public sealed class IndexNowOptions
+{
+    public bool Enabled { get; set; }
+    /// <summary>8-128 characters: letters, digits and dashes (e.g. a GUID without braces).</summary>
+    public string? Key { get; set; }
+    public string Endpoint { get; set; } = "https://api.indexnow.org/indexnow";
+    /// <summary>How often changed pages are sent.</summary>
+    public int IntervalMinutes { get; set; } = 15;
+
+    public bool IsValid => Enabled && Key is { Length: >= 8 and <= 128 } k && k.All(ch => char.IsAsciiLetterOrDigit(ch) || ch == '-');
 }
 
 /// <summary>A named link: breadcrumbs, related pages.</summary>

@@ -91,6 +91,9 @@ public static class DependencyInjection
         services.AddSingleton<NotificationDispatchSignal>();
         services.AddSingleton<INotificationDispatchSignal>(sp => sp.GetRequiredService<NotificationDispatchSignal>());
         services.AddHostedService<NotificationDispatcher>();
+        // IndexNow (Bing, Yandex, Seznam, Naver): changed public pages, every few minutes; off unless Seo:IndexNow has a key.
+        services.AddHttpClient(Seo.IndexNowWorker.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(20));
+        services.AddHostedService<Seo.IndexNowWorker>();
         // Booking reminders, subscription expiry and offers, every few minutes.
         services.AddHostedService<ScheduledNotificationsWorker>();
 

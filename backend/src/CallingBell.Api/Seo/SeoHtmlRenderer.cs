@@ -22,6 +22,9 @@ public sealed class SeoHtmlRenderer(Microsoft.Extensions.Options.IOptions<SeoOpt
         sb.Append("<title>").Append(E(d.Title)).Append("</title>\n");
         Meta(sb, "name", "description", d.Description);
         Meta(sb, "name", "robots", d.Robots);
+        // Search Console / Bing Webmaster Tools ownership, when configured (Seo:GoogleSiteVerification, Seo:BingSiteVerification).
+        if (!string.IsNullOrWhiteSpace(options.Value.GoogleSiteVerification)) Meta(sb, "name", "google-site-verification", options.Value.GoogleSiteVerification.Trim());
+        if (!string.IsNullOrWhiteSpace(options.Value.BingSiteVerification)) Meta(sb, "name", "msvalidate.01", options.Value.BingSiteVerification.Trim());
         sb.Append("    <link rel=\"canonical\" href=\"").Append(E(d.CanonicalUrl)).Append("\" data-seo />\n");
         Meta(sb, "property", "og:type", d.OgType);
         Meta(sb, "property", "og:site_name", options.Value.SiteName);
