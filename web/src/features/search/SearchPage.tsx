@@ -295,22 +295,34 @@ export default function SearchPage() {
               {parsing ? <CircularProgress size={16} sx={{ position: 'absolute', right: 12, top: 12 }} aria-label="Finding the place" />
                 : <VoiceSearchButton onText={(t) => setText(t)} submit className="absolute right-1 top-1/2 -translate-y-1/2" />}
             </form>
-            <div className="flex gap-2">
-              <Button className="lg:!hidden" variant="outlined" startIcon={<TuneRounded />} onClick={() => setDrawer(true)}>Filters{activeChips.length ? ` (${activeChips.length})` : ''}</Button>
+            {/* One line: Filters (phones and tablets) and sort. */}
+            <div className="flex flex-nowrap items-center gap-2">
+              <Button className="lg:!hidden" variant="outlined" startIcon={<TuneRounded />} onClick={() => setDrawer(true)}
+                sx={{ flexShrink: 0, whiteSpace: 'nowrap', height: 40 }}>
+                Filters{activeChips.length ? ` (${activeChips.length})` : ''}
+              </Button>
               {/* Sorting applies to CallInBell results; Google Maps and AI results are listed nearest first. */}
               {!place && (
                 <TextField select size="small" value={query.sort} onChange={(e) => update({ sort: e.target.value === 'relevance' ? null : e.target.value })}
-                  sx={{ minWidth: 170 }} slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Sort by' } }}>
+                  sx={{ minWidth: 170, width: { sm: 190 }, flex: { xs: '1 1 0', sm: '0 0 auto' }, '& .MuiInputBase-root': { height: 40 } }} slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Sort by' } }}>
                   {sorts.map((s) => <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>)}
                 </TextField>
               )}
             </div>
           </div>
 
+          {/* Active filters on one line: they scroll sideways when they don't fit; "Clear all" stays in view at the end. */}
           {activeChips.length > 0 && (
-            <div className="mb-4 flex flex-wrap items-center gap-2">
-              {activeChips.map((c) => <Chip key={c.key} label={c.label} onDelete={() => update({ [c.key]: null, ...(c.key === 'city' ? { area: null } : {}) })} variant="outlined" sx={{ bgcolor: 'background.paper' }} />)}
-              <Button size="small" onClick={clearAll}>Clear all</Button>
+            <div className="mb-4 flex items-center gap-2">
+              <ul className="flex min-w-0 flex-1 flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain py-0.5 pr-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [mask-image:linear-gradient(to_right,#000_calc(100%-24px),transparent)]"
+                aria-label="Active filters">
+                {activeChips.map((c) => (
+                  <li key={c.key} className="shrink-0">
+                    <Chip label={c.label} onDelete={() => update({ [c.key]: null, ...(c.key === 'city' ? { area: null } : {}) })} variant="outlined" sx={{ bgcolor: 'background.paper' }} />
+                  </li>
+                ))}
+              </ul>
+              <Button size="small" onClick={clearAll} sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>Clear all</Button>
             </div>
           )}
 
