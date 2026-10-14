@@ -125,6 +125,21 @@ public interface IRealtimeNotifier
     Task NotifyUserAsync(string userId, NotificationDto notification, CancellationToken ct = default);
 }
 
+/// <summary>
+/// Told when public data may have changed (a listing, review or booking), so open pages get the new platform figures pushed to them.
+/// Never blocks: the push happens in the background, once per burst of changes.
+/// </summary>
+public interface IPlatformStatsSignal
+{
+    void Changed();
+}
+
+/// <summary>Used where no real-time push is wired up (hosts without SignalR).</summary>
+public sealed class NoPlatformStatsSignal : IPlatformStatsSignal
+{
+    public void Changed() { }
+}
+
 /// <summary>An order created at the payment gateway (amounts in the smallest currency unit, i.e. paise).</summary>
 public sealed record GatewayOrder(string Id, long Amount, string Currency, string Status);
 

@@ -8,6 +8,7 @@ import TrendingUpRounded from '@mui/icons-material/TrendingUpRounded';
 import CheckCircleRounded from '@mui/icons-material/CheckCircleRounded';
 import { compactNumber, moneyExact, number } from '@/lib/format';
 import { useDocumentTitle, usePlans } from '@/lib/hooks';
+import { useLivePlatformStats } from '@/lib/realtime';
 import { homeFor, isOwner, useAuth } from '@/stores/auth';
 import type { ContentBlock, MarketingPage, Plan } from '@/lib/types';
 import { ErrorState, Img, SectionHeader, VerifiedMark } from '@/components/ui';
@@ -34,6 +35,7 @@ function Credit({ block, className = 'text-muted' }: { block: ContentBlock; clas
 
 export default function ListBusinessPage() {
   useDocumentTitle('List your business');
+  useLivePlatformStats();
   const { data, isLoading, isError, refetch } = useMarketingPage('ListYourBusiness');
   const plans = usePlans();
 

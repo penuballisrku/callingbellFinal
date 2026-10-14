@@ -3,7 +3,7 @@ import type { HubConnection } from '@microsoft/signalr';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import { useAuth } from '@/stores/auth';
-import type { NotificationItem } from './types';
+import type { BusinessGrowthStats, HomeData, MarketingPage, NotificationItem } from './types';
 
 export interface AvailabilityEvent { businessId: string; status: string; lastSeenOn: string }
 
@@ -58,6 +58,48 @@ export function usePresence(businessIds: string[], onChange: (e: AvailabilityEve
       if (conn.state === 'Connected') void conn.invoke('Unwatch', ids).catch(() => undefined);
     };
   }, [key]);
+}
+
+/**
+ * Keeps the platform figures on screen (listed businesses, published reviews, completed bookings…) current while the page is open.
+ * The API pushes new figures over PresenceHub when a listing, review or booking changes; they are written into the cached home and
+ * marketing page data, so the page shows them without another request. After a lost connection the pages are refetched instead.
+ */
+export function useLivePlatformStats() {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    let active = true;
+    let conn: HubConnection | null = null;
+    const listener = (s: BusinessGrowthStats) => {
+      queryClient.setQueriesData<HomeData>({ queryKey: ['home'] }, (old) => old && {
+        ...old, stats: { businesses: s.activeBusinesses, cities: s.cities, reviews: s.reviews, bookingsCompleted: s.bookingsCompleted },
+      });
+      queryClient.setQueriesData<MarketingPage>({ queryKey: ['content'] }, (old) => old?.stats ? { ...old, stats: s } : old);
+    };
+    const watch = async () => {
+      if (active && conn?.state === 'Connected') await conn.invoke('WatchStats').catch(() => undefined);
+    };
+    const resync = () => {
+      if (!active) return;
+      void watch();
+      void queryClient.invalidateQueries({ queryKey: ['home'] });
+      void queryClient.invalidateQueries({ queryKey: ['content'] });
+    };
+    void presenceConnection().then((c) => {
+      if (!active) return;
+      conn = c;
+      c.on('platformStats', listener);
+      c.onreconnected(resync);
+      void watch();
+    });
+    return () => {
+      active = false;
+      if (!conn) return;
+      conn.off('platformStats', listener);
+      if (conn.state === 'Connected') void conn.invoke('UnwatchStats').catch(() => undefined);
+    };
+  }, [queryClient]);
 }
 
 // One notification connection per signed-in user, shared across layouts and re-mounts.

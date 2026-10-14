@@ -8,11 +8,18 @@ namespace CallingBell.Api.Hubs;
 
 /// <summary>
 /// Real-time availability network. Clients subscribe to the businesses currently on screen and
-/// receive "availabilityChanged" events when an owner changes status.
+/// receive "availabilityChanged" events when an owner changes status. Pages showing platform figures (listed businesses, reviews,
+/// completed bookings) call <see cref="WatchStats"/> and receive "platformStats" whenever they change.
 /// </summary>
 public sealed class PresenceHub : Hub
 {
     public const string AvailabilityChanged = "availabilityChanged";
+    public const string PlatformStatsChanged = "platformStats";
+    public const string StatsGroup = "platform-stats";
+
+    public Task WatchStats() => Groups.AddToGroupAsync(Context.ConnectionId, StatsGroup);
+
+    public Task UnwatchStats() => Groups.RemoveFromGroupAsync(Context.ConnectionId, StatsGroup);
 
     public static string BusinessGroup(Guid businessId) => $"business:{businessId:N}";
 

@@ -2,6 +2,7 @@ import { Link } from 'react-router';
 import { Button } from '@mui/material';
 import { number } from '@/lib/format';
 import { useDocumentTitle } from '@/lib/hooks';
+import { useLivePlatformStats } from '@/lib/realtime';
 import { ErrorState } from '@/components/ui';
 import {
   ClosingCta, ContentPageSkeleton, DividedList, FaqList, FeaturePanel, IconCardGrid, IntroSection, NumberedSteps, PageHero, StatsStrip, useMarketingPage } from '@/features/content/ContentBlocks';
@@ -9,6 +10,7 @@ import {
 /** "Trust & safety": every word comes from MarketingContent (PageKey "TrustSafety"); the numbers are live platform stats. */
 export default function TrustSafetyPage() {
   useDocumentTitle('Trust & safety');
+  useLivePlatformStats();
   const { data, isLoading, isError, refetch } = useMarketingPage('TrustSafety');
 
   if (isError) return <div className="container-page py-16"><ErrorState onRetry={() => refetch()} /></div>;

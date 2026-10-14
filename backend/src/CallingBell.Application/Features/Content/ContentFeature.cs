@@ -20,6 +20,32 @@ public sealed record ContentBlockDto(string Code, string Section, string? Eyebro
 public sealed record BusinessGrowthStatsDto(int ActiveBusinesses, int VerifiedBusinesses, int Cities, int Categories, int LeadsLast30Days,
     int BookingsCompleted, int Reviews, decimal AverageRating);
 
+/// <summary>
+/// The live platform figures shared by the marketing pages and the real-time push (<see cref="IPlatformStatsSignal"/>), so both always
+/// count the same way: listed businesses, published reviews and completed bookings straight from the database.
+/// </summary>
+public static class PlatformStats
+{
+    public static async Task<BusinessGrowthStatsDto> ComputeAsync(IUnitOfWork uow, CancellationToken ct)
+    {
+        var listed = uow.Repository<Business>().QueryNoTracking().Listed();
+        var since = DateTimeOffset.UtcNow.AddDays(-30);
+        var reviews = uow.Repository<Review>().QueryNoTracking().Where(r => r.Status == ReviewStatuses.Published);
+        var averageRating = await reviews.AverageAsync(r => (double?)r.Rating, ct) ?? 0;
+
+        return new BusinessGrowthStatsDto(
+            await listed.CountAsync(ct),
+            await listed.CountAsync(b => b.VerificationStatus == VerificationStatuses.Verified, ct),
+            // Cities CallInBell operates in (curated), not every city in the imported country catalogue.
+            await uow.Repository<City>().QueryNoTracking().CountAsync(c => c.IsActive && c.Source == null, ct),
+            await uow.Repository<SubCategory>().QueryNoTracking().CountAsync(s => s.IsActive, ct),
+            await uow.Repository<Enquiry>().QueryNoTracking().CountAsync(e => e.CreatedOn >= since, ct),
+            await uow.Repository<Booking>().QueryNoTracking().CountAsync(b => b.Status == BookingStatuses.Completed, ct),
+            await reviews.CountAsync(ct),
+            Math.Round((decimal)averageRating, 1));
+    }
+}
+
 public sealed record MarketingPageDto(string PageKey, IReadOnlyList<ContentBlockDto> Blocks, BusinessGrowthStatsDto Stats);
 
 /// <param name="Country">ISO country code of the place being browsed: blocks with a photo for that country show it instead of their own.</param>
@@ -75,21 +101,7 @@ public sealed class GetMarketingPageHandler(IUnitOfWork uow, LegalSettings legal
                 : b).ToList();
         }
 
-        var listed = uow.Repository<Business>().QueryNoTracking().Listed();
-        var since = DateTimeOffset.UtcNow.AddDays(-30);
-        var reviews = uow.Repository<Review>().QueryNoTracking().Where(r => r.Status == ReviewStatuses.Published);
-        var averageRating = await reviews.AverageAsync(r => (double?)r.Rating, ct) ?? 0;
-
-        var stats = new BusinessGrowthStatsDto(
-            await listed.CountAsync(ct),
-            await listed.CountAsync(b => b.VerificationStatus == VerificationStatuses.Verified, ct),
-            // Cities CallInBell operates in (curated), not every city in the imported country catalogue.
-            await uow.Repository<City>().QueryNoTracking().CountAsync(c => c.IsActive && c.Source == null, ct),
-            await uow.Repository<SubCategory>().QueryNoTracking().CountAsync(s => s.IsActive, ct),
-            await uow.Repository<Enquiry>().QueryNoTracking().CountAsync(e => e.CreatedOn >= since, ct),
-            await uow.Repository<Booking>().QueryNoTracking().CountAsync(b => b.Status == BookingStatuses.Completed, ct),
-            await reviews.CountAsync(ct),
-            Math.Round((decimal)averageRating, 1));
+        var stats = await PlatformStats.ComputeAsync(uow, ct);
 
         return new MarketingPageDto(request.PageKey, blocks, stats);
     }

@@ -29,6 +29,7 @@ import { LogoMark } from '@/components/Logo';
 import { api } from '@/lib/api';
 import { compactNumber, money, number, pluralize } from '@/lib/format';
 import { useCategories, useDocumentTitle, usePageCity, useSelectedAreaSlug } from '@/lib/hooks';
+import { useLivePlatformStats } from '@/lib/realtime';
 import { useCity } from '@/stores/city';
 import type { Banner, BusinessCard, HomeData, MarketingPage, NearbyService, SearchSuggestion, NearbyServices, PopularService, RelatedCategory, SubCategory, TopPicks } from '@/lib/types';
 import { ErrorState, Img, SectionHeader } from '@/components/ui';
@@ -119,6 +120,7 @@ export default function HomePage() {
 }
 
 function Hero({ data }: { data?: HomeData }) {
+  useLivePlatformStats();
   const navigate = useNavigate();
   const citySlug = useCity((s) => s.citySlug);
   const areaId = useCity((s) => s.areaId);

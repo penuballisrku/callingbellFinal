@@ -2,6 +2,7 @@ using CallingBell.Application.Common.Behaviours;
 using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace CallingBell.Application;
 
@@ -20,6 +21,8 @@ public static class DependencyInjection
         services.AddScoped<Common.ReferenceDataCache>();
         services.AddScoped<Common.ReverseGeocoder>();
         services.AddSingleton<Features.Seo.SeoCache>();
+        // The API replaces this with the SignalR push (PlatformStatsBroadcaster).
+        services.TryAddSingleton<Common.Interfaces.IPlatformStatsSignal, Common.Interfaces.NoPlatformStatsSignal>();
         services.AddScoped<Features.Seo.ISeoMetadataService, Features.Seo.SeoMetadataService>();
         services.AddScoped<Features.Seo.SitemapService>();
         services.AddScoped<Features.Seo.LlmsTxtService>();
