@@ -22,10 +22,10 @@ interface ThemeState {
 }
 
 /**
- * Light is the default experience (the brand palette: white surfaces, #F7F8FA canvas, navy header bands and footer, amber accent);
- * users can switch to Dark or Auto (follow the device), and their choice is kept.
+ * Dark is the default experience (navy surfaces with the amber accent); users can switch to Light or Auto (follow the device), and
+ * their choice is kept. Keep the fallback in index.html's pre-paint script in sync.
  */
-export const DEFAULT_MODE: ThemeMode = 'light';
+export const DEFAULT_MODE: ThemeMode = 'dark';
 
 // The storage key and version are also read by the pre-paint script in index.html - keep them in sync.
 export const useThemeSettings = create<ThemeState>()(
