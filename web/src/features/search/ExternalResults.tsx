@@ -365,23 +365,12 @@ type PlaceDetails = ReturnType<typeof usePlaceDetails>;
  */
 export function ClaimBusinessBanner({ place, className, compact = false }: {
   place: { name: string; phone?: string | null; website?: string | null; address?: string | null; sourceId?: string | null }; className?: string;
-  /** One quiet line for result lists (the full banner, repeated on every result, crowded the list); the detail views keep the banner. */
+  /** One slim strip for result lists (the full banner, repeated on every result, crowded the list); the detail views keep the banner. */
   compact?: boolean;
 }) {
   // The search the result came from suggests the category when the map's own is vague.
   const [search] = useSearchParams();
-  if (compact) {
-    return (
-      <p className={`flex flex-wrap items-center gap-x-1.5 text-xs text-muted ${className ?? ''}`}>
-        <span aria-hidden className="inline-flex"><LogoMark size={14} /></span>
-        <span>Own this business?</span>
-        <Link to={joinHref(place, joinHint(search))} className="inline-flex items-center gap-0.5 font-semibold text-accent-ink hover:underline"
-          aria-label={`Join CallInBell as the owner of ${place.name}`}>
-          List it free on CallInBell <ArrowForwardRounded sx={{ fontSize: 14 }} />
-        </Link>
-      </p>
-    );
-  }
+  if (compact) return <JoinLeadsStrip to={joinHref(place, joinHint(search))} name={place.name} className={className} />;
   return (
     <div className={`flex flex-col gap-3 rounded-xl border border-[color-mix(in_srgb,var(--cb-accent)_45%,transparent)] bg-accent-soft p-3 sm:flex-row sm:items-center ${className ?? ''}`}>
       <span aria-hidden className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-surface shadow-[var(--cb-shadow-xs)]"><LogoMark size={22} /></span>
@@ -395,6 +384,30 @@ export function ClaimBusinessBanner({ place, className, compact = false }: {
           '&:hover': { bgcolor: 'color-mix(in srgb, var(--cb-accent) 88%, #000)' },
         }}>
         Join CallInBell
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * "Need More Leads? Join CallinBell!" with a "Join CallinBell" button, on search results and in the AI assistant's places. Animated
+ * underline and button pulse: see .cb-leads-* in index.css (transform/box-shadow only, off for prefers-reduced-motion).
+ */
+function JoinLeadsStrip({ to, name, onOpen, className }: { to: string; name: string; onOpen?: () => void; className?: string }) {
+  return (
+    <div className={`cb-leads flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-[color-mix(in_srgb,var(--cb-accent)_45%,transparent)] bg-accent-soft px-3 py-2 ${className ?? ''}`}>
+      <span aria-hidden className="inline-flex shrink-0"><LogoMark size={18} /></span>
+      <p className="min-w-0 flex-1 text-sm font-bold text-ink">
+        Need More Leads? <span className="cb-leads-mark inline-block">Join CallinBell!</span>
+      </p>
+      <Button size="small" variant="contained" disableElevation component={Link} to={to} onClick={onOpen}
+        className="cb-leads-cta" endIcon={<ArrowForwardRounded sx={{ fontSize: 16 }} />}
+        aria-label={`Join CallinBell as the owner of ${name}`}
+        sx={{
+          flexShrink: 0, bgcolor: 'var(--cb-accent)', color: 'var(--cb-on-accent)', fontWeight: 700, whiteSpace: 'nowrap',
+          '&:hover': { bgcolor: 'color-mix(in srgb, var(--cb-accent) 88%, #000)' },
+        }}>
+        Join CallinBell
       </Button>
     </div>
   );
@@ -512,19 +525,8 @@ export function CompactPlace({ p, source, join }: {
       </div>
       <PlaceActions p={p} d={d} source={source} compact />
       {join && (
-        <div className="mt-2.5 flex items-center gap-2 rounded-lg bg-accent-soft px-2.5 py-2">
-          <LogoMark size={16} />
-          <span className="min-w-0 flex-1 truncate text-xs text-ink-2">Want More Customers?</span>
-          <Button size="small" variant="contained" disableElevation component={Link} onClick={join.onOpen}
-            to={joinHref({ name: p.name, phone: d.phone, website: d.website, address: p.address, sourceId: p.id }, join.hint)}
-            aria-label={`Join CallInBell as ${p.name}`}
-            sx={{
-              flexShrink: 0, bgcolor: 'var(--cb-accent)', color: 'var(--cb-on-accent)', fontWeight: 700, whiteSpace: 'nowrap',
-              '&:hover': { bgcolor: 'color-mix(in srgb, var(--cb-accent) 88%, #000)' },
-            }}>
-            Join CallInBell
-          </Button>
-        </div>
+        <JoinLeadsStrip className="mt-2.5" name={p.name} onOpen={join.onOpen}
+          to={joinHref({ name: p.name, phone: d.phone, website: d.website, address: p.address, sourceId: p.id }, join.hint)} />
       )}
     </article>
   );

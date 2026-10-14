@@ -32,7 +32,7 @@ export function PlaceActions({ place: p, compactMid, className = '' }: {
       <RowAction href={p.directionsUrl} external icon={<DirectionsRounded sx={{ fontSize: 18 }} />} label="Directions" hint="Directions in Google Maps" compactMid={compactMid} />
       <RowAction href={p.mapsUrl} external icon={<MapOutlined sx={{ fontSize: 18 }} />} label="View on Map" short="Map" hint="Open in Google Maps" compactMid={compactMid} />
       <RowAction to={joinHref({ name: p.name, phone: p.phone, address: p.address, sourceId: p.sourceId }, joinHint(search))} icon={<NotificationsActiveRounded sx={{ fontSize: 18 }} />}
-        label="Join CallInBell" short="Join" tone="accent" hint={`Own ${p.name}? List it on CallInBell`} />
+        label="Join CallInBell" short="Join" tone="accent" hint={`Need more leads? List ${p.name} on CallInBell`} highlight />
     </div>
   );
 }
@@ -43,16 +43,21 @@ const actionTone = {
   default: 'border-line bg-surface text-ink-2 hover:bg-subtle hover:text-ink',
 } as const;
 
-/** One action as a link: icon over a short label on phones, icon beside the label from 640px. */
-function RowAction({ href, to, external, icon, label, short, hint, tone = 'default', compactMid }: {
+/**
+ * One action as a link: icon over a short label on phones, icon beside the label from 640px. `highlight`: the "Join CallinBell" animation
+ * (underline under the label and a soft pulse, .cb-leads-* in index.css); the label's padding is offset so the underline isn't clipped.
+ */
+function RowAction({ href, to, external, icon, label, short, hint, tone = 'default', compactMid, highlight }: {
   href?: string; to?: string; external?: boolean; icon: ReactNode; label: string; short?: string; hint: string;
-  tone?: keyof typeof actionTone; compactMid?: boolean;
+  tone?: keyof typeof actionTone; compactMid?: boolean; highlight?: boolean;
 }) {
+  const mark = highlight ? 'cb-leads-mark' : '';
   const content = (
     <>
       <span aria-hidden className="flex">{icon}</span>
-      <span className={`max-w-full truncate ${compactMid ? 'lg:max-xl:sr-only' : ''}`}>
-        {short ? <><span className="sm:hidden">{short}</span><span className="hidden sm:inline">{label}</span></> : label}
+      <span className={`max-w-full truncate ${highlight ? '-mb-[3px] pb-[3px]' : ''} ${compactMid ? 'lg:max-xl:sr-only' : ''}`}>
+        {short ? <><span className={`sm:hidden ${mark}`}>{short}</span><span className={`hidden sm:inline ${mark}`}>{label}</span></>
+          : <span className={mark}>{label}</span>}
       </span>
     </>
   );
@@ -63,7 +68,7 @@ function RowAction({ href, to, external, icon, label, short, hint, tone = 'defau
     <span role="link" aria-disabled="true" aria-label={`${label}: ${hint}`} tabIndex={0}
       className={`${base} cursor-not-allowed border-line bg-surface text-faint`}>{content}</span>
   ) : to ? (
-    <Link to={to} aria-label={label} className={`${base} ${actionTone[tone]}`}>{content}</Link>
+    <Link to={to} aria-label={label} className={`${base} ${actionTone[tone]} ${highlight ? 'cb-leads cb-leads-cta' : ''}`}>{content}</Link>
   ) : (
     <a href={href} aria-label={label} className={`${base} ${actionTone[tone]}`} {...(external ? { target: '_blank', rel: 'noreferrer' } : {})}>{content}</a>
   );
