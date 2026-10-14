@@ -48,6 +48,9 @@ internal sealed partial class TestPaymentGateway : IPaymentGateway
             : new GatewayPayment(paymentId, orderId, 0, "INR", "failed", null, "This test order has expired (the API restarted). Start the checkout again."));
     }
 
+    /// <summary>Test payments are captured as soon as they are made.</summary>
+    public Task<GatewayPayment> CapturePaymentAsync(string paymentId, long amount, string currency, CancellationToken ct) => GetPaymentAsync(paymentId, ct);
+
     public bool VerifyPaymentSignature(string gatewayOrderId, string paymentId, string signature) =>
         signature == Signature && PaymentId().Match(paymentId) is { Success: true } m && gatewayOrderId == OrderPrefix + m.Groups["order"].Value
         && Methods.Contains(m.Groups["method"].Value);

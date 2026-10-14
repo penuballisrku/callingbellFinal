@@ -50,6 +50,14 @@ internal sealed class RazorpayGateway(HttpClient http, IOptions<RazorpayOptions>
         return new GatewayPayment(p.Id, p.OrderId, p.Amount, p.Currency, p.Status, p.Method, p.ErrorDescription);
     }
 
+    public async Task<GatewayPayment> CapturePaymentAsync(string paymentId, long amount, string currency, CancellationToken ct)
+    {
+        using var request = Request(HttpMethod.Post, $"payments/{Uri.EscapeDataString(paymentId)}/capture");
+        request.Content = new StringContent(JsonSerializer.Serialize(new { amount, currency }), Encoding.UTF8, "application/json");
+        var p = await SendAsync<PaymentResponse>(request, "capture the payment", ct);
+        return new GatewayPayment(p.Id, p.OrderId, p.Amount, p.Currency, p.Status, p.Method, p.ErrorDescription);
+    }
+
     public bool VerifyPaymentSignature(string gatewayOrderId, string paymentId, string signature) =>
         IsConfigured && Matches($"{gatewayOrderId}|{paymentId}", _options.KeySecret, signature);
 

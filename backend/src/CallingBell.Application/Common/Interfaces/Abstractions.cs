@@ -156,6 +156,11 @@ public interface IPaymentGateway
     string? PublicKey { get; }
     Task<GatewayOrder> CreateOrderAsync(string receipt, long amountInPaise, string currency, IReadOnlyDictionary<string, string> notes, CancellationToken ct);
     Task<GatewayPayment> GetPaymentAsync(string paymentId, CancellationToken ct);
+    /// <summary>
+    /// Captures an authorized payment, so the money is settled rather than refunded after a few days (Razorpay refunds authorized
+    /// payments that are never captured when the account's auto-capture setting is off).
+    /// </summary>
+    Task<GatewayPayment> CapturePaymentAsync(string paymentId, long amount, string currency, CancellationToken ct);
     /// <summary>Verifies the signature the checkout returns after a successful payment.</summary>
     bool VerifyPaymentSignature(string gatewayOrderId, string paymentId, string signature);
     /// <summary>Verifies a webhook body against its signature header. False when no webhook secret is configured.</summary>

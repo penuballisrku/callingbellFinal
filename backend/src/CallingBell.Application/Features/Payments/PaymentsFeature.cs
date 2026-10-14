@@ -161,7 +161,7 @@ public sealed class VerifyPlanPaymentHandler(IUnitOfWork uow, ICurrentUser user,
 
         // Never trust the browser alone: confirm the payment, its order and its amount with the gateway.
         var payment = await gateway.GetPaymentAsync(r.GatewayPaymentId, ct);
-        return await SubscriptionActivator.ActivateAsync(uow, notifier, order.Id, payment, ct);
+        return await SubscriptionActivator.ActivateAsync(uow, gateway, notifier, order.Id, payment, ct);
     }
 }
 
@@ -211,7 +211,7 @@ public sealed class HandlePaymentWebhookHandler(IUnitOfWork uow, IPaymentGateway
         switch (evt)
         {
             case "payment.captured" or "payment.authorized" or "order.paid":
-                await SubscriptionActivator.ActivateAsync(uow, notifier, order.Id, payment, ct);
+                await SubscriptionActivator.ActivateAsync(uow, gateway, notifier, order.Id, payment, ct);
                 break;
             case "payment.failed":
                 var tracked = await uow.Repository<PaymentOrder>().Query().FirstAsync(o => o.Id == order.Id, ct);
@@ -236,9 +236,11 @@ internal static class SubscriptionActivator
 
     /// <summary>
     /// Marks the order paid, starts the subscription and writes the invoice - exactly once, even if the browser callback and the
-    /// webhook arrive together (row-version concurrency on the order).
+    /// webhook arrive together (row-version concurrency on the order). An authorized payment is captured first, so a plan is never
+    /// activated for money the gateway would later refund.
     /// </summary>
-    public static async Task<PaymentResultDto> ActivateAsync(IUnitOfWork uow, IRealtimeNotifier notifier, Guid orderId, GatewayPayment payment, CancellationToken ct)
+    public static async Task<PaymentResultDto> ActivateAsync(IUnitOfWork uow, IPaymentGateway gateway, IRealtimeNotifier notifier, Guid orderId,
+        GatewayPayment payment, CancellationToken ct)
     {
         // Reject payments that don't match this order (wrong order, amount or status) and record why - outside the activation transaction.
         var snapshot = await uow.Repository<PaymentOrder>().QueryNoTracking().Where(o => o.Id == orderId)
@@ -258,6 +260,9 @@ internal static class SubscriptionActivator
             try { await uow.SaveChangesAsync(ct); } catch (DbUpdateConcurrencyException) { return await PaymentResults.ForAsync(uow, orderId, ct); }
             throw new BadRequestException("This payment could not be confirmed. If money was deducted, Razorpay will refund it automatically.");
         }
+
+        if (snapshot.Status != PaymentOrderStatuses.Paid && payment.Status == "authorized")
+            payment = await CaptureAsync(gateway, payment, ct);
 
         string? ownerId = null, planName = null;
         try
@@ -317,6 +322,24 @@ internal static class SubscriptionActivator
             // The other confirmation path activated the order first - nothing more to do.
         }
         return await PaymentResults.ForAsync(uow, orderId, ct);
+    }
+
+    /// <summary>
+    /// Captures the (already matched) payment. When the browser callback and the webhook capture at the same time, the second capture is
+    /// refused by the gateway; the payment is then read again and accepted if it is captured.
+    /// </summary>
+    private static async Task<GatewayPayment> CaptureAsync(IPaymentGateway gateway, GatewayPayment payment, CancellationToken ct)
+    {
+        try
+        {
+            payment = await gateway.CapturePaymentAsync(payment.Id, payment.Amount, payment.Currency, ct);
+        }
+        catch (BadRequestException)
+        {
+            payment = await gateway.GetPaymentAsync(payment.Id, ct);
+        }
+        return payment.Status == "captured" ? payment
+            : throw new BadRequestException("Your payment is authorized but not yet captured. It will be confirmed automatically in a few minutes.");
     }
 
     private static string Mode(string? method) => method?.ToLowerInvariant() switch
