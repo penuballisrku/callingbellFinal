@@ -269,6 +269,10 @@ export interface AdminDashboard {
   activeUsers: { date: string; dau: number; mau: number; newUsers: number }[];
   categories: Distribution[]; cities: Distribution[]; subscriptions: Distribution[];
   attention: { pendingApprovals: number; pendingVerifications: number; flaggedReviews: number; pendingAds: number };
+  /** Business profile views per day over the last 90 days, summed over all businesses. */
+  profileViews: { date: string; views: number }[];
+  /** The most viewed businesses in the last 30 days (key = slug, count = views). */
+  topViewed: Distribution[];
 }
 export interface AdminBusinessRow {
   id: string; name: string; slug: string; logoUrl?: string | null; categoryName: string; subCategoryName?: string | null; city: string; area?: string | null;

@@ -11,6 +11,8 @@ namespace CallingBell.Application.Features.Admin;
 public sealed record MonthlyPointDto(string Month, DateTime MonthStart, IReadOnlyDictionary<string, decimal> Values);
 public sealed record DailyPointDto(DateTime Date, int Dau, int Mau, int NewUsers);
 public sealed record DistributionDto(string Key, string Name, int Count, decimal? Value = null, string? ColorHex = null);
+/// <summary>Business profile views on one day, summed over all businesses (BusinessDailyStats).</summary>
+public sealed record DailyViewsDto(DateTime Date, int Views);
 public sealed record AttentionDto(int PendingApprovals, int PendingVerifications, int FlaggedReviews, int PendingAds);
 
 public sealed record AdminDashboardDto(
@@ -23,7 +25,9 @@ public sealed record AdminDashboardDto(
     IReadOnlyList<DistributionDto> Categories,
     IReadOnlyList<DistributionDto> Cities,
     IReadOnlyList<DistributionDto> Subscriptions,
-    AttentionDto Attention);
+    AttentionDto Attention,
+    IReadOnlyList<DailyViewsDto> ProfileViews,
+    IReadOnlyList<DistributionDto> TopViewed);
 
 public sealed record GetAdminDashboardQuery : IRequest<AdminDashboardDto>;
 
@@ -60,6 +64,9 @@ public sealed class GetAdminDashboardHandler(IUnitOfWork uow) : IRequestHandler<
         var latestDay = await platform.OrderByDescending(p => p.StatDate).FirstOrDefaultAsync(ct);
         var dauPrev = await platform.Where(p => p.StatDate <= today.AddDays(-30)).OrderByDescending(p => p.StatDate).Select(p => p.ActiveUsers).FirstOrDefaultAsync(ct);
         var publishedReviews = reviews.Where(r => r.Status == ReviewStatuses.Published);
+        var dailyStats = uow.Repository<BusinessDailyStat>().QueryNoTracking();
+        var views30 = await dailyStats.Where(s => s.StatDate > today.AddDays(-30)).SumAsync(s => (int?)s.ProfileViews, ct) ?? 0;
+        var viewsPrev = await dailyStats.Where(s => s.StatDate > today.AddDays(-60) && s.StatDate <= today.AddDays(-30)).SumAsync(s => (int?)s.ProfileViews, ct) ?? 0;
 
         var kpis = new List<KpiDto>
         {
@@ -77,7 +84,8 @@ public sealed class GetAdminDashboardHandler(IUnitOfWork uow) : IRequestHandler<
             new("reviews", "Published reviews", await publishedReviews.CountAsync(ct), null, "number"),
             new("averageRating", "Average rating", Math.Round(await publishedReviews.AverageAsync(r => (decimal?)r.Rating, ct) ?? 0, 2), null, "rating"),
             new("dau", "Daily active users", latestDay?.ActiveUsers ?? 0, latestDay is null ? null : OwnerAccess.Delta(latestDay.ActiveUsers, dauPrev), "number"),
-            new("mau", "Monthly active users", latestDay?.MonthlyActiveUsers ?? 0, null, "number")
+            new("mau", "Monthly active users", latestDay?.MonthlyActiveUsers ?? 0, null, "number"),
+            new("profileViews", "Profile views (30d)", views30, OwnerAccess.Delta(views30, viewsPrev), "number")
         };
 
         // ---- Last 12 complete months (the current, partial month would show a false drop) ----
@@ -145,6 +153,17 @@ public sealed class GetAdminDashboardHandler(IUnitOfWork uow) : IRequestHandler<
             await reviews.CountAsync(r => r.Status == ReviewStatuses.Flagged, ct),
             await ads.CountAsync(a => a.Status == AdStatuses.PendingApproval, ct));
 
-        return new AdminDashboardDto(kpis, registrations, leadSeries, bookingSeries, revenueSeries, activeUsers, categories, cities, subscriptions, attention);
+        // ---- Profile views: daily totals (90 days) and the most viewed businesses (30 days) ----
+        var viewsByDay = (await dailyStats.Where(s => s.StatDate > today.AddDays(-90)).GroupBy(s => s.StatDate)
+                .Select(g => new { Date = g.Key, Views = g.Sum(s => s.ProfileViews) }).OrderBy(d => d.Date).ToListAsync(ct))
+            .Select(d => new DailyViewsDto(d.Date, d.Views)).ToList();
+        var topViewed = await dailyStats.Where(s => s.StatDate > today.AddDays(-30))
+            .GroupBy(s => new { s.BusinessId, s.Business.Slug, s.Business.Name })
+            .Select(g => new { g.Key.Slug, g.Key.Name, Views = g.Sum(s => s.ProfileViews) })
+            .Where(x => x.Views > 0).OrderByDescending(x => x.Views).Take(10)
+            .Select(x => new DistributionDto(x.Slug, x.Name, x.Views, null, null)).ToListAsync(ct);
+
+        return new AdminDashboardDto(kpis, registrations, leadSeries, bookingSeries, revenueSeries, activeUsers, categories, cities, subscriptions, attention,
+            viewsByDay, topViewed);
     }
 }

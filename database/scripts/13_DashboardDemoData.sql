@@ -114,7 +114,8 @@ SELECT u.Id, ab.Id, MIN(DATEADD(DAY, -(ABS(CHECKSUM(u.Id, n.d)) % 120), @Now))
 FROM dbo.AspNetUsers u
 JOIN #D n ON n.d < 2 + ABS(CHECKSUM(u.Id, N'fav')) % 7
 JOIN #ActiveBiz ab ON ab.Idx = ABS(CHECKSUM(u.Id, n.d, N'pick')) % @BizCount
-WHERE u.UserType = N'Customer' AND u.IsActive = 1
+-- Demo customers only: sample reviews, enquiries, bookings and favourites are never assigned to people who really signed up.
+WHERE u.UserType = N'Customer' AND u.IsActive = 1 AND u.Email LIKE N'%@demo.callingbell.in'
   AND NOT EXISTS (SELECT 1 FROM dbo.Favorites f WHERE f.UserId = u.Id AND f.BusinessId = ab.Id)
 GROUP BY u.Id, ab.Id;
 

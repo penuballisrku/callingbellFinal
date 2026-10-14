@@ -90,7 +90,8 @@ INSERT INTO #M VALUES
 
 IF OBJECT_ID('tempdb..#Cust') IS NOT NULL DROP TABLE #Cust;
 SELECT Id, DisplayName, Email, PhoneNumber, ROW_NUMBER() OVER (ORDER BY NormalizedEmail) - 1 AS Idx
-INTO #Cust FROM dbo.AspNetUsers WHERE UserType = N'Customer' AND IsActive = 1;
+-- Demo customers only: sample reviews, enquiries, bookings and favourites are never assigned to people who really signed up.
+INTO #Cust FROM dbo.AspNetUsers WHERE UserType = N'Customer' AND IsActive = 1 AND Email LIKE N'%@demo.callingbell.in';
 DECLARE @CustCount int = (SELECT COUNT(*) FROM #Cust);
 
 IF OBJECT_ID('tempdb..#Svc') IS NOT NULL DROP TABLE #Svc;

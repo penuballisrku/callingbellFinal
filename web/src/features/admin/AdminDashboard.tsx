@@ -7,13 +7,14 @@ import { moneyShort, number } from '@/lib/format';
 import { useDocumentTitle } from '@/lib/hooks';
 import type { AdminDashboard as Dashboard, MonthlyPoint } from '@/lib/types';
 import { BarsChart, RankedBars, TrendChart } from '@/components/charts';
-import { ErrorState, KpiCard, KpiSkeletons, PageHeader, Panel } from '@/components/ui';
+import { EmptyState, ErrorState, KpiCard, KpiSkeletons, PageHeader, Panel } from '@/components/ui';
 
 const flatten = (points: MonthlyPoint[]) => points.map((p) => ({ month: p.month, ...p.values }));
 
 export default function AdminDashboard() {
   useDocumentTitle('Admin dashboard');
   const [usersRange, setUsersRange] = useState<30 | 90>(90);
+  const [viewsRange, setViewsRange] = useState<30 | 90>(30);
   const { data, isLoading, isError, refetch } = useQuery({ queryKey: ['admin', 'dashboard'], queryFn: () => api.get<Dashboard>('/api/admin/dashboard') });
   if (isError) return <ErrorState onRetry={() => refetch()} />;
 
@@ -22,7 +23,10 @@ export default function AdminDashboard() {
   const row2 = ['leads', 'newEnquiries', 'bookings', 'pendingBookings', 'activeSubscriptions'];
   const row3 = ['advertisements', 'reviews', 'averageRating', 'dau', 'mau'];
   const a = data?.attention;
-  const dau = data?.activeUsers.slice(-usersRange).map((d) => ({ ...d, label: new Date(d.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) })) ?? [];
+  const dayLabel = (date: string) => new Date(date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  const dau = data?.activeUsers.slice(-usersRange).map((d) => ({ ...d, label: dayLabel(d.date) })) ?? [];
+  const views = data?.profileViews.slice(-viewsRange).map((d) => ({ ...d, label: dayLabel(d.date) })) ?? [];
+  const viewsKpi = k('profileViews');
 
   return (
     <>
@@ -80,6 +84,21 @@ export default function AdminDashboard() {
           </div>
         )}
       </Panel>
+
+      <div className="mt-6 grid gap-6 xl:grid-cols-3">
+        <Panel title="Profile views" className="xl:col-span-2"
+          subtitle={viewsKpi ? `${number(viewsKpi.value)} business profile views in the last 30 days${viewsKpi.changePercent != null ? ` · ${viewsKpi.changePercent > 0 ? '+' : ''}${viewsKpi.changePercent}% vs the 30 days before` : ''}` : 'Business profile views per day'}
+          action={<ToggleButtonGroup size="small" exclusive value={viewsRange} onChange={(_, v) => v && setViewsRange(v)}><ToggleButton value={30}>30d</ToggleButton><ToggleButton value={90}>90d</ToggleButton></ToggleButtonGroup>}>
+          {isLoading ? <Skeleton variant="rounded" height={400} /> : views.length
+            ? <TrendChart data={views} x="label" area height={400} lines={[{ key: 'views', label: 'Profile views', color: 2 }]} />
+            : <EmptyState title="No profile views yet" message="Views appear here as people open business pages." />}
+        </Panel>
+        <Panel title="Most viewed businesses" subtitle="Profile views, last 30 days">
+          {isLoading ? <Skeleton variant="rounded" height={260} /> : data!.topViewed.length
+            ? <RankedBars rows={data!.topViewed.map((b) => ({ key: b.key, label: b.name, value: b.count }))} valueLabel="Profile views by business" tone={4} />
+            : <EmptyState title="No views in the last 30 days" />}
+        </Panel>
+      </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-3">
         <Panel title="Businesses by category" subtitle="Active listings">
