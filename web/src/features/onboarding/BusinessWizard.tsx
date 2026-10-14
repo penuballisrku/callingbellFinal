@@ -484,6 +484,7 @@ function Wizard({ mode, data, paymentsEnabled, imported }: {
 
   const current = steps[step]!;
   const isLast = step === steps.length - 1;
+  const finishLabel = `${mode === 'register' ? 'Create account' : 'Create business'}${isPaidPlan && paymentsEnabled ? ` & pay ${moneyPrecise(orderTotal, plan)}` : mode === 'register' ? ' & finish' : ''}`;
 
   return (
     <FormProvider {...form}>
@@ -517,16 +518,14 @@ function Wizard({ mode, data, paymentsEnabled, imported }: {
                 {current.key === 'contact' && <ContactStep data={data} />}
                 {current.key === 'offer' && <OfferStep data={data} />}
                 {current.key === 'media' && <MediaStep data={data} media={mediaState} imported={importedPhotos} />}
-                {current.key === 'payment' && <PaymentStep data={data} paymentsEnabled={paymentsEnabled} onChangePlan={() => goToKey('offer')} />}
+                {current.key === 'payment' && <PaymentStep data={data} paymentsEnabled={paymentsEnabled} payButton={finishLabel} onChangePlan={() => goToKey('offer')} />}
                 {current.key === 'review' && <ReviewStep data={data} media={mediaState} onEdit={goToKey} paymentsEnabled={paymentsEnabled} />}
               </div>
               <div className="sticky bottom-0 z-10 flex items-center justify-between gap-3 rounded-b-xl border-t border-line bg-surface/95 px-5 py-3.5 backdrop-blur md:px-7">
                 <Button onClick={() => goTo(step - 1)} disabled={step === 0} startIcon={<ArrowBackRounded />} color="inherit">Back</Button>
                 <Button type="submit" variant="contained" color={isLast ? 'secondary' : 'primary'} size="large"
                   endIcon={isLast ? <CheckRounded /> : <ArrowForwardRounded />} disabled={emailStatus === 'checking'}>
-                  {isLast
-                    ? `${mode === 'register' ? 'Create account' : 'Create business'}${isPaidPlan && paymentsEnabled ? ` & pay ${moneyPrecise(orderTotal, plan)}` : mode === 'register' ? ' & finish' : ''}`
-                    : 'Continue'}
+                  {isLast ? finishLabel : current.key === 'payment' && paymentsEnabled ? 'Continue to review & pay' : 'Continue'}
                 </Button>
               </div>
             </form>

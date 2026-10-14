@@ -449,7 +449,10 @@ function OrderTotal({ plan, cycle }: { plan: Plan; cycle: string }) {
   return <span className="font-semibold">{moneyPrecise(total, plan)}{tax && <span className="font-normal text-muted"> incl. {tax}</span>}</span>;
 }
 
-export function PaymentStep({ data, paymentsEnabled, onChangePlan }: { data: WizardData; paymentsEnabled: boolean; onChangePlan: () => void }) {
+/** <paramref name="payButton"/>: the label of the wizard's last button, which creates the business and opens the Razorpay window. */
+export function PaymentStep({ data, paymentsEnabled, payButton, onChangePlan }: {
+  data: WizardData; paymentsEnabled: boolean; payButton: string; onChangePlan: () => void;
+}) {
   const { control } = useFormContext<WizardForm>();
   const planCode = useWatch({ control, name: 'business.planCode' });
   const cycle = useWatch({ control, name: 'business.billingCycle' });
@@ -494,6 +497,12 @@ export function PaymentStep({ data, paymentsEnabled, onChangePlan }: { data: Wiz
         <LockOutlined className="mt-0.5 text-muted" fontSize="small" />
         <div>
           <div className="font-semibold">Secure payment with Razorpay</div>
+          {paymentsEnabled && (
+            <p className="mt-1 text-ink">
+              You pay on the last step: check your details, then click <strong>{payButton}</strong>. Razorpay&apos;s secure payment window opens
+              there with the total of <strong>{moneyPrecise(total, plan)}</strong>.
+            </p>
+          )}
           <p className="mt-0.5 text-muted">Pay by UPI, debit or credit card, net banking or wallet. CallInBell never sees your card or bank details.
             If you close the payment window, your business keeps a basic listing and you can pay any time from your dashboard.</p>
           <p className="mt-2 text-muted">Plans don&apos;t renew automatically. See <PolicyList policies={['cancellation', 'refund']} /> for cancellations,
