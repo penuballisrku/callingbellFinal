@@ -109,20 +109,25 @@ SELECT pr.*, sp.Id AS PlanId,
 INTO #Period
 FROM periods pr JOIN dbo.SubscriptionPlans sp ON sp.Code = pr.PlanCode;
 
--- Free listings and 14-day trials for businesses awaiting approval
+-- Free listings, including businesses awaiting approval (CallInBell has no free trials: a paid plan starts only once it is paid for)
 INSERT INTO #Period (BusinessId, Slug, Code, BusinessStatus, Cycle, i, StartDate, EndDate, PlanCode, PlanId, Amount, SubStatus)
-SELECT p.Id, p.Slug, p.Code, p.Status, N'Monthly', 0, p.FirstStart,
-       CASE WHEN p.Status = N'PendingApproval' THEN DATEADD(DAY, 14, p.FirstStart) ELSE DATEADD(YEAR, 10, p.FirstStart) END,
-       p.CurrentPlan, sp.Id, 0,
-       CASE WHEN p.Status = N'PendingApproval' THEN N'Trial' WHEN p.Status = N'Inactive' THEN N'Cancelled' ELSE N'Active' END
-FROM #Plan p JOIN dbo.SubscriptionPlans sp ON sp.Code = p.CurrentPlan
+SELECT p.Id, p.Slug, p.Code, p.Status, N'Monthly', 0, p.FirstStart, DATEADD(YEAR, 10, p.FirstStart),
+       sp.Code, sp.Id, 0,
+       CASE WHEN p.Status = N'Inactive' THEN N'Cancelled' ELSE N'Active' END
+FROM #Plan p JOIN dbo.SubscriptionPlans sp ON sp.Code = N'FREE'
 WHERE p.CurrentPlan = N'FREE' OR p.Status = N'PendingApproval';
 
 MERGE dbo.BusinessSubscriptions AS t
 USING #Period AS s
 ON t.SubscriptionNumber = N'SUB-' + s.Code + N'-' + RIGHT(N'0' + CAST(s.i + 1 AS nvarchar(3)), 2)
-WHEN MATCHED AND (t.Status <> s.SubStatus OR (t.CreatedBy = N'seed' AND t.Amount <> s.Amount))
+-- Unpaid seed rows that belong on Free (the 14-day paid-plan trials older seeds gave businesses awaiting approval) also move to the
+-- Free plan and its end date ("ToFree" below).
+WHEN MATCHED AND (t.Status <> s.SubStatus OR (t.CreatedBy = N'seed' AND t.Amount <> s.Amount)
+                  OR (t.CreatedBy = N'seed' AND t.Amount = 0 AND s.PlanCode = N'FREE' AND t.PlanId <> s.PlanId))
     THEN UPDATE SET Status = s.SubStatus, Amount = CASE WHEN t.CreatedBy = N'seed' THEN s.Amount ELSE t.Amount END,
+                    PlanId    = CASE WHEN t.CreatedBy = N'seed' AND t.Amount = 0 AND s.PlanCode = N'FREE' THEN s.PlanId  ELSE t.PlanId END,    -- ToFree
+                    EndDate   = CASE WHEN t.CreatedBy = N'seed' AND t.Amount = 0 AND s.PlanCode = N'FREE' THEN s.EndDate ELSE t.EndDate END,   -- ToFree
+                    AutoRenew = CASE WHEN t.CreatedBy = N'seed' AND t.Amount = 0 AND s.PlanCode = N'FREE' THEN 0 ELSE t.AutoRenew END,         -- ToFree
                     ModifiedBy = N'seed', ModifiedOn = SYSDATETIMEOFFSET()
 WHEN NOT MATCHED BY TARGET
     THEN INSERT (SubscriptionNumber, BusinessId, PlanId, BillingCycle, StartDate, EndDate, Amount, Status, AutoRenew, CreatedBy, CreatedOn)

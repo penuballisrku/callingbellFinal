@@ -49,3 +49,4 @@
 :r $(ScriptDir)\34_Rebrand.sql
 :r $(ScriptDir)\35_WebPushVapid.sql
 :r $(ScriptDir)\36_LegalPolicies.sql
+:r $(ScriptDir)\37_NoFreeTrials.sql
