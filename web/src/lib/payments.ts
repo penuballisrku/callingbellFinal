@@ -9,8 +9,12 @@ export const TEST_GATEWAY = 'Test';
 
 /** Whether online checkout is available (Razorpay keys configured on the server). */
 export function usePaymentConfig() {
-  // Re-checked after a minute, so a page left open sees payments switched on (or off) on the server without a reload.
-  return useQuery({ queryKey: ['payments', 'config'], queryFn: () => api.get<PaymentConfig>('/api/payments/config'), staleTime: 60_000 });
+  // A page left open sees payments switched on (or off) on the server without a reload: re-checked when the tab is focused again and,
+  // while payments are off, every 30 seconds (the sign-up wizard can stay open for a long time).
+  return useQuery({
+    queryKey: ['payments', 'config'], queryFn: () => api.get<PaymentConfig>('/api/payments/config'), staleTime: 30_000,
+    refetchOnWindowFocus: true, refetchInterval: (q) => (q.state.data?.enabled ? false : 30_000),
+  });
 }
 
 export const GST_RATE = 0.18;
