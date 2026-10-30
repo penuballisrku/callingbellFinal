@@ -321,6 +321,9 @@ export interface AdminSubscriptions {
 /** A real place from outside the platform (OpenStreetMap or Google Maps), shown below registered businesses in search. */
 export interface ExternalPlace {
   id: string; name: string; kind?: string | null; address?: string | null; phone?: string | null; website?: string | null; openingHours?: string | null;
+  email?: string | null; description?: string | null;
+  /** Short facts from the place's map data: "Wheelchair accessible", "Cuisine: South Indian"… */
+  features?: string[] | null;
   rating?: number | null; ratingCount?: number | null; distanceKm: number; directionsUrl: string; sourceUrl?: string | null;
   /** Google Maps only: photo served through /api/places/photo, with its author (Google requires the credit to be shown). */
   photoUrl?: string | null; photoCredit?: string | null; photoCreditUrl?: string | null;

@@ -11,11 +11,13 @@ import PlaceRounded from '@mui/icons-material/PlaceRounded';
 import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import WhatsApp from '@mui/icons-material/WhatsApp';
 import StarRounded from '@mui/icons-material/StarRounded';
+import CheckCircleRounded from '@mui/icons-material/CheckCircleRounded';
 import { LogoMark } from '@/components/Logo';
 import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 import { Link, useSearchParams } from 'react-router';
 import { api } from '@/lib/api';
-import { number } from '@/lib/format';
+import { money, number } from '@/lib/format';
+import { usePlans } from '@/lib/hooks';
 import type { ExternalPlace, ExternalSearch, ExternalTier, PlaceContact } from '@/lib/types';
 import { Img } from '@/components/ui';
 import { GoogleMapsAttribution, GoogleMapsDataCredit } from '@/components/GoogleMapsAttribution';
@@ -176,7 +178,7 @@ export function ExternalResults({ ext, loading, isError, only, polling, onRefres
       )}
       {only === 'ai' && <AiInsight insight={ext.insight} stalled={polling === false} onRefresh={onRefresh} />}
       {only === 'ai' && (
-        <TierSection tier={ext.ai} source="ai" title="AI recommended" where={where} onSelect={onSelect}
+        <TierSection tier={ext.ai} source="ai" title="AI recommended" where={where} onSelect={onSelect} googleOn={ext.google.status !== 'off'}
           subtitle={ext.ai.aiStatus === 'ranked'
             ? 'Best matches picked by AI · not on CallInBell'
             : ext.ai.aiStatus === 'pending'
@@ -251,11 +253,13 @@ function searchLocation(ext: ExternalSearch): SearchLocation | null {
   return { label, source };
 }
 
-function TierSection({ tier, source, title, subtitle, where, empty, attribution, onSelect, onLoadMore, loadingMore }: {
+function TierSection({ tier, source, title, subtitle, where, empty, attribution, onSelect, onLoadMore, loadingMore, googleOn = true }: {
   tier: ExternalTier; source: 'ai' | 'google'; title: string; subtitle: React.ReactNode; where: SearchLocation | null; empty: string; attribution: React.ReactNode;
   onSelect?: (place: ExternalPlace, source: 'google' | 'ai') => void;
   /** Loads the source's next page (Google: 20 more); undefined when there is no more. */
   onLoadMore?: () => void; loadingMore?: boolean;
+  /** Google Maps is available to add a phone number or photo to places that lack one. */
+  googleOn?: boolean;
 }) {
   const [shown, setShown] = useState(PAGE);
   const showMore = () => {
@@ -298,7 +302,7 @@ function TierSection({ tier, source, title, subtitle, where, empty, attribution,
         <>
           {/* One business per row. */}
           <ul className="space-y-3">
-            {tier.items.slice(0, shown).map((p) => <li key={p.id} className="min-w-0"><PlaceCard p={p} source={source} onSelect={onSelect} /></li>)}
+            {tier.items.slice(0, shown).map((p) => <li key={p.id} className="min-w-0"><PlaceCard p={p} source={source} onSelect={onSelect} googleOn={googleOn} /></li>)}
           </ul>
           {(tier.items.length > shown || onLoadMore) && (
             <div className="mt-4 flex justify-center">
@@ -323,11 +327,12 @@ function TierSection({ tier, source, title, subtitle, where, empty, attribution,
 
 /**
  * Everything a place card shows: phone, rating, open now and a photo. Google Maps results carry these already. AI picks come from
- * OpenStreetMap, which rarely has them, so they are looked up on Google Maps (by name, near the place) when the card is shown. Each
- * lookup is a billed Google request, so it runs only for the cards on screen (eight at a time) and once per place per visit.
+ * OpenStreetMap (through Geoapify), which often has the phone number but rarely a rating or photo; a place without a phone number is
+ * looked up on Google Maps (by name, near the place) when the card is shown and Google is on (`googleOn`). Each lookup is a billed
+ * Google request, so it runs only for the cards on screen (eight at a time) and once per place per visit.
  */
-function usePlaceDetails(p: ExternalPlace) {
-  const canLookup = !p.id.startsWith('google:') && p.latitude != null && p.longitude != null;
+function usePlaceDetails(p: ExternalPlace, googleOn = true) {
+  const canLookup = googleOn && !p.phone && !p.id.startsWith('google:') && p.latitude != null && p.longitude != null;
   const lookup = useQuery({
     queryKey: ['place-contact', p.id],
     queryFn: () => api.get<PlaceContact>('/api/places/contact', { name: p.name, lat: p.latitude, lon: p.longitude }),
@@ -378,6 +383,8 @@ export function ClaimBusinessBanner({ place, className, compact = false }: {
       <div className="min-w-0 flex-1">
         <p className="text-sm font-bold text-ink">Want more customers?</p>
         <p className="text-xs text-ink-2">Own {place.name}? List it on CallInBell and get enquiries, bookings and reviews from customers nearby.</p>
+        <OwnerBenefits className="mt-2" />
+        <PlanFrom className="mt-1.5" />
       </div>
       <Button size="small" variant="contained" disableElevation component={Link} to={joinHref(place, joinHint(search))}
         sx={{
@@ -390,26 +397,74 @@ export function ClaimBusinessBanner({ place, className, compact = false }: {
   );
 }
 
-/**
- * "Need More Leads? Join CallinBell!" with a "Join CallinBell" button, on search results and in the AI assistant's places. Animated
- * underline and button pulse: see .cb-leads-* in index.css (transform/box-shadow only, off for prefers-reduced-motion).
- */
-function JoinLeadsStrip({ to, name, onOpen, className }: { to: string; name: string; onOpen?: () => void; className?: string }) {
+/** What a business gets on CallInBell (all things the platform does today), for the owner of a place found on the map. */
+const OWNER_BENEFITS = [
+  'Instant lead alerts on WhatsApp & SMS',
+  'Online bookings and enquiries',
+  'Verified badge and customer reviews',
+  'Listed above map results in search',
+];
+
+function OwnerBenefits({ className = '', count = OWNER_BENEFITS.length }: { className?: string; count?: number }) {
   return (
-    <div className={`cb-leads flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-[color-mix(in_srgb,var(--cb-accent)_45%,transparent)] bg-accent-soft px-3 py-2 ${className ?? ''}`}>
-      <span aria-hidden className="inline-flex shrink-0"><LogoMark size={18} /></span>
-      <p className="min-w-0 flex-1 text-sm font-bold text-ink">
-        Need More Leads? <span className="cb-leads-mark inline-block">Join CallinBell!</span>
-      </p>
-      <Button size="small" variant="contained" disableElevation component={Link} to={to} onClick={onOpen}
-        className="cb-leads-cta" endIcon={<ArrowForwardRounded sx={{ fontSize: 16 }} />}
-        aria-label={`Join CallinBell as the owner of ${name}`}
-        sx={{
-          flexShrink: 0, bgcolor: 'var(--cb-accent)', color: 'var(--cb-on-accent)', fontWeight: 700, whiteSpace: 'nowrap',
-          '&:hover': { bgcolor: 'color-mix(in srgb, var(--cb-accent) 88%, #000)' },
-        }}>
-        Join CallinBell
-      </Button>
+    <ul className={`grid gap-x-4 gap-y-1 text-xs text-ink-2 sm:grid-cols-2 ${className}`}>
+      {OWNER_BENEFITS.slice(0, count).map((b) => (
+        <li key={b} className="flex min-w-0 items-start gap-1.5">
+          <CheckCircleRounded sx={{ fontSize: 14, mt: '1px', flexShrink: 0 }} className="text-accent-ink" aria-hidden />
+          <span className="min-w-0">{b}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** "Plans from ₹199/month · See plans": the lowest paid plan's price, from the database, in the visitor's currency. */
+function PlanFrom({ className = '' }: { className?: string }) {
+  const { data: plans } = usePlans();
+  const cheapest = plans?.filter((p) => p.monthlyPrice > 0).sort((a, b) => a.monthlyPrice - b.monthlyPrice)[0];
+  return (
+    <p className={`flex flex-wrap items-center gap-x-1.5 text-[11px] text-muted ${className}`}>
+      <span>Your details from this listing are filled in for you</span>
+      {cheapest && <><span aria-hidden>·</span><span>Plans from <span className="font-semibold text-ink-2">{money(cheapest.monthlyPrice, cheapest)}</span>/month</span></>}
+      <span aria-hidden>·</span>
+      <Link to="/pricing" className="font-semibold text-accent-ink underline-offset-2 hover:underline">See plans</Link>
+    </p>
+  );
+}
+
+/**
+ * The invitation shown with every outside result (search results and the AI assistant's places): "Own {name}? Get more customers on
+ * CallInBell", the animated "Need more leads? Join CallinBell!", what a business gets, and the starting price. `dense`: the narrow
+ * assistant panel, with two benefits. Animated underline and button pulse: see .cb-leads-* in index.css (transform/box-shadow only,
+ * off for prefers-reduced-motion).
+ */
+function JoinLeadsStrip({ to, name, onOpen, className, dense = false }: { to: string; name: string; onOpen?: () => void; className?: string; dense?: boolean }) {
+  return (
+    <div className={`cb-leads rounded-lg border border-[color-mix(in_srgb,var(--cb-accent)_45%,transparent)] bg-accent-soft px-3 py-2.5 ${className ?? ''}`}>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span aria-hidden className="inline-flex shrink-0 self-start pt-0.5"><LogoMark size={18} /></span>
+        {/* At least 12rem for the text: on narrow screens the button moves to its own full-width row instead of squeezing it. */}
+        <div className="min-w-[12rem] flex-1">
+          <p className="text-sm font-bold text-ink">
+            <span className="break-words">Own {name}?</span> Get more customers on CallInBell
+          </p>
+          <p className="text-[13px] font-semibold text-ink-2">
+            Need more leads? <span className="cb-leads-mark inline-block">Join CallinBell!</span>
+          </p>
+        </div>
+        <Button size="small" variant="contained" disableElevation component={Link} to={to} onClick={onOpen}
+          className="cb-leads-cta" endIcon={<ArrowForwardRounded sx={{ fontSize: 16 }} />}
+          aria-label={`Join CallinBell as the owner of ${name}`}
+          sx={{
+            flexShrink: 0, bgcolor: 'var(--cb-accent)', color: 'var(--cb-on-accent)', fontWeight: 700, whiteSpace: 'nowrap',
+            width: { xs: '100%', sm: 'auto' },
+            '&:hover': { bgcolor: 'color-mix(in srgb, var(--cb-accent) 88%, #000)' },
+          }}>
+          Join CallinBell
+        </Button>
+      </div>
+      <OwnerBenefits className="mt-2" count={dense ? 2 : undefined} />
+      {!dense && <PlanFrom className="mt-1.5" />}
     </div>
   );
 }
@@ -479,6 +534,19 @@ function PlaceImage({ p, d, size }: { p: ExternalPlace; d: PlaceDetails; size: '
   );
 }
 
+/** Contact facts as text, so they can be read and copied: email, website and the full opening hours (the phone is on the Call button). */
+function PlaceFacts({ p, d, hours }: { p: ExternalPlace; d: PlaceDetails; hours?: string }) {
+  if (!p.email && !d.website && !hours) return null;
+  const site = d.website?.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
+  return (
+    <dl className="mt-1.5 grid gap-y-0.5 text-[13px] sm:grid-cols-[auto_1fr] sm:gap-x-3">
+      {p.email && <><dt className="text-muted">Email</dt><dd className="min-w-0 truncate"><a href={`mailto:${p.email}`} className="text-ink hover:underline">{p.email}</a></dd></>}
+      {d.website && site && <><dt className="text-muted">Website</dt><dd className="min-w-0 truncate"><a href={d.website} target="_blank" rel="noreferrer nofollow" className="text-ink hover:underline">{site}</a></dd></>}
+      {hours && <><dt className="text-muted">Hours</dt><dd className="min-w-0 text-ink-2">{hours}</dd></>}
+    </dl>
+  );
+}
+
 /**
  * One clear primary action: Call when there is a number (the fastest way to reach a business), otherwise Directions. WhatsApp and
  * Directions follow as secondary buttons; website and map links are plain text links.
@@ -526,7 +594,7 @@ export function CompactPlace({ p, source, join }: {
       </div>
       <PlaceActions p={p} d={d} source={source} compact />
       {join && (
-        <JoinLeadsStrip className="mt-2.5" name={p.name} onOpen={join.onOpen}
+        <JoinLeadsStrip className="mt-2.5" dense name={p.name} onOpen={join.onOpen}
           to={joinHref({ name: p.name, phone: d.phone, website: d.website, address: p.address, sourceId: p.id }, join.hint)} />
       )}
     </article>
@@ -534,8 +602,10 @@ export function CompactPlace({ p, source, join }: {
 }
 
 /** `onSelect`: the name (a button) or a click anywhere on the card outside its own buttons and links opens the place's details. */
-function PlaceCard({ p, source, onSelect }: { p: ExternalPlace; source: 'ai' | 'google'; onSelect?: (place: ExternalPlace, source: 'google' | 'ai') => void }) {
-  const d = usePlaceDetails(p);
+function PlaceCard({ p, source, onSelect, googleOn = true }: {
+  p: ExternalPlace; source: 'ai' | 'google'; onSelect?: (place: ExternalPlace, source: 'google' | 'ai') => void; googleOn?: boolean;
+}) {
+  const d = usePlaceDetails(p, googleOn);
   const hours = p.openingHours?.replace(/;\s*/g, ' · ');
   return (
     <article className={`card p-4 ${onSelect ? 'cursor-pointer transition-colors hover:border-line-strong' : ''}`}
@@ -563,8 +633,15 @@ function PlaceCard({ p, source, onSelect }: { p: ExternalPlace; source: 'ai' | '
               <PlaceRounded sx={{ fontSize: 15, mt: '2px', flexShrink: 0 }} className="text-muted" aria-hidden /><span className="min-w-0">{p.address}</span>
             </address>
           )}
+          {p.description && <p className="mt-1 line-clamp-2 text-[13px] text-ink-2">{p.description}</p>}
+          <PlaceFacts p={p} d={d} hours={hours} />
           {d.loading && !d.phone && <Skeleton width={140} height={20} aria-label="Finding phone number" />}
           {d.noPhone && <p className="mt-1 text-[13px] text-muted">No phone number listed</p>}
+          {p.features && p.features.length > 0 && (
+            <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Details">
+              {p.features.map((f) => <li key={f} className="rounded-full border border-line bg-subtle px-2 py-0.5 text-[11px] text-ink-2">{f}</li>)}
+            </ul>
+          )}
           {p.aiReason && <AiReason text={p.aiReason} />}
         </div>
       </div>
@@ -573,7 +650,7 @@ function PlaceCard({ p, source, onSelect }: { p: ExternalPlace; source: 'ai' | '
       <p className="mt-1 flex flex-wrap items-center gap-x-1 text-xs text-muted">
         {source === 'google' || d.fromGoogle
           ? <>{source === 'ai' && <span>Place from OpenStreetMap ·</span>}<GoogleMapsDataCredit /></>
-          : 'Details from OpenStreetMap'}
+          : <>Details from OpenStreetMap via <a href="https://www.geoapify.com/" target="_blank" rel="noreferrer" className="underline">Geoapify</a></>}
       </p>
     </article>
   );

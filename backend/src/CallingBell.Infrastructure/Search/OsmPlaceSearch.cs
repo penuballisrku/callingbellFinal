@@ -162,9 +162,12 @@ internal sealed partial class OsmPlaceSearch(IHttpClientFactory httpFactory, IMe
 
                 // A place counts as a tag match when one of the requested tags is on it; otherwise it was found by name.
                 var byTag = valid.Any(s => !IsName(s) && e.Tags.TryGetValue(TagKey(s), out var v) && v == TagValue(s));
+                var elementTags = e.Tags;
+                string? T(string key) => elementTags.GetValueOrDefault(key);
                 places.Add(new ExternalPlace("osm", $"{e.Type}/{e.Id}", name.Trim(), Kind(e.Tags), Address(e.Tags), elat, elng,
                     Tag(e.Tags, "phone", "contact:phone", "contact:mobile", "mobile"), Website(Tag(e.Tags, "website", "contact:website", "url")),
-                    Tag(e.Tags, "opening_hours"), null, null, $"https://www.openstreetmap.org/{e.Type}/{e.Id}", byTag ? "tag" : "name"));
+                    Tag(e.Tags, "opening_hours"), null, null, $"https://www.openstreetmap.org/{e.Type}/{e.Id}", byTag ? "tag" : "name",
+                    Email: PlaceTags.Email(T), Description: PlaceTags.Description(T), Features: PlaceTags.Features(T)));
             }
             return places;
         }

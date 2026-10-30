@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using CallingBell.Application.Common;
 using CallingBell.Application.Common.Interfaces;
 using CallingBell.Infrastructure.Search;
 using Microsoft.Extensions.Caching.Memory;
@@ -140,8 +141,10 @@ internal sealed class GeoapifyService(IHttpClientFactory httpFactory, IOptions<G
         var kind = p.Categories?.OrderByDescending(c => c.Count(ch => ch == '.')).FirstOrDefault()?.Split('.')[^1].Replace('_', ' ');
         if (kind is { Length: > 0 }) kind = char.ToUpperInvariant(kind[0]) + kind[1..];
         var address = p.AddressLine2 ?? p.Formatted;
+        string? Tag(string key) => raw.TryGetValue(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
         return new ExternalPlace("osm", id, (Raw("name:en") ?? p.Name).Trim(), kind, address, lat, lon, phone, website,
-            p.OpeningHours ?? Raw("opening_hours"), null, null, $"https://www.openstreetmap.org/{id}", "tag");
+            p.OpeningHours ?? Raw("opening_hours"), null, null, $"https://www.openstreetmap.org/{id}", "tag",
+            Email: p.Contact?.Email ?? PlaceTags.Email(Tag), Description: PlaceTags.Description(Tag), Features: PlaceTags.Features(Tag));
     }
 
     // ---------------- Address autocomplete ----------------
@@ -246,7 +249,7 @@ internal sealed class GeoapifyService(IHttpClientFactory httpFactory, IOptions<G
     private sealed record PlaceProperties(
         string? Name, string? Formatted, [property: JsonPropertyName("address_line2")] string? AddressLine2, double? Lat, double? Lon,
         List<string>? Categories, string? Website, [property: JsonPropertyName("opening_hours")] string? OpeningHours, Contact? Contact, Datasource? Datasource);
-    private sealed record Contact(string? Phone);
+    private sealed record Contact(string? Phone, string? Email);
     private sealed record Datasource(Dictionary<string, JsonElement>? Raw);
     private sealed record GeocodeResults(List<GeocodeResult>? Results);
     private sealed record GeocodeResult(

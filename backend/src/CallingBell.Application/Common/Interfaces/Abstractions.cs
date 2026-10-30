@@ -301,7 +301,7 @@ public interface IReviewSummarizer
 /// <param name="Photo">Google Maps only: the place's first photo.</param>
 public sealed record ExternalPlace(string Source, string Id, string Name, string? Kind, string? Address, double Latitude, double Longitude,
     string? Phone, string? Website, string? OpeningHours, decimal? Rating, int? RatingCount, string? SourceUrl, string MatchedBy,
-    GooglePlacePhoto? Photo = null, bool? OpenNow = null);
+    GooglePlacePhoto? Photo = null, bool? OpenNow = null, string? Email = null, string? Description = null, IReadOnlyList<string>? Features = null);
 
 /// <summary>
 /// Geoapify (geoapify.com): OpenStreetMap-based places, address autocomplete and static map images, within a daily credit budget.

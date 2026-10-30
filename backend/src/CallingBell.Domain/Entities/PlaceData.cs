@@ -38,6 +38,10 @@ public class OsmPlace : AuditableEntity
     public string? Phone { get; set; }
     public string? Website { get; set; }
     public string? OpeningHours { get; set; }
+    public string? Email { get; set; }
+    public string? Description { get; set; }
+    /// <summary>Short facts from its tags ("Wheelchair accessible", "Cuisine: South Indian"), '|' separated.</summary>
+    public string? Features { get; set; }
     public decimal Latitude { get; set; }
     public decimal Longitude { get; set; }
     /// <summary>The city whose import found it (null when found from another city's import first).</summary>

@@ -15,10 +15,12 @@ namespace CallingBell.Application.Features.Search;
 /// <param name="PhotoUrl">Google Maps only: the place's photo, served through <c>GET /api/places/photo</c>.</param>
 /// <param name="PhotoCredit">The photo's author, which Google requires to be shown with it.</param>
 /// <param name="AiReason">AI tier only: why the AI picked this place, in plain words.</param>
+/// <param name="Features">Short facts from the place's tags ("Wheelchair accessible", "Cuisine: South Indian").</param>
 public sealed record ExternalPlaceDto(string Id, string Name, string? Kind, string? Address, string? Phone, string? Website, string? OpeningHours,
     decimal? Rating, int? RatingCount, double DistanceKm, string DirectionsUrl, string? SourceUrl,
     string? PhotoUrl = null, string? PhotoCredit = null, string? PhotoCreditUrl = null, string? AiReason = null,
-    double? Latitude = null, double? Longitude = null, bool? OpenNow = null);
+    double? Latitude = null, double? Longitude = null, bool? OpenNow = null, string? Email = null, string? Description = null,
+    IReadOnlyList<string>? Features = null);
 
 /// <param name="Status">"ready", "off" (not configured), "unavailable" (source unreachable) or "skipped" (nothing to search for).</param>
 /// <param name="AiStatus">AI tier only: "ranked" (picked and ordered by the AI), "pending" (being picked; poll) or "off" (nearest first).</param>
@@ -378,12 +380,13 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
             .Where(p => p.Latitude >= minLat && p.Latitude <= maxLat && p.Longitude >= minLng && p.Longitude <= maxLng && p.LastSeenOn >= since
                         && p.SubCategories.Any(s => subIds.Contains(s.SubCategoryId)))
             .OrderBy(p => p.Id)
-            .Select(p => new { p.OsmRef, p.Name, p.Kind, p.Address, p.Latitude, p.Longitude, p.Phone, p.Website, p.OpeningHours })
+            .Select(p => new { p.OsmRef, p.Name, p.Kind, p.Address, p.Latitude, p.Longitude, p.Phone, p.Website, p.OpeningHours, p.Email, p.Description, p.Features })
             .Take(2000)
             .ToListAsync(ct);
         return rows
             .Select(p => new ExternalPlace("osm", p.OsmRef, p.Name, p.Kind, p.Address, (double)p.Latitude, (double)p.Longitude, p.Phone, p.Website,
-                p.OpeningHours, null, null, $"https://www.openstreetmap.org/{p.OsmRef}", "tag"))
+                p.OpeningHours, null, null, $"https://www.openstreetmap.org/{p.OsmRef}", "tag", Email: p.Email, Description: p.Description,
+                Features: p.Features?.Split('|', StringSplitOptions.RemoveEmptyEntries)))
             .Where(p => Km(p, lat, lng) * 1000 <= CityRadiusM)
             .ToList();
     }
@@ -509,7 +512,7 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
             Math.Round(Km(p, lat, lng), 1), directions, p.SourceUrl,
             p.Photo is null ? null : $"/api/places/photo?name={Uri.EscapeDataString(p.Photo.Name)}&maxWidth={PhotoWidthPx}",
             credit?.DisplayName, credit?.Uri, Latitude: Math.Round(p.Latitude, 6), Longitude: Math.Round(p.Longitude, 6),
-            OpenNow: p.OpenNow);
+            OpenNow: p.OpenNow, Email: p.Email, Description: p.Description, Features: p.Features is { Count: > 0 } f ? f : null);
     }
 
     private sealed record Sub(Guid Id, string Slug, string Name, string CategorySlug, string CategoryName, string? OsmTags, string? GeoapifyCategories);

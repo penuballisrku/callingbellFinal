@@ -146,6 +146,9 @@ internal sealed class OsmCatalogRun(ApplicationDbContext db, IOsmPlaceSearch osm
                 place.Phone = Clip(p.Phone, 60);
                 place.Website = Clip(p.Website, 400);
                 place.OpeningHours = Clip(p.OpeningHours, 400);
+                place.Email = Clip(p.Email, 200);
+                place.Description = Clip(p.Description, 1000);
+                place.Features = p.Features is { Count: > 0 } f ? Clip(string.Join('|', f), 1000) : null;
                 place.Latitude = Math.Round((decimal)p.Latitude, 6);
                 place.Longitude = Math.Round((decimal)p.Longitude, 6);
                 place.LastSeenOn = now;

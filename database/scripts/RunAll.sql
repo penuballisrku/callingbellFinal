@@ -53,3 +53,4 @@
 :r $(ScriptDir)\38_CityDistricts.sql
 :r $(ScriptDir)\39_PlaceData.sql
 :r $(ScriptDir)\40_Geoapify.sql
+:r $(ScriptDir)\41_PlaceDetails.sql
