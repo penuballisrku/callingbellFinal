@@ -103,6 +103,7 @@ function BusinessRow({ b, onSelect }: { b: Card; onSelect?: (b: Card) => void })
             {!b.isSponsored && b.isFeatured && <span className="rounded bg-accent-soft px-1.5 py-0.5 text-[11px] font-semibold text-accent-ink">Featured</span>}
           </div>
           {b.tagline && <p className="truncate text-sm text-muted">{b.tagline}</p>}
+          {b.description && <p className="mt-1 line-clamp-2 text-[13px] text-ink-2">{b.description}</p>}
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
             <Rating value={b.averageRating} count={b.reviewCount} />
             <AvailabilityBadge status={b.availabilityStatus} lastSeenOn={b.lastSeenOn} compact />

@@ -1,3 +1,4 @@
+using CallingBell.Application.Common;
 using CallingBell.Application.Common.Interfaces;
 using CallingBell.Domain.Constants;
 using CallingBell.Domain.Entities;
@@ -81,6 +82,39 @@ public sealed class SearchLocationsHandler(IUnitOfWork uow, IGeoLocationService 
             .DistinctBy(a => a.AreaId)
             .Take(MaxAreas)
             .ToList();
+
+        // Nothing typed yet: the browsed city's own areas, so one can be picked without knowing its name (those with listed businesses
+        // first, then the nearest to the city centre).
+        if (q.Length == 0 && preferred is not null)
+        {
+            var city = await uow.Repository<City>().QueryNoTracking()
+                .Where(c => c.IsActive && c.Slug == preferred && c.State.CountryCode == country)
+                .Select(c => new { c.Id, c.Slug, c.Name, c.District, c.Latitude, c.Longitude, StateSlug = c.State.Slug, StateName = c.State.Name })
+                .FirstOrDefaultAsync(ct);
+            if (city is not null)
+            {
+                var own = await uow.Repository<Area>().QueryNoTracking()
+                    .Where(a => a.CityId == city.Id && a.IsActive && a.ParentAreaId == null)
+                    .Select(a => new { a.Id, a.Name, a.Slug, a.Pincode, a.District, a.Latitude, a.Longitude })
+                    .ToListAsync(ct);
+                var listed = await uow.Repository<Business>().QueryNoTracking()
+                    .Where(b => b.Status == BusinessStatuses.Active && b.CityId == city.Id && b.AreaId != null)
+                    .GroupBy(b => b.AreaId!.Value).Select(g => new { g.Key, Count = g.Count() })
+                    .ToDictionaryAsync(x => x.Key, x => x.Count, ct);
+                double FromCentre(decimal? lat, decimal? lng) =>
+                    lat is null || lng is null || city.Latitude is null || city.Longitude is null ? double.MaxValue
+                        : GeoMath.HaversineKm((double)city.Latitude, (double)city.Longitude, (double)lat, (double)lng);
+                areaRows = own
+                    .OrderByDescending(a => listed.GetValueOrDefault(a.Id)).ThenBy(a => FromCentre(a.Latitude, a.Longitude)).ThenBy(a => a.Name)
+                    .Take(MaxAreas)
+                    .Select(a => new
+                    {
+                        AreaId = a.Id, a.Name, a.Slug, a.Pincode, Matched = (string?)null, CityId = city.Id, CitySlug = city.Slug, CityName = city.Name,
+                        District = a.District ?? city.District, city.StateSlug, city.StateName,
+                    })
+                    .ToList();
+            }
+        }
 
         var cityIds = cities.Select(c => c.Id).ToList();
         var areaIds = areaRows.Select(a => a.AreaId).ToList();

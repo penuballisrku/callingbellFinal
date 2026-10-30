@@ -59,6 +59,13 @@ public sealed class AreaDiscoveryOptions
     public int Concurrency { get; set; } = 8;
     /// <summary>Of those, how many may query OpenStreetMap at once (its public servers are shared and often busy).</summary>
     public int OverpassConcurrency { get; set; } = 3;
+    /// <summary>
+    /// Read the OpenStreetMap places through Geoapify (when configured): the same data in a second or two, where the public Overpass
+    /// servers often answer 504 for minutes. Overpass is still asked when Geoapify is off, out of credits or unavailable.
+    /// </summary>
+    public bool UseGeoapify { get; set; } = true;
+    /// <summary>Upper bound on places read through Geoapify per city (one credit per 20).</summary>
+    public int MaxGeoapifyPlaces { get; set; } = 1000;
 }
 
 /// <summary>Queue of cities waiting for discovery; one run per city at a time.</summary>
@@ -161,12 +168,15 @@ internal sealed class AreaDiscoveryWorker(AreaDiscoveryQueue queue, IServiceScop
 /// </list>
 /// </summary>
 internal sealed class AreaDiscoveryRun(
-    ApplicationDbContext db, IHttpClientFactory httpFactory, OllamaChatClient ai, IOptions<AreaDiscoveryOptions> options,
+    ApplicationDbContext db, IHttpClientFactory httpFactory, OllamaChatClient ai, GeoapifyService geoapify, IOptions<AreaDiscoveryOptions> options,
     IOptions<AiOptions> aiOptions, IMemoryCache cache, AreaDiscoveryQueue queue, ILogger<AreaDiscoveryRun> logger)
 {
     public const string HttpClientName = "area-discovery";
     private const string Agent = "agent:area-discovery";
     private static readonly string[] MajorPlaces = ["suburb", "quarter", "locality", "town", "village"];
+    /// <summary>The OpenStreetMap place types collected (as the Overpass query below), as Geoapify categories.</summary>
+    private const string GeoapifyPlaces =
+        "populated_place.suburb,populated_place.quarter,populated_place.neighbourhood,populated_place.town,populated_place.village";
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     /// <summary>Transit points and junctions that OpenStreetMap sometimes tags as places; they are not localities.</summary>
     private static readonly Regex NotALocality = new(
@@ -217,13 +227,19 @@ internal sealed class AreaDiscoveryRun(
             logger.LogInformation("Area discovery for {City}: {Note}", city.Name, city.AreaDiscoveryNote);
         }, ct);
 
-        // 2. OpenStreetMap, merged with the Wikidata places. If its servers are unavailable the Wikidata areas stay listed and the run
-        //    fails, so it is tried again later.
+        // 2. OpenStreetMap (through Geoapify when it can answer, else Overpass), merged with the Wikidata places. If neither is available
+        //    the Wikidata areas stay listed and the run fails, so it is tried again later.
+        var radiusM = o.RadiusKm * 1000;
         List<Candidate> osm;
-        try
+        var elements = o.UseGeoapify && geoapify.IsEnabled
+            ? await geoapify.OsmElementsAsync(GeoapifyPlaces, lat0, lng0, radiusM, o.MaxGeoapifyPlaces, ct)
+            : null;
+        if (elements is { Count: > 0 })
+            osm = Candidates(elements.Select(e => new OverpassElement(e.Type, e.Id, e.Lat, e.Lon, null, e.Tags)), lat0, lng0, radiusM);
+        else try
         {
             await queue.OverpassSlots.WaitAsync(ct);
-            try { osm = await OverpassAsync(lat0, lng0, o.RadiusKm * 1000, ct); }
+            try { osm = await OverpassAsync(lat0, lng0, radiusM, ct); }
             finally { queue.OverpassSlots.Release(); }
         }
         catch (Exception ex) when (wiki.Count > 0 && (ex is HttpRequestException or TaskCanceledException) && !ct.IsCancellationRequested)
@@ -234,7 +250,7 @@ internal sealed class AreaDiscoveryRun(
         }
         var summary = await MergeAsync(city, [.. wiki, .. osm], started, retire: true, useAi: o.UseAi, ct);
         city.AreasDiscoveredOn = DateTimeOffset.UtcNow;
-        city.AreaDiscoveryNote = Trim($"{osm.Count} OSM + {wiki.Count} Wikidata places; {summary}.", 400);
+        city.AreaDiscoveryNote = Trim($"{osm.Count} OSM{(elements is { Count: > 0 } ? " (via Geoapify)" : "")} + {wiki.Count} Wikidata places; {summary}.", 400);
         await db.SaveChangesAsync(ct);
         ReferenceDataCache.Invalidate(cache); // curated cities carry their areas in the cached city lists
         logger.LogInformation("Area discovery for {City}: {Note}", city.Name, city.AreaDiscoveryNote);
@@ -436,9 +452,14 @@ internal sealed class AreaDiscoveryRun(
             foreach (var t in asking) _ = t.ContinueWith(x => _ = x.Exception, TaskScheduler.Default);
         }
         if (result is null) throw new HttpRequestException($"No Overpass server answered ({lastError?.Message ?? "no servers configured"}).", lastError);
+        return Candidates(result.Elements ?? [], lat, lng, radiusM);
+    }
 
+    /// <summary>OpenStreetMap places (from Overpass or Geoapify) within the radius, as candidates with their names and aliases.</summary>
+    private static List<Candidate> Candidates(IEnumerable<OverpassElement> elements, double lat, double lng, int radiusM)
+    {
         var list = new List<Candidate>();
-        foreach (var e in result?.Elements ?? [])
+        foreach (var e in elements)
         {
             if (e.Tags is null || !e.Tags.TryGetValue("place", out var place)) continue;
             var (elat, elng) = e.Lat is { } la && e.Lon is { } lo ? (la, lo) : e.Center is { } c ? (c.Lat, c.Lon) : (double.NaN, double.NaN);

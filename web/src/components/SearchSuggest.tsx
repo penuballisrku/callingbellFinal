@@ -9,7 +9,7 @@ import TrendingUpRounded from '@mui/icons-material/TrendingUpRounded';
 import CloseRounded from '@mui/icons-material/CloseRounded';
 import { api } from '@/lib/api';
 import { useDebounced } from '@/lib/hooks';
-import { namesPlace, parsedSearchParams, parseSearch } from '@/lib/searchParse';
+import { mayNamePlace, parsedSearchParams, parseSearch } from '@/lib/searchParse';
 import type { SearchSuggestion, SearchSuggestions } from '@/lib/types';
 import { useCity } from '@/stores/city';
 import { Img } from './ui';
@@ -70,7 +70,7 @@ export function searchHref(text: string, picked: SearchSuggestion | null, citySl
  */
 export async function resolveSearchHref(text: string, picked: SearchSuggestion | null, citySlug?: string | null, areaId?: string | null) {
   const q = text.trim();
-  if ((picked && picked.label === q) || !namesPlace(q)) return searchHref(text, picked, citySlug, areaId);
+  if ((picked && picked.label === q) || !mayNamePlace(q)) return searchHref(text, picked, citySlug, areaId);
   try {
     const parsed = await parseSearch(q, citySlug);
     return `/search?${parsedSearchParams(parsed, new URLSearchParams(), { citySlug, areaId })}`;

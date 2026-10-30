@@ -129,6 +129,56 @@ internal sealed class GeoapifyService(IHttpClientFactory httpFactory, IOptions<G
         }
     }
 
+    /// <summary>
+    /// Places of the given categories as the OpenStreetMap elements they come from (type, id, position and string tags), for the
+    /// background agents that read the tags themselves. Uses the background share of the credits. Null when Geoapify is off, out of
+    /// credits or unavailable.
+    /// </summary>
+    internal async Task<List<OsmElement>?> OsmElementsAsync(string categories, double lat, double lng, int radiusM, int maxPlaces, CancellationToken ct)
+    {
+        const int page = 500;
+        var elements = new List<OsmElement>();
+        try
+        {
+            for (var offset = 0; offset < maxPlaces; offset += page)
+            {
+                var limit = Math.Min(page, maxPlaces - offset);
+                if (!TryReserve(1, background: true)) return offset == 0 ? null : elements;
+                var url = string.Create(CultureInfo.InvariantCulture,
+                    $"{options.Value.ApiUrl}/v2/places?categories={categories}&filter=circle:{lng:0.######},{lat:0.######},{radiusM}&limit={limit}&offset={offset}&lang=en&apiKey={Key}");
+                using var response = await Client().GetAsync(url, ct);
+                if (!response.IsSuccessStatusCode)
+                {
+                    logger.LogWarning("Geoapify places ({Categories}) answered {Status}", categories, (int)response.StatusCode);
+                    return offset == 0 ? null : elements;
+                }
+                var features = (await response.Content.ReadFromJsonAsync<FeatureCollection>(Json, ct))?.Features ?? [];
+                Charge((features.Count + 19) / 20 - 1);
+                foreach (var p in features.Select(f => f.Properties))
+                {
+                    var raw = p?.Datasource?.Raw;
+                    if (p?.Lat is not { } plat || p.Lon is not { } plon || raw is null
+                        || !raw.TryGetValue("osm_id", out var idEl) || !idEl.TryGetInt64(out var id)
+                        || !raw.TryGetValue("osm_type", out var typeEl) || typeEl.ValueKind != JsonValueKind.String) continue;
+                    var type = typeEl.GetString() switch { "n" or "node" => "node", "w" or "way" => "way", "r" or "relation" => "relation", _ => null };
+                    if (type is null) continue;
+                    var tags = raw.Where(kv => kv.Value.ValueKind == JsonValueKind.String && kv.Key is not ("osm_id" or "osm_type"))
+                        .ToDictionary(kv => kv.Key, kv => kv.Value.GetString()!);
+                    // The postcode Geoapify gives the place's location, when OpenStreetMap tags none (callers verify it).
+                    if (!string.IsNullOrWhiteSpace(p.Postcode) && !tags.ContainsKey("addr:postcode")) tags.TryAdd("postal_code", p.Postcode);
+                    elements.Add(new OsmElement(type, Math.Abs(id), plat, plon, tags));
+                }
+                if (features.Count < limit) break;
+            }
+            return elements;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            logger.LogWarning("Geoapify places ({Categories}) failed: {Error}", categories, ex.Message);
+            return elements.Count == 0 ? null : elements;
+        }
+    }
+
     /// <summary>A Geoapify place as the OpenStreetMap element it comes from; places without an OpenStreetMap id or name are skipped.</summary>
     private static ExternalPlace? ToPlace(PlaceProperties? p)
     {
@@ -263,11 +313,15 @@ internal sealed class GeoapifyService(IHttpClientFactory httpFactory, IOptions<G
 
     private static string Trim(string text, int max) => text.Length <= max ? text : text[..max] + "…";
 
+    /// <summary>An OpenStreetMap element as Geoapify returns it: "node", "way" or "relation", its id, position and tags.</summary>
+    internal sealed record OsmElement(string Type, long Id, double Lat, double Lon, Dictionary<string, string> Tags);
+
     private sealed record FeatureCollection(List<Feature>? Features);
     private sealed record Feature(PlaceProperties? Properties);
     private sealed record PlaceProperties(
         string? Name, string? Formatted, [property: JsonPropertyName("address_line2")] string? AddressLine2, double? Lat, double? Lon,
-        List<string>? Categories, string? Website, [property: JsonPropertyName("opening_hours")] string? OpeningHours, Contact? Contact, Datasource? Datasource);
+        List<string>? Categories, string? Website, [property: JsonPropertyName("opening_hours")] string? OpeningHours, Contact? Contact, Datasource? Datasource,
+        string? Postcode);
     private sealed record Contact(JsonElement? Phone, JsonElement? Email);
     private sealed record Datasource(Dictionary<string, JsonElement>? Raw);
     private sealed record GeocodeResults(List<GeocodeResult>? Results);

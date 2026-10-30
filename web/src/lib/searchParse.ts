@@ -19,6 +19,12 @@ export interface ParsedSearch {
 /** True when the text may name a place or "near me" ("lawyers in Nellore", "plumbers near Madhapur"), so it is worth parsing. */
 export const namesPlace = (text: string) => /\S\s+(in|near|around|at)\s+\S/i.test(text.trim());
 
+/**
+ * True when submitted text may name a place, with or without "in" ("doctors kukatpally"), so it is parsed before searching. Only on
+ * submit: while typing, a half-typed place mustn't be looked up.
+ */
+export const mayNamePlace = (text: string) => namesPlace(text) || text.trim().split(/\s+/).length >= 2;
+
 export const parseSearch = (text: string, citySlug?: string | null) =>
   api.get<ParsedSearch>('/api/search/parse', { text: text.trim(), city: citySlug });
 

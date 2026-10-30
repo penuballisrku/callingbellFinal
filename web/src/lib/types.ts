@@ -111,6 +111,9 @@ export interface BusinessCard {
   id: string; slug: string; name: string; tagline?: string | null; logoUrl?: string | null; coverImageUrl?: string | null;
   categoryName: string; categorySlug: string; subCategoryName?: string | null; subCategorySlug?: string | null;
   city: string; area?: string | null; addressLine?: string | null; landmark?: string | null; pincode?: string | null;
+  state?: string | null;
+  /** The start of the description (results show two lines of it). */
+  description?: string | null;
   phoneNumber?: string | null; whatsAppNumber?: string | null; latitude?: number | null; longitude?: number | null;
   averageRating: number; reviewCount: number; availabilityStatus: string; lastSeenOn?: string | null;
   isVerified: boolean; isFeatured: boolean; isSponsored: boolean; startingPrice?: number | null; acceptsOnlineBooking: boolean;
@@ -178,7 +181,7 @@ export interface AssistantReply {
   suggestions: string[]; relaxed: string[]; aiPending: boolean; aiUsed: boolean;
 }
 
-export interface AppliedFilters { q?: string | null; categorySlug?: string | null; categoryName?: string | null; subSlug?: string | null; subName?: string | null; citySlug?: string | null; cityName?: string | null; openNow: boolean; availability?: string | null; areaName?: string | null; areaMatches?: number | null }
+export interface AppliedFilters { q?: string | null; categorySlug?: string | null; categoryName?: string | null; subSlug?: string | null; subName?: string | null; citySlug?: string | null; cityName?: string | null; openNow: boolean; availability?: string | null; areaName?: string | null; areaMatches?: number | null; areaId?: string | null }
 
 export interface Service { id: string; name: string; description: string; price: number; priceUnit?: string | null; durationMinutes: number; type: string; imageUrl?: string | null; isPopular: boolean }
 export interface Hours { dayOfWeek: number; day: string; open?: string | null; close?: string | null; isClosed: boolean; isToday: boolean }

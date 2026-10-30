@@ -66,6 +66,25 @@ public sealed partial class ParseSearchHandler(IUnitOfWork uow, ReferenceDataCac
 
         var place = placeText is null ? null : await MatchPlaceAsync(placeText, r.City, ct);
         var (categorySlug, subSlug) = await MatchCatalogueAsync(query, ct);
+
+        // No "in"/"near": "electricians kukatpally" or "kukatpally electricians". The words at either end are taken as the place only
+        // when the rest names a category or sub-category and they match a listed city or area, so "ac repair" stays a service.
+        if (placeText is null && categorySlug is null && subSlug is null)
+        {
+            var words = text.Split(' ');
+            for (var k = Math.Min(3, words.Length - 1); k >= 1 && placeText is null; k--)
+            {
+                foreach (var (what, where) in new[] { (words[..^k], words[^k..]), (words[k..], words[..k]) })
+                {
+                    var whatText = string.Join(' ', what);
+                    var (whatCategory, whatSub) = await MatchCatalogueAsync(whatText, ct);
+                    if (whatCategory is null && whatSub is null) continue;
+                    if (await MatchPlaceAsync(string.Join(' ', where), r.City, ct) is not { } found) continue;
+                    (query, placeText, place, categorySlug, subSlug) = (whatText, string.Join(' ', where), found, whatCategory, whatSub);
+                    break;
+                }
+            }
+        }
         if (categorySlug is null && subSlug is null && r.ByMeaning && await semantic.MatchAsync(query, 1, ct) is { Confident: true } match)
             subSlug = match.Top[0].SubCategorySlug;
         return new ParsedSearchDto(text, query, placeText, place, categorySlug, subSlug);
@@ -148,13 +167,17 @@ public sealed partial class ParseSearchHandler(IUnitOfWork uow, ReferenceDataCac
     {
         var q = Stem(Norm(query));
         if (q.Length < 3) return (null, null);
-        var subs = await uow.Repository<SubCategory>().QueryNoTracking().Where(s => s.IsActive && s.Category.IsActive)
-            .Select(s => new { s.Slug, s.Name }).ToListAsync(ct);
-        if (subs.FirstOrDefault(s => Stem(Norm(s.Name)) == q) is { } sub) return (null, sub.Slug);
-        var categories = await uow.Repository<Category>().QueryNoTracking().Where(c => c.IsActive)
-            .Select(c => new { c.Slug, c.Name }).ToListAsync(ct);
-        return categories.FirstOrDefault(c => Stem(Norm(c.Name)) == q) is { } cat ? (cat.Slug, null) : (null, null);
+        // Loaded once per request: one search may try several splits of its words.
+        _subs ??= (await uow.Repository<SubCategory>().QueryNoTracking().Where(s => s.IsActive && s.Category.IsActive)
+            .Select(s => new { s.Slug, s.Name }).ToListAsync(ct)).Select(s => (s.Slug, Key: Stem(Norm(s.Name)))).ToList();
+        if (_subs.FirstOrDefault(s => s.Key == q) is { Slug: { } sub }) return (null, sub);
+        _categories ??= (await uow.Repository<Category>().QueryNoTracking().Where(c => c.IsActive)
+            .Select(c => new { c.Slug, c.Name }).ToListAsync(ct)).Select(c => (c.Slug, Key: Stem(Norm(c.Name)))).ToList();
+        return _categories.FirstOrDefault(c => c.Key == q) is { Slug: { } cat } ? (cat, null) : (null, null);
     }
+
+    private List<(string Slug, string Key)>? _subs;
+    private List<(string Slug, string Key)>? _categories;
 
     /// <summary>Lower case, letters and digits only, single spaces: "Madhapur," and "madhapur" compare equal.</summary>
     private static string Norm(string s) =>

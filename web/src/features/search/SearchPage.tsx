@@ -26,7 +26,7 @@ import VerifiedRounded from '@mui/icons-material/VerifiedRounded';
 import LocationOffRounded from '@mui/icons-material/LocationOffRounded';
 import PlaceRounded from '@mui/icons-material/PlaceRounded';
 import { useSnackbar } from 'notistack';
-import { namesPlace, parsedSearchParams, parseSearch, placeLabel, type ParsedSearch } from '@/lib/searchParse';
+import { mayNamePlace, namesPlace, parsedSearchParams, parseSearch, placeLabel, type ParsedSearch } from '@/lib/searchParse';
 
 interface SearchResponse { data: Card[]; pagination: Meta; applied: AppliedFilters }
 
@@ -116,7 +116,7 @@ export default function SearchPage() {
   const submitText = () => {
     // Nothing typed and no category chosen: show every category to browse.
     if (!text.trim() && !params.get('category') && !params.get('sub')) { navigate('/categories'); return; }
-    if (namesPlace(text)) void parseAndApply(text);
+    if (mayNamePlace(text)) void parseAndApply(text);
     else update({ q: text.trim() || null });
   };
   // Links and bookmarks such as /search?q=lawyers+in+Nellore are parsed the same way.
@@ -265,6 +265,19 @@ export default function SearchPage() {
     query.plan && { key: 'plan', label: `${query.plan} plan` },
   ].filter(Boolean) as { key: string; label: string }[];
 
+  // Places from the map (Google Maps and AI recommended) listed below the registered businesses.
+  const mapCount = searchesExternal ? (external.data?.google.total ?? 0) + (external.data?.ai.total ?? 0) : 0;
+  const total = data?.pagination.totalCount ?? 0;
+  const plural = (n: number, one: string, many: string) => `${number(n)} ${n === 1 ? one : many}`;
+  // With an area selected: how many are in it, and how many more the rest of the city adds (listed after them, nearest first).
+  const found = data && (total === 0 && mapCount > 0
+    ? `${plural(mapCount, 'place', 'places')} nearby · none registered on CallInBell yet`
+    : (areaMatches != null && applied?.areaName
+      ? `${plural(areaMatches, 'business', 'businesses')} in ${applied.areaName}`
+        + (total > areaMatches ? ` · ${number(total - areaMatches)} more in ${applied.cityName ?? 'the city'}` : '')
+      : `${plural(total, 'business', 'businesses')} found`)
+      + (mapCount > 0 ? ` · ${number(mapCount)} more nearby on the map` : ''));
+
   const filters = <Filters params={params} update={update} />;
   const filtersNote = searchesExternal && (
     <p className="mb-3 flex items-start gap-1.5 rounded-lg bg-subtle px-3 py-2 text-xs text-muted">
@@ -276,7 +289,7 @@ export default function SearchPage() {
     <div className="container-page py-8">
       <PageHeader title={title} crumbs={[{ label: 'Home', to: '/' }, { label: 'Search' }]}
         subtitle={place ? 'Google Maps businesses and AI recommendations · not a CallInBell city yet'
-          : data ? `${number(data.pagination.totalCount)} ${data.pagination.totalCount === 1 ? 'business' : 'businesses'} found` : 'Searching…'} />
+          : found || 'Searching…'} />
 
       <div className="grid gap-6 lg:grid-cols-[264px_1fr]">
         <aside className="hidden lg:block">

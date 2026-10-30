@@ -19,6 +19,9 @@ public sealed record BusinessCardDto
     public string? SubCategorySlug { get; init; }
     public string City { get; init; } = string.Empty;
     public string? Area { get; init; }
+    public string? State { get; init; }
+    /// <summary>The start of the business's description (up to <see cref="BusinessCards.DescriptionLength"/> characters).</summary>
+    public string? Description { get; init; }
     /// <summary>Street address, landmark and pincode, so results can show the full address (as the business page does).</summary>
     public string? AddressLine { get; init; }
     public string? Landmark { get; init; }
@@ -49,6 +52,9 @@ public sealed record BusinessCardDto
 public static class BusinessCards
 {
     public sealed record Origin(double Latitude, double Longitude);
+
+    /// <summary>How much of the description a card carries (results show two lines of it).</summary>
+    public const int DescriptionLength = 220;
 
     public static IQueryable<Business> Listed(this IQueryable<Business> query) =>
         query.Where(b => b.Status == BusinessStatuses.Active);
@@ -89,6 +95,8 @@ public static class BusinessCards
             SubCategorySlug = b.SubCategory != null ? b.SubCategory.Slug : null,
             City = b.City,
             Area = b.Area,
+            State = b.CityRef != null ? b.CityRef.State.Name : null,
+            Description = b.Description.Length > DescriptionLength ? b.Description.Substring(0, DescriptionLength) : b.Description,
             AddressLine = b.AddressLine,
             Landmark = b.Landmark,
             Pincode = b.Pincode,

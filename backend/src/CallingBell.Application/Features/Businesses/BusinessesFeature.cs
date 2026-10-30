@@ -2,6 +2,7 @@ using CallingBell.Application.Common;
 using CallingBell.Application.Common.Exceptions;
 using CallingBell.Application.Common.Interfaces;
 using CallingBell.Application.Common.Models;
+using CallingBell.Application.Features.Search;
 using CallingBell.Domain.Constants;
 using CallingBell.Domain.Entities;
 using MediatR;
@@ -32,16 +33,28 @@ public sealed record SearchBusinessesQuery : PagedRequest, IRequest<SearchResult
     public double? Lat { get; init; }
     public double? Lng { get; init; }
     public double? MaxDistanceKm { get; init; }
+
+    // The same filters by id or name, for callers that hold ids rather than slugs. The slugs above win when both are given.
+    public Guid? CategoryId { get; init; }
+    public Guid? SubCategoryId { get; init; }
+    public Guid? CityId { get; init; }
+    /// <summary>An area by name ("Kukatpally"), matched within the city when one is given; ignored when <see cref="AreaId"/> is set.</summary>
+    public string? AreaName { get; init; }
+    /// <summary>Same as <see cref="Q"/>: what is searched for, optionally with a place ("Electricians in Kukatpally").</summary>
+    public string? SearchText { get; init; }
+    public double? Latitude { get => Lat; init => Lat ??= value; }
+    public double? Longitude { get => Lng; init => Lng ??= value; }
+    public int? PageNumber { get => Page; init { if (value is { } p) Page = p; } }
 }
 
 /// <param name="AreaName">Selected area; its businesses are listed first and distances are measured from it.</param>
 /// <param name="AreaMatches">How many results are in the selected area. They come first; the rest of the city follows, nearest first.</param>
 public sealed record AppliedFiltersDto(string? Q, string? CategorySlug, string? CategoryName, string? SubSlug, string? SubName,
-    string? CitySlug, string? CityName, bool OpenNow, string? Availability, string? AreaName = null, int? AreaMatches = null);
+    string? CitySlug, string? CityName, bool OpenNow, string? Availability, string? AreaName = null, int? AreaMatches = null, Guid? AreaId = null);
 
 public sealed record SearchResultDto(IReadOnlyList<BusinessCardDto> Items, PaginationMeta Pagination, AppliedFiltersDto Applied);
 
-public sealed class SearchBusinessesHandler(IUnitOfWork uow) : IRequestHandler<SearchBusinessesQuery, SearchResultDto>
+public sealed class SearchBusinessesHandler(IUnitOfWork uow, ISender sender) : IRequestHandler<SearchBusinessesQuery, SearchResultDto>
 {
     private static readonly string[] Unavailable = [AvailabilityStatuses.Offline, AvailabilityStatuses.Busy];
     private static readonly HashSet<string> StopWords = new(StringComparer.OrdinalIgnoreCase)
@@ -53,11 +66,49 @@ public sealed class SearchBusinessesHandler(IUnitOfWork uow) : IRequestHandler<S
         var today = now.Date;
 
         // Understand natural phrases like "Electricians near me", "Available doctors", "Salons open now", "Lawyers in Pune".
-        var text = (r.Q ?? string.Empty).Trim();
+        var text = (r.Q ?? r.SearchText ?? string.Empty).Trim();
         var openNow = r.OpenNow;
         var availability = r.Availability;
-        var citySlug = r.City;
         if (text.Contains("open now", StringComparison.OrdinalIgnoreCase)) { openNow = true; text = text.Replace("open now", " ", StringComparison.OrdinalIgnoreCase); }
+        var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        if (words.RemoveAll(w => w.Equals("available", StringComparison.OrdinalIgnoreCase) || w.Equals("online", StringComparison.OrdinalIgnoreCase)) > 0)
+            availability ??= "now";
+        text = string.Join(' ', words);
+
+        // Filters given by id (or the area by name) instead of slug.
+        var categorySlug = r.Category is { Length: > 0 } ? r.Category : r.CategoryId is { } categoryId
+            ? await uow.Repository<Category>().QueryNoTracking().Where(c => c.Id == categoryId).Select(c => c.Slug).FirstOrDefaultAsync(ct) : null;
+        var subSlug = r.Sub is { Length: > 0 } ? r.Sub : r.SubCategoryId is { } subId
+            ? await uow.Repository<SubCategory>().QueryNoTracking().Where(s => s.Id == subId).Select(s => s.Slug).FirstOrDefaultAsync(ct) : null;
+        var citySlug = r.City is { Length: > 0 } ? r.City : r.CityId is { } cityId
+            ? await uow.Repository<City>().QueryNoTracking().Where(c => c.Id == cityId).Select(c => c.Slug).FirstOrDefaultAsync(ct) : null;
+        var selectedAreaId = r.AreaId;
+        if (selectedAreaId is null && !string.IsNullOrWhiteSpace(r.AreaName))
+        {
+            var name = r.AreaName.Trim();
+            selectedAreaId = await uow.Repository<Area>().QueryNoTracking()
+                .Where(a => a.IsActive && a.City.IsActive && (a.Name == name || a.Slug == name) && (citySlug == null || a.City.Slug == citySlug))
+                .OrderBy(a => a.ParentAreaId == null ? 0 : 1).ThenBy(a => a.Id)
+                .Select(a => a.ParentAreaId ?? a.Id).FirstOrDefaultAsync(ct) is { } found && found != Guid.Empty ? found : null;
+        }
+
+        // Typed text naming what and where ("Hospitals in Kukatpally", "electricians kukatpally"): the same reading the search page
+        // applies, so typing it and choosing it from the dropdowns give the same results.
+        if (text.Length > 0 && selectedAreaId is null && categorySlug is null && subSlug is null)
+        {
+            var parsed = await sender.Send(new ParseSearchQuery(text.Length > 200 ? text[..200] : text, citySlug, ByMeaning: false), ct);
+            if (parsed.Place is { } place)
+            {
+                citySlug = place.CitySlug;
+                selectedAreaId = place.AreaId;
+                text = parsed.Query;
+            }
+            if (parsed.SubCategorySlug is not null || parsed.CategorySlug is not null)
+            {
+                (categorySlug, subSlug) = (parsed.CategorySlug, parsed.SubCategorySlug);
+                text = "";
+            }
+        }
 
         // Only cities where businesses are listed (and curated ones): with the whole country imported, single words such as "Una" or
         // "Mau" are also town names and must not silently become the city filter. Typed places ("in Nellore") are parsed separately.
@@ -81,20 +132,20 @@ public sealed class SearchBusinessesHandler(IUnitOfWork uow) : IRequestHandler<S
         var query = uow.Repository<Business>().QueryNoTracking().Listed();
 
         string? categoryName = null, subName = null, cityName = null;
-        if (!string.IsNullOrWhiteSpace(r.Category))
+        if (!string.IsNullOrWhiteSpace(categorySlug))
         {
-            categoryName = await uow.Repository<Category>().QueryNoTracking().Where(c => c.Slug == r.Category).Select(c => c.Name).FirstOrDefaultAsync(ct);
-            query = query.Where(b => b.Category.Slug == r.Category);
+            categoryName = await uow.Repository<Category>().QueryNoTracking().Where(c => c.Slug == categorySlug).Select(c => c.Name).FirstOrDefaultAsync(ct);
+            query = query.Where(b => b.Category.Slug == categorySlug);
         }
-        if (!string.IsNullOrWhiteSpace(r.Sub))
+        if (!string.IsNullOrWhiteSpace(subSlug))
         {
-            subName = await uow.Repository<SubCategory>().QueryNoTracking().Where(s => s.Slug == r.Sub).Select(s => s.Name).FirstOrDefaultAsync(ct);
-            query = query.Where(b => b.SubCategory != null && b.SubCategory.Slug == r.Sub);
+            subName = await uow.Repository<SubCategory>().QueryNoTracking().Where(s => s.Slug == subSlug).Select(s => s.Name).FirstOrDefaultAsync(ct);
+            query = query.Where(b => b.SubCategory != null && b.SubCategory.Slug == subSlug);
         }
         // The selected area comes first (its businesses top the list, distances are measured from it); the rest of its city follows.
         string? areaName = null;
         decimal? areaLat = null, areaLng = null;
-        if (r.AreaId is { } areaId)
+        if (selectedAreaId is { } areaId)
         {
             var area = await uow.Repository<Area>().QueryNoTracking().Where(a => a.Id == areaId)
                 .Select(a => new { a.Name, a.Latitude, a.Longitude, a.CityId }).FirstOrDefaultAsync(ct);
@@ -172,11 +223,14 @@ public sealed class SearchBusinessesHandler(IUnitOfWork uow) : IRequestHandler<S
 
         List<BusinessCardDto> items;
         int? areaMatches = null;
-        if (r.AreaId is { } selectedArea && areaName is not null)
+        if (selectedAreaId is { } selectedArea && areaName is not null)
         {
             // Pages run through the area's results first, then the rest of the city: nearest to the area first, unless another sort was chosen.
-            var inArea = query.Where(b => b.AreaId == selectedArea);
-            var elsewhere = query.Where(b => b.AreaId == null || b.AreaId != selectedArea);
+            // In the area: linked to it or to one of its sub-localities, or (older listings without the link) naming it as their area.
+            var inArea = query.Where(b => b.AreaId == selectedArea || (b.AreaRef != null && b.AreaRef.ParentAreaId == selectedArea)
+                                          || (b.AreaId == null && b.Area == areaName));
+            var elsewhere = query.Where(b => !(b.AreaId == selectedArea || (b.AreaRef != null && b.AreaRef.ParentAreaId == selectedArea)
+                                               || (b.AreaId == null && b.Area == areaName)));
             areaMatches = await inArea.CountAsync(ct);
             items = r.Skip < areaMatches
                 ? await Order(inArea).ThenBy(b => b.Name).Skip(r.Skip).Take(r.PageSize).Select(BusinessCards.ToCard(now, origin)).ToListAsync(ct)
@@ -198,7 +252,8 @@ public sealed class SearchBusinessesHandler(IUnitOfWork uow) : IRequestHandler<S
 
         var meta = PagedResult<BusinessCardDto>.Create(items, r.Page, r.PageSize, total).Meta;
         return new SearchResultDto(items, meta,
-            new AppliedFiltersDto(string.Join(' ', terms), r.Category, categoryName, r.Sub, subName, city?.Slug, cityName, openNow, availability, areaName, areaMatches));
+            new AppliedFiltersDto(string.Join(' ', terms), categorySlug, categoryName, subSlug, subName, city?.Slug, cityName, openNow, availability, areaName, areaMatches,
+                selectedAreaId));
     }
 
     /// <summary>Nearest first among otherwise equal results, when there is a point to measure from.</summary>
