@@ -34,7 +34,7 @@ internal sealed class IdentityService(
 
     public async Task<AuthResultDto> SignInWithPhoneAsync(string phoneNumber, CancellationToken ct)
     {
-        var users = await userManager.Users.Where(u => u.PhoneNumber == phoneNumber && !u.IsDeleted).Take(2).ToListAsync(ct);
+        var users = await userManager.Users.Where(u => u.PhoneNumber == phoneNumber && !u.IsDeleted).OrderBy(u => u.Id).Take(2).ToListAsync(ct);
         if (users.Count == 0) throw new BadRequestException("No account uses this mobile number.");
         if (users.Count > 1)
             throw new BadRequestException("This mobile number is linked to more than one account. Sign in with your email and password instead.");

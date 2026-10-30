@@ -117,6 +117,7 @@ public sealed partial class ParseSearchHandler(IUnitOfWork uow, ReferenceDataCac
         var rows = await uow.Repository<Area>().QueryNoTracking()
             .Where(a => a.IsActive && cityIds.Contains(a.CityId)
                         && (a.Name == name || a.Slug == slug || a.Pincode == name || (a.AltNames != null && a.AltNames.Contains(name))))
+            .OrderBy(a => a.Id)
             .Select(a => new { a.Id, a.Name, a.Slug, a.Pincode, a.AltNames, a.CityId, a.ParentAreaId, ParentName = a.ParentArea != null ? a.ParentArea.Name : null })
             .Take(50).ToListAsync(ct);
 

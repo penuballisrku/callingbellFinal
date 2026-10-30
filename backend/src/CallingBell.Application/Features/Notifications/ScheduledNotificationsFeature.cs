@@ -112,7 +112,7 @@ public sealed class SendScheduledNotificationsHandler(IUnitOfWork uow, IRealtime
                 .Where(u => u.ReceiveOffers && u.IsActive && u.CityId == c.CityId && u.Id != c.OwnerUserId
                             && !notifications.Any(n => n.UserId == u.Id && n.RouteCode == NotificationRoutes.Offers && n.CreatedOn >= since)
                             && !notifications.Any(n => n.UserId == u.Id && n.IdempotencyKey == keyPrefix + u.Id))
-                .Select(u => u.Id).Take(MaxOffersPerRun - sent).ToListAsync(ct);
+                .OrderBy(u => u.Id).Select(u => u.Id).Take(MaxOffersPerRun - sent).ToListAsync(ct);
             foreach (var userId in audience)
             {
                 var detail = string.IsNullOrWhiteSpace(c.Description) ? c.Title : $"{c.Title}: {c.Description}";

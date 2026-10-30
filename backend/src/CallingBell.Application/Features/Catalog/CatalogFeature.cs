@@ -262,6 +262,7 @@ public sealed class GetServiceSuggestionsHandler(IUnitOfWork uow) : IRequestHand
         var slug = r.SubCategorySlug.Trim();
         var rows = await uow.Repository<BusinessService>().QueryNoTracking()
             .Where(s => s.IsActive && s.Business.Status == BusinessStatuses.Active && s.Business.SubCategory != null && s.Business.SubCategory.Slug == slug)
+            .OrderBy(s => s.Id)
             .Select(s => new { s.BusinessId, s.Name, s.Description, s.Price, s.PriceUnit, s.DurationMinutes, s.Type })
             .Take(2000)
             .ToListAsync(ct);

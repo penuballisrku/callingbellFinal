@@ -317,7 +317,7 @@ public sealed class BusinessDuplicateFinder(IUnitOfWork uow)
     }
 
     private static Task<List<Candidate>> Select(IQueryable<Business> q, CancellationToken ct) =>
-        q.Select(b => new Candidate(b.Id, b.Slug, b.Name, b.City, b.Status, b.Latitude, b.Longitude, b.Website)).Take(20).ToListAsync(ct);
+        q.OrderBy(b => b.Id).Select(b => new Candidate(b.Id, b.Slug, b.Name, b.City, b.Status, b.Latitude, b.Longitude, b.Website)).Take(20).ToListAsync(ct);
 
     private sealed record Candidate(Guid Id, string Slug, string Name, string? City, string Status, decimal? Latitude, decimal? Longitude, string? Website);
 }
