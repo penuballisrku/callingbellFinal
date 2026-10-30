@@ -54,3 +54,4 @@
 :r $(ScriptDir)\39_PlaceData.sql
 :r $(ScriptDir)\40_Geoapify.sql
 :r $(ScriptDir)\41_PlaceDetails.sql
+:r $(ScriptDir)\42_DatabaseSettings.sql

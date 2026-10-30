@@ -27,6 +27,8 @@ public sealed class GeoapifyOptions
     public int TimeoutSeconds { get; set; } = 20;
     /// <summary>How long geocoding answers and map images are kept in memory.</summary>
     public int CacheHours { get; set; } = 24;
+    /// <summary>How long a places search is kept in memory, so repeat searches and the page's polls don't call Geoapify again.</summary>
+    public int PlacesCacheHours { get; set; } = 6;
 }
 
 /// <summary>
@@ -89,6 +91,8 @@ internal sealed class GeoapifyService(IHttpClientFactory httpFactory, IOptions<G
         var cats = string.Join(',', categories.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(c => c.All(ch => char.IsAsciiLetterLower(ch) || ch is '.' or '_')).Distinct());
         if (cats.Length == 0) return null;
+        var key = string.Create(CultureInfo.InvariantCulture, $"geoapify-places|{cats}|{lat:0.###},{lng:0.###}|{radiusM}|{maxPlaces}");
+        if (cache.TryGetValue(key, out IReadOnlyList<ExternalPlace>? cached)) return cached;
         const int page = 500; // Geoapify's largest page
         var places = new Dictionary<string, ExternalPlace>();
         try
@@ -114,7 +118,9 @@ internal sealed class GeoapifyService(IHttpClientFactory httpFactory, IOptions<G
                     if (ToPlace(f.Properties) is { } p) places.TryAdd(p.Id, p);
                 if (features.Count < limit) break;
             }
-            return [.. places.Values];
+            IReadOnlyList<ExternalPlace> found = [.. places.Values];
+            cache.Set(key, found, TimeSpan.FromHours(options.Value.PlacesCacheHours));
+            return found;
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException && !ct.IsCancellationRequested)
         {
@@ -134,7 +140,7 @@ internal sealed class GeoapifyService(IHttpClientFactory httpFactory, IOptions<G
         var id = $"{type}/{Math.Abs(osmId)}";
         string? Raw(string key) => raw.TryGetValue(key, out var v) && v.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(v.GetString())
             ? v.GetString()!.Split(';')[0].Trim() : null;
-        var phone = p.Contact?.Phone ?? Raw("phone") ?? Raw("contact:phone") ?? Raw("contact:mobile");
+        var phone = Text(p.Contact?.Phone) ?? Raw("phone") ?? Raw("contact:phone") ?? Raw("contact:mobile");
         var website = p.Website ?? Raw("website") ?? Raw("contact:website");
         if (website is not null && !website.StartsWith("http", StringComparison.OrdinalIgnoreCase)) website = "https://" + website;
         // The most specific category names the place ("healthcare.dentist" → "Dentist").
@@ -144,7 +150,20 @@ internal sealed class GeoapifyService(IHttpClientFactory httpFactory, IOptions<G
         string? Tag(string key) => raw.TryGetValue(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
         return new ExternalPlace("osm", id, (Raw("name:en") ?? p.Name).Trim(), kind, address, lat, lon, phone, website,
             p.OpeningHours ?? Raw("opening_hours"), null, null, $"https://www.openstreetmap.org/{id}", "tag",
-            Email: p.Contact?.Email ?? PlaceTags.Email(Tag), Description: PlaceTags.Description(Tag), Features: PlaceTags.Features(Tag));
+            Email: Text(p.Contact?.Email) ?? PlaceTags.Email(Tag), Description: PlaceTags.Description(Tag), Features: PlaceTags.Features(Tag));
+    }
+
+    /// <summary>A contact value as text: Geoapify sends a string, but sometimes a list (several numbers) or a number; the first is used.</summary>
+    private static string? Text(JsonElement? value)
+    {
+        var text = value switch
+        {
+            { ValueKind: JsonValueKind.String } s => s.GetString(),
+            { ValueKind: JsonValueKind.Number } n => n.GetRawText(),
+            { ValueKind: JsonValueKind.Array } a => a.EnumerateArray().Select(e => Text(e)).FirstOrDefault(t => t is not null),
+            _ => null,
+        };
+        return string.IsNullOrWhiteSpace(text) ? null : text.Split(';')[0].Trim();
     }
 
     // ---------------- Address autocomplete ----------------
@@ -249,7 +268,7 @@ internal sealed class GeoapifyService(IHttpClientFactory httpFactory, IOptions<G
     private sealed record PlaceProperties(
         string? Name, string? Formatted, [property: JsonPropertyName("address_line2")] string? AddressLine2, double? Lat, double? Lon,
         List<string>? Categories, string? Website, [property: JsonPropertyName("opening_hours")] string? OpeningHours, Contact? Contact, Datasource? Datasource);
-    private sealed record Contact(string? Phone, string? Email);
+    private sealed record Contact(JsonElement? Phone, JsonElement? Email);
     private sealed record Datasource(Dictionary<string, JsonElement>? Raw);
     private sealed record GeocodeResults(List<GeocodeResult>? Results);
     private sealed record GeocodeResult(
