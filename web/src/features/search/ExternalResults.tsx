@@ -183,7 +183,8 @@ export function ExternalResults({ ext, loading, isError, only, polling, onRefres
               ? 'Nearest first · AI is picking the best matches…'
               : 'Nearest first · not on CallInBell'}
           empty={`OpenStreetMap has no ${what} mapped near ${where?.label ?? 'this location'} yet.`}
-          attribution={<>Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="underline">OpenStreetMap contributors</a></>} />
+          attribution={<>Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="underline">OpenStreetMap contributors</a>
+            {' · '}Places via <a href="https://www.geoapify.com/" target="_blank" rel="noreferrer" className="underline">Geoapify</a></>} />
       )}
     </>
   );

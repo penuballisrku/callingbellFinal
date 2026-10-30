@@ -130,6 +130,17 @@ public static class DependencyInjection
         services.AddScoped<CityCatalogRun>();
         services.AddHostedService<CityCatalogWorker>();
 
+        // PIN code directory agent: India Post's All India Pincode Directory (data.gov.in), and each area's district from its PIN code.
+        services.Configure<PincodeDirectoryOptions>(configuration.GetSection(PincodeDirectoryOptions.Section));
+        services.AddHttpClient(PincodeDirectoryRun.HttpClientName, c => c.Timeout = TimeSpan.FromMinutes(2)).RemoveAllLoggers(); // api-key in the URL
+        services.AddScoped<PincodeDirectoryRun>();
+        services.AddHostedService<PincodeDirectoryWorker>();
+
+        // OpenStreetMap catalogue agent: each covered city's places per sub-category, stored so searches don't wait on Overpass.
+        services.Configure<OsmCatalogOptions>(configuration.GetSection(OsmCatalogOptions.Section));
+        services.AddScoped<OsmCatalogRun>();
+        services.AddHostedService<OsmCatalogWorker>();
+
         // AI enrichment with a free local Ollama model. All jobs share one background worker and never run inside a request.
         services.Configure<AiOptions>(configuration.GetSection(AiOptions.Section));
         services.AddHttpClient(OllamaChatClient.HttpClientName, c => c.Timeout = Timeout.InfiniteTimeSpan); // per-call timeout from AiOptions
@@ -151,7 +162,7 @@ public static class DependencyInjection
         // Search results beyond the platform: OpenStreetMap places (free) and Google Maps (needs a Places API key).
         services.Configure<ExternalSearchOptions>(configuration.GetSection(ExternalSearchOptions.Section));
         services.Configure<GooglePlacesOptions>(configuration.GetSection(GooglePlacesOptions.Section));
-        services.AddHttpClient(OsmPlaceSearch.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(60)); // per-search budget from ExternalSearchOptions
+        services.AddHttpClient(OsmPlaceSearch.HttpClientName, c => c.Timeout = TimeSpan.FromMinutes(10)); // per-query budget from ExternalSearchOptions / OsmCatalogOptions
         // Keeps the TLS connection to Google open between searches (the default drops it after a minute idle, and a new one costs
         // ~1-2 s), and multiplexes concurrent requests (results plus per-card contact lookups) over HTTP/2.
         services.AddHttpClient(GooglePlacesSearch.HttpClientName, c =>
@@ -172,7 +183,15 @@ public static class DependencyInjection
         services.AddSingleton<IGooglePlacesSearch, GooglePlacesSearch>();
         services.AddScoped<IPopularSearchCounter, PopularSearchCounter>();
         services.AddHttpClient(PhotonPlaceGeocoder.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(8));
-        services.AddSingleton<IPlaceGeocoder, PhotonPlaceGeocoder>();
+        services.AddSingleton<PhotonPlaceGeocoder>();
+
+        // Geoapify (optional, needs Geoapify:ApiKey): places, geocoding, address autocomplete and map images, within a daily credit budget.
+        services.Configure<GeoapifyOptions>(configuration.GetSection(GeoapifyOptions.Section));
+        // Geoapify takes its key in the query string: request URLs are never logged, so the key stays out of the logs.
+        services.AddHttpClient(GeoapifyService.HttpClientName).RemoveAllLoggers();
+        services.AddSingleton<GeoapifyService>();
+        services.AddSingleton<IGeoapify>(sp => sp.GetRequiredService<GeoapifyService>());
+        services.AddSingleton<IPlaceGeocoder, FallbackPlaceGeocoder>();
         // Join CallInBell: photos copied from the source only when Onboarding:AllowExternalPhotoImport is on (licence permitting).
         services.Configure<CallingBell.Application.Features.Onboarding.OnboardingOptions>(configuration.GetSection(CallingBell.Application.Features.Onboarding.OnboardingOptions.Section));
         services.AddHttpClient(ExternalPhotoFetcher.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(20));

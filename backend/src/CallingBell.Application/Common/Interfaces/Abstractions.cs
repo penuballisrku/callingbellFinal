@@ -303,11 +303,46 @@ public sealed record ExternalPlace(string Source, string Id, string Name, string
     string? Phone, string? Website, string? OpeningHours, decimal? Rating, int? RatingCount, string? SourceUrl, string MatchedBy,
     GooglePlacePhoto? Photo = null, bool? OpenNow = null);
 
+/// <summary>
+/// Geoapify (geoapify.com): OpenStreetMap-based places, address autocomplete and static map images, within a daily credit budget.
+/// Off (<see cref="IsEnabled"/> false) until an API key is configured, or once the day's credits are used up.
+/// </summary>
+public interface IGeoapify
+{
+    bool IsEnabled { get; }
+
+    /// <summary>
+    /// Places of the given Geoapify categories (comma-separated, e.g. "healthcare.dentist") within the radius, as OpenStreetMap places
+    /// (<see cref="ExternalPlace.Id"/> "node/123"). Null when Geoapify is off, out of credits or failed.
+    /// </summary>
+    /// <param name="background">The catalogue agent's import: only allowed while most of the day's credits are still free for visitors.</param>
+    Task<IReadOnlyList<ExternalPlace>?> PlacesAsync(string categories, double lat, double lng, int radiusM, int maxPlaces, bool background, CancellationToken ct);
+
+    /// <summary>Address suggestions for what was typed, near <paramref name="lat"/>/<paramref name="lng"/> when given. Null when off or failed.</summary>
+    Task<IReadOnlyList<AddressSuggestion>?> AutocompleteAsync(string text, string countryCode, double? lat, double? lng, CancellationToken ct);
+
+    /// <summary>A map image centred on the point with a marker. Null when off or failed.</summary>
+    Task<StaticMapImage?> StaticMapAsync(double lat, double lng, int zoom, int width, int height, CancellationToken ct);
+}
+
+public sealed record AddressSuggestion(string Formatted, string? AddressLine1, string? AddressLine2, string? Suburb, string? City, string? District,
+    string? State, string? Postcode, string? CountryCode, double Latitude, double Longitude);
+
+public sealed record StaticMapImage(byte[] Content, string ContentType);
+
 /// <summary>Finds named places near a point in OpenStreetMap by "key=value" tag and "name~words" selectors.</summary>
 public interface IOsmPlaceSearch
 {
     /// <returns>Places found, or null when OpenStreetMap could not be reached.</returns>
     Task<IReadOnlyList<ExternalPlace>?> SearchAsync(IReadOnlyCollection<string> selectors, double lat, double lng, int radiusM, CancellationToken ct);
+
+    /// <summary>
+    /// Every place for the selectors within the radius, straight from Overpass (not cached, no Photon fallback), for the catalogue agent
+    /// that stores them. Null when Overpass could not be reached.
+    /// </summary>
+    /// <param name="timeoutSeconds">Server-side time limit for the query (city-wide queries need longer than a live search).</param>
+    Task<IReadOnlyList<ExternalPlace>?> FetchAsync(IReadOnlyCollection<string> selectors, double lat, double lng, int radiusM, int maxPlaces, int timeoutSeconds,
+        CancellationToken ct);
 
     /// <summary>One element with all its tags (OpenStreetMap API), cached in memory. Null when it doesn't exist or OSM can't be reached.</summary>
     /// <param name="id">"node/123", "way/456" or "relation/789".</param>

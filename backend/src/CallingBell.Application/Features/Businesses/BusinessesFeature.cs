@@ -252,6 +252,8 @@ public sealed record BusinessDetailDto
     public IReadOnlyDictionary<int, int> RatingBreakdown { get; init; } = new Dictionary<int, int>();
     public IReadOnlyList<ReviewDto> RecentReviews { get; init; } = [];
     public IReadOnlyList<BusinessCardDto> Similar { get; init; } = [];
+    /// <summary>Map image of the location (<c>GET /api/businesses/{slug}/map</c>); null when the business has no position or maps are off.</summary>
+    public string? MapImageUrl { get; init; }
 }
 
 public sealed record VideoDto(Guid Id, string Title, string VideoUrl, string? PosterUrl, int? DurationSeconds);
@@ -259,7 +261,7 @@ public sealed record SocialLinkDto(string Platform, string Url);
 
 public sealed record GetBusinessBySlugQuery(string Slug) : IRequest<BusinessDetailDto>;
 
-public sealed class GetBusinessBySlugHandler(IUnitOfWork uow, ICurrentUser user) : IRequestHandler<GetBusinessBySlugQuery, BusinessDetailDto>
+public sealed class GetBusinessBySlugHandler(IUnitOfWork uow, ICurrentUser user, IGeoapify geoapify) : IRequestHandler<GetBusinessBySlugQuery, BusinessDetailDto>
 {
     public async Task<BusinessDetailDto> Handle(GetBusinessBySlugQuery request, CancellationToken ct)
     {
@@ -327,7 +329,8 @@ public sealed class GetBusinessBySlugHandler(IUnitOfWork uow, ICurrentUser user)
             Email = info.Email, Website = info.Website, YearEstablished = info.YearEstablished, TeamSize = info.TeamSize, Languages = info.Languages,
             VerifiedOn = info.VerifiedOn, CategoryColor = info.CategoryColor, CitySlug = info.CitySlug, State = info.State, CountryCode = info.CountryCode, PlanName = info.PlanName,
             IsFavorite = isFavorite, Services = services, Hours = hours, Images = images, Videos = videos, SocialLinks = socialLinks, RatingBreakdown = breakdown,
-            RecentReviews = recent, Similar = similar
+            RecentReviews = recent, Similar = similar,
+            MapImageUrl = geoapify.IsEnabled && info.Latitude is not null && info.Longitude is not null ? $"/api/businesses/{Uri.EscapeDataString(card.Slug)}/map" : null
         };
     }
 }

@@ -50,3 +50,6 @@
 :r $(ScriptDir)\35_WebPushVapid.sql
 :r $(ScriptDir)\36_LegalPolicies.sql
 :r $(ScriptDir)\37_NoFreeTrials.sql
+:r $(ScriptDir)\38_CityDistricts.sql
+:r $(ScriptDir)\39_PlaceData.sql
+:r $(ScriptDir)\40_Geoapify.sql

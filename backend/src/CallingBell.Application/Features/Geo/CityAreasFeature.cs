@@ -9,14 +9,16 @@ namespace CallingBell.Application.Features.Geo;
 
 /// <param name="AltNames">Alternate and old spellings, for search.</param>
 /// <param name="SubLocalities">Neighbourhoods inside this area, for search ("Hydernagar" finds Kukatpally).</param>
+/// <param name="District">The district of the area's PIN code (India Post directory), when known.</param>
 public sealed record CityAreaDto(Guid Id, string Name, string Slug, string Pincode, string? AreaType,
-    IReadOnlyList<string> AltNames, IReadOnlyList<string> SubLocalities);
+    IReadOnlyList<string> AltNames, IReadOnlyList<string> SubLocalities, string? District = null);
 
 /// <param name="Discovering">True while the discovery agent is working on this city; poll until false.</param>
 /// <param name="DiscoveredOn">When the agent last completed for this city (null = never).</param>
 /// <param name="StateSlug">The city's state / province / region, so a picker given only the city can select its state.</param>
+/// <param name="District">The district the city lies in (GeoNames), when known.</param>
 public sealed record CityAreasDto(string CitySlug, string CityName, string State, bool Discovering, DateTimeOffset? DiscoveredOn,
-    int SubLocalityCount, IReadOnlyList<CityAreaDto> Areas, string? StateSlug = null);
+    int SubLocalityCount, IReadOnlyList<CityAreaDto> Areas, string? StateSlug = null, string? District = null);
 
 public sealed record GetCityAreasQuery(string CitySlug) : IRequest<CityAreasDto>;
 
@@ -41,22 +43,22 @@ public sealed class GetCityAreasHandler(IUnitOfWork uow, IAreaDiscoveryService d
         if (age is null || age > RefreshAfter || (list.Areas.Count == 0 && age > RetryEmptyAfter)) discovery.Request(list.CityId);
 
         return new CityAreasDto(list.CitySlug, list.CityName, list.State, discovery.IsRunning(list.CityId), list.DiscoveredOn,
-            list.SubLocalityCount, list.Areas, list.StateSlug);
+            list.SubLocalityCount, list.Areas, list.StateSlug, list.District);
     }
 
     private sealed record CachedAreas(Guid CityId, string CitySlug, string CityName, string State, string StateSlug, DateTimeOffset? DiscoveredOn,
-        int SubLocalityCount, IReadOnlyList<CityAreaDto> Areas);
+        int SubLocalityCount, IReadOnlyList<CityAreaDto> Areas, string? District);
 
     private async Task<CachedAreas> LoadAsync(string slug, CancellationToken ct)
     {
         var city = await uow.Repository<City>().QueryNoTracking()
             .Where(c => c.IsActive && c.Slug == slug)
-            .Select(c => new { c.Id, c.Slug, c.Name, State = c.State.Name, StateSlug = c.State.Slug, c.AreasDiscoveredOn })
+            .Select(c => new { c.Id, c.Slug, c.Name, c.District, State = c.State.Name, StateSlug = c.State.Slug, c.AreasDiscoveredOn })
             .FirstOrDefaultAsync(ct) ?? throw new NotFoundException("City", slug);
 
         var areas = await uow.Repository<Area>().QueryNoTracking()
             .Where(a => a.CityId == city.Id && a.IsActive)
-            .Select(a => new { a.Id, a.Name, a.Slug, a.Pincode, a.AreaType, a.AltNames, a.ParentAreaId })
+            .Select(a => new { a.Id, a.Name, a.Slug, a.Pincode, a.AreaType, a.AltNames, a.ParentAreaId, a.District })
             .ToListAsync(ct);
 
         var subsByParent = areas.Where(a => a.ParentAreaId != null).ToLookup(a => a.ParentAreaId!.Value, a => a.Name);
@@ -65,9 +67,9 @@ public sealed class GetCityAreasHandler(IUnitOfWork uow, IAreaDiscoveryService d
             .OrderBy(a => a.Name)
             .Select(a => new CityAreaDto(a.Id, a.Name, a.Slug, a.Pincode, a.AreaType,
                 (a.AltNames ?? string.Empty).Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
-                subsByParent[a.Id].OrderBy(n => n).ToList()))
+                subsByParent[a.Id].OrderBy(n => n).ToList(), a.District))
             .ToList();
         return new CachedAreas(city.Id, city.Slug, city.Name, city.State, city.StateSlug, city.AreasDiscoveredOn,
-            areas.Count(a => a.ParentAreaId != null), top);
+            areas.Count(a => a.ParentAreaId != null), top, city.District);
     }
 }

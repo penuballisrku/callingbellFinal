@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useShallow } from 'zustand/react/shallow';
 import { api } from './api';
-import type { Category, City, CityAreas, Lookup, Lookups, Plan, StateRegion } from './types';
+import type { Category, City, CityAreas, LocationSuggestion, Lookup, Lookups, Plan, StateRegion } from './types';
 import { resolveLocation, useCity, type DetectedLocation, type LocationSelection } from '@/stores/city';
 
 /** <c>areaId</c> is set with <c>areaSlug</c>, so the area can be selected without loading the city list. */
@@ -50,7 +50,7 @@ export function useVisitorDistrict() {
 
 const selectionFields = (s: LocationSelection): LocationSelection => ({
   countryCode: s.countryCode, stateSlug: s.stateSlug, stateName: s.stateName, citySlug: s.citySlug, cityName: s.cityName,
-  areaId: s.areaId, areaSlug: s.areaSlug, areaName: s.areaName, source: s.source,
+  areaId: s.areaId, areaSlug: s.areaSlug, areaName: s.areaName, district: s.district, areaPincode: s.areaPincode, source: s.source,
 });
 
 /**
@@ -171,6 +171,17 @@ export function useBusinessPlans(businessId: string | undefined) {
  * selected city's areas are ever loaded. The first request for a city queues the area-discovery agent; while it is working this polls
  * so new areas appear without a reload.
  */
+/** Cities and areas matching what the visitor types in the location box (empty text: popular cities); the browsed city's areas first. */
+export function useLocationSearch(text: string, country: string | null, citySlug: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ['location-search', country, text.toLowerCase(), citySlug],
+    queryFn: ({ signal }) => api.get<LocationSuggestion[]>('/api/locations/search', { q: text || null, country, city: citySlug }, signal),
+    enabled,
+    staleTime: 10 * 60_000,
+    placeholderData: (previous) => previous,
+  });
+}
+
 export function useCityAreas(citySlug?: string | null) {
   const query = useQuery({
     queryKey: ['city-areas', citySlug],

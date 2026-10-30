@@ -18,7 +18,11 @@ export interface DetectedLocation {
 }
 
 /** Names that come with a choice, so labels show without loading lists; any of them can be filled in later. */
-export interface PlaceNames { cityName?: string | null; stateSlug?: string | null; stateName?: string | null; areaSlug?: string | null; areaName?: string | null }
+export interface PlaceNames {
+  cityName?: string | null; stateSlug?: string | null; stateName?: string | null; areaSlug?: string | null; areaName?: string | null;
+  /** The city's district and the area's PIN code, shown with the place in the location box. */
+  district?: string | null; areaPincode?: string | null;
+}
 
 /**
  * Where the visitor is browsing - country, state / province / region, city, area - in one place, so every page agrees. The country is
@@ -36,6 +40,9 @@ interface LocationState {
   areaId: string | null;
   areaSlug: string | null;
   areaName: string | null;
+  /** The city's district (GeoNames) and the area's PIN code, for the label; filled with the choice or later (see describe). */
+  district: string | null;
+  areaPincode: string | null;
   /**
    * 'user' once the visitor picks a place themselves; 'device' when it came from their device's position (shared with permission);
    * 'ip' while it comes from their IP address (approximate).
@@ -58,10 +65,11 @@ interface LocationState {
   resetToDetected: () => void;
 }
 
-const EMPTY = { stateSlug: null, stateName: null, citySlug: null, cityName: null, areaId: null, areaSlug: null, areaName: null } as const;
+const EMPTY = { stateSlug: null, stateName: null, citySlug: null, cityName: null, areaId: null, areaSlug: null, areaName: null, district: null, areaPincode: null } as const;
 
 /** The selection fields (no actions). */
-export type LocationSelection = Pick<LocationState, 'countryCode' | 'stateSlug' | 'stateName' | 'citySlug' | 'cityName' | 'areaId' | 'areaSlug' | 'areaName' | 'source'>;
+export type LocationSelection = Pick<LocationState, 'countryCode' | 'stateSlug' | 'stateName' | 'citySlug' | 'cityName' | 'areaId' | 'areaSlug' | 'areaName'
+  | 'district' | 'areaPincode' | 'source'>;
 
 /**
  * The selection once the IP's location is taken into account: kept when the visitor chose a place in the same country this session,
@@ -76,7 +84,11 @@ export function resolveLocation(s: LocationSelection, { countryCode, located, di
   if (!d) return { countryCode, ...EMPTY, source: located ? 'ip' : null };
   const next: LocationSelection = {
     countryCode, stateSlug: d.stateSlug ?? null, stateName: d.state, citySlug: d.citySlug, cityName: d.cityName,
-    areaId: d.areaId ?? null, areaSlug: d.areaId ? d.areaSlug ?? null : null, areaName: d.areaId ? d.areaName ?? null : null, source: 'ip',
+    areaId: d.areaId ?? null, areaSlug: d.areaId ? d.areaSlug ?? null : null, areaName: d.areaId ? d.areaName ?? null : null,
+    // Not part of the IP's answer: kept when already known for the same place (see describe).
+    district: s.citySlug === d.citySlug && s.areaId === (d.areaId ?? null) ? s.district ?? null : null,
+    areaPincode: d.areaId && s.areaId === d.areaId ? s.areaPincode ?? null : null,
+    source: 'ip',
   };
   // Unchanged: the same object, so nothing re-renders.
   return (Object.keys(next) as (keyof LocationSelection)[]).every((k) => s[k] === next[k]) ? s : next;
@@ -108,12 +120,15 @@ export const useCity = create<LocationState>()(
           areaId,
           areaSlug: areaId ? names.areaSlug ?? (same && s.areaId === areaId ? s.areaSlug : null) : null,
           areaName: areaId ? names.areaName ?? (same && s.areaId === areaId ? s.areaName : null) : null,
+          district: names.district ?? (same && s.areaId === areaId ? s.district : null),
+          areaPincode: areaId ? names.areaPincode ?? (same && s.areaId === areaId ? s.areaPincode : null) : null,
           source: 'user',
         };
       }),
-      setDevice: ({ countryCode, citySlug, areaId = null, cityName = null, stateSlug = null, stateName = null, areaSlug = null, areaName = null }) => set({
-        countryCode, citySlug, cityName, stateSlug, stateName, areaId,
-        areaSlug: areaId ? areaSlug : null, areaName: areaId ? areaName : null, source: 'device',
+      setDevice: ({ countryCode, citySlug, areaId = null, cityName = null, stateSlug = null, stateName = null, areaSlug = null, areaName = null,
+        district = null, areaPincode = null }) => set({
+        countryCode, citySlug, cityName, stateSlug, stateName, areaId, district,
+        areaSlug: areaId ? areaSlug : null, areaName: areaId ? areaName : null, areaPincode: areaId ? areaPincode : null, source: 'device',
       }),
       describe: (citySlug, names) => set((s) => (s.citySlug !== citySlug ? s : {
         cityName: s.cityName ?? names.cityName ?? null,
@@ -121,6 +136,8 @@ export const useCity = create<LocationState>()(
         stateName: s.stateName ?? names.stateName ?? null,
         areaSlug: s.areaId ? s.areaSlug ?? names.areaSlug ?? null : null,
         areaName: s.areaId ? s.areaName ?? names.areaName ?? null : null,
+        district: s.district ?? names.district ?? null,
+        areaPincode: s.areaId ? s.areaPincode ?? names.areaPincode ?? null : null,
       })),
       applyDetected: (detected) => set((s) => resolveLocation(s, detected)),
       resetToDetected: () => set({ ...EMPTY, source: null }),
@@ -129,8 +146,8 @@ export const useCity = create<LocationState>()(
       name: STORAGE_KEY,
       version: 2,
       storage: createJSONStorage(sessionStore),
-      partialize: ({ countryCode, stateSlug, stateName, citySlug, cityName, areaId, areaSlug, areaName, source }) =>
-        ({ countryCode, stateSlug, stateName, citySlug, cityName, areaId, areaSlug, areaName, source }),
+      partialize: ({ countryCode, stateSlug, stateName, citySlug, cityName, areaId, areaSlug, areaName, district, areaPincode, source }) =>
+        ({ countryCode, stateSlug, stateName, citySlug, cityName, areaId, areaSlug, areaName, district, areaPincode, source }),
     },
   ),
 );

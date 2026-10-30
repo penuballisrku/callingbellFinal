@@ -145,6 +145,15 @@ public sealed class CatalogController : ApiControllerBase
     public async Task<ActionResult<ApiResponse<IReadOnlyList<StateDto>>>> States([FromQuery] string country, CancellationToken ct) =>
         Success(await Sender.Send(new GetStatesQuery(country), ct));
 
+    /// <summary>Type-ahead for the location box: cities and areas (by name, alternate name, sub-locality or PIN code) in a country.</summary>
+    /// <param name="q">What the visitor typed; empty gives the country's popular cities.</param>
+    /// <param name="country">ISO 3166-1 alpha-2 code; the default country when missing.</param>
+    /// <param name="city">The city being browsed: its areas are listed first.</param>
+    [HttpGet("locations/search"), EnableRateLimiting("public-search")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<LocationSuggestionDto>>>> SearchLocations([FromQuery] string? q, [FromQuery] string? country,
+        [FromQuery] string? city, CancellationToken ct) =>
+        Success(await Sender.Send(new SearchLocationsQuery(q, country, city), ct));
+
     /// <summary>All areas of a city with alternate names and sub-localities; queues the area-discovery agent when the data is missing or stale.</summary>
     [HttpGet("locations/cities/{slug}/areas")]
     public async Task<ActionResult<ApiResponse<CityAreasDto>>> CityAreas(string slug, CancellationToken ct)
@@ -233,6 +242,16 @@ public sealed class BusinessesController : ApiControllerBase
     public async Task<ActionResult<ApiResponse<BusinessDetailDto>>> Get(string slug, CancellationToken ct) =>
         Success(await Sender.Send(new GetBusinessBySlugQuery(slug), ct));
 
+    /// <summary>Map image of the business's location (Geoapify, © OpenStreetMap contributors); 404 when it has no position or maps are off.</summary>
+    [HttpGet("{slug}/map")]
+    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Map(string slug, CancellationToken ct)
+    {
+        if (await Sender.Send(new GetBusinessMapQuery(slug), ct) is not { } image) return NotFound();
+        Response.Headers.CacheControl = "public, max-age=604800";
+        return File(image.Content, image.ContentType);
+    }
+
     [HttpGet("{slug}/reviews")]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<ReviewDto>>>> Reviews(string slug, [FromQuery] int page = 1, [FromQuery] int pageSize = 10,
         [FromQuery] int? rating = null, [FromQuery] string? sort = null, CancellationToken ct = default) =>
@@ -287,6 +306,15 @@ public sealed class BusinessesController : ApiControllerBase
 public sealed class GeoController(IOptions<GeoIpOptions> options, IHostEnvironment env, DevelopmentPublicIp developmentIp, IGeoLocationService geo)
     : ApiControllerBase
 {
+    /// <summary>
+    /// Address suggestions for the business sign-up form (Geoapify), each with the listed city and area it falls in. With no text it
+    /// only tells whether suggestions are available (<c>enabled</c>).
+    /// </summary>
+    [HttpGet("address-suggestions"), EnableRateLimiting("public-search")]
+    public async Task<ActionResult<ApiResponse<AddressSuggestionsDto>>> AddressSuggestions([FromQuery] string? text, [FromQuery] string? country,
+        [FromQuery] double? lat, [FromQuery] double? lon, CancellationToken ct) =>
+        Success(await Sender.Send(new GetAddressSuggestionsQuery(text, country, lat, lon), ct));
+
     /// <summary>The visitor's country (ISO code) from a CDN edge header or the local GeoIP database.</summary>
     [HttpGet("country")]
     public async Task<ActionResult<ApiResponse<VisitorCountryDto>>> Country(CancellationToken ct)

@@ -272,6 +272,51 @@ internal sealed class CatalogConfiguration :
     }
 }
 
+/// <summary>Reference data imported from open sources (39_PlaceData.sql): PIN codes, OpenStreetMap places, Google place ids.</summary>
+internal sealed class PlaceDataConfiguration :
+    IEntityTypeConfiguration<PostOffice>, IEntityTypeConfiguration<OsmPlace>, IEntityTypeConfiguration<OsmPlaceSubCategory>,
+    IEntityTypeConfiguration<OsmCityImport>, IEntityTypeConfiguration<GooglePlaceRef>
+{
+    public void Configure(EntityTypeBuilder<PostOffice> b)
+    {
+        b.ToTable("PostOffices");
+        b.Property(x => x.Pincode).HasMaxLength(10);
+        b.Property(x => x.Latitude).HasPrecision(9, 6);
+        b.Property(x => x.Longitude).HasPrecision(9, 6);
+    }
+
+    public void Configure(EntityTypeBuilder<OsmPlace> b)
+    {
+        b.ToTable("OsmPlaces");
+        b.Property(x => x.OsmRef).HasMaxLength(40);
+        b.HasIndex(x => x.OsmRef).IsUnique();
+        b.Property(x => x.Latitude).HasPrecision(9, 6);
+        b.Property(x => x.Longitude).HasPrecision(9, 6);
+        b.HasOne(x => x.City).WithMany().HasForeignKey(x => x.CityId);
+    }
+
+    public void Configure(EntityTypeBuilder<OsmPlaceSubCategory> b)
+    {
+        b.ToTable("OsmPlaceSubCategories");
+        b.HasKey(x => new { x.OsmPlaceId, x.SubCategoryId });
+        b.HasOne(x => x.OsmPlace).WithMany(p => p.SubCategories).HasForeignKey(x => x.OsmPlaceId);
+        b.HasOne(x => x.SubCategory).WithMany().HasForeignKey(x => x.SubCategoryId);
+    }
+
+    public void Configure(EntityTypeBuilder<OsmCityImport> b)
+    {
+        b.ToTable("OsmCityImports");
+        b.HasKey(x => new { x.CityId, x.SubCategoryId });
+    }
+
+    public void Configure(EntityTypeBuilder<GooglePlaceRef> b)
+    {
+        b.ToTable("GooglePlaceRefs");
+        b.HasKey(x => x.PlaceId);
+        b.Property(x => x.PlaceId).HasMaxLength(300);
+    }
+}
+
 internal sealed class BusinessSlugHistoryConfiguration : IEntityTypeConfiguration<BusinessSlugHistory>
 {
     public void Configure(EntityTypeBuilder<BusinessSlugHistory> b)

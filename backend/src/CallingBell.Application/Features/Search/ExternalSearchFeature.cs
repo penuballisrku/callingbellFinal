@@ -93,7 +93,7 @@ public sealed class ExternalSearchValidator : AbstractValidator<ExternalSearchQu
 /// </list>
 /// Each source leaves out places a higher-priority source already listed.
 /// </summary>
-public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver origins, IOsmPlaceSearch osm, IGooglePlacesSearch google,
+public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver origins, IOsmPlaceSearch osm, IGeoapify geoapify, IGooglePlacesSearch google,
     ISearchAssistant assistant, ISemanticCatalog semantic, IPlaceGeocoder geocoder, ReferenceDataCache reference, CountryPricingService pricing,
     IGeoLocationService geo) : IRequestHandler<ExternalSearchQuery, ExternalSearchDto>
 {
@@ -107,6 +107,8 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
     private const int MaxRanked = 20;
     private const int MaxSubCategories = 3;
     private const int PhotoWidthPx = 480;
+    /// <summary>A city's stored OpenStreetMap import older than this isn't used; OpenStreetMap is asked directly instead.</summary>
+    private static readonly TimeSpan StoredOsmMaxAge = TimeSpan.FromDays(60);
     private static readonly HashSet<string> StopWords = new(StringComparer.OrdinalIgnoreCase)
         { "near", "me", "nearby", "best", "top", "in", "at", "around", "for", "the", "a", "an", "good", "services", "service", "open", "now", "available", "online" };
 
@@ -131,7 +133,8 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
             : await origins.ResolveAsync(r.ClientIp, citySlug, areaSlug, r.RadiusKm, ct);
 
         // What: the sub-categories searched for, with their OpenStreetMap tags.
-        var subs = (await reference.ActiveSubCategoriesAsync(ct)).Select(s => new Sub(s.Slug, s.Name, s.CategorySlug, s.CategoryName, s.OsmTags)).ToList();
+        var subs = (await reference.ActiveSubCategoriesAsync(ct))
+            .Select(s => new Sub(s.Id, s.Slug, s.Name, s.CategorySlug, s.CategoryName, s.OsmTags, s.GeoapifyCategories)).ToList();
         var q = (r.Q ?? "").Trim();
         var label = subs.FirstOrDefault(s => s.Slug == r.Sub)?.Name
                     ?? subs.FirstOrDefault(s => s.CategorySlug == r.Category)?.CategoryName
@@ -185,7 +188,8 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
         var googleTask = google.IsEnabled && withGoogle
             ? google.SearchAsync($"{label} in {Where(origin)}", lat, lng, RadiusM, r.GooglePageToken, ct)
             : Task.FromResult<GoogleSearchPage?>(new GoogleSearchPage([], null));
-        var osmTask = !withAi || selectors.Count == 0 ? Task.FromResult<IReadOnlyList<ExternalPlace>?>(null) : SearchOsmAsync(selectors, lat, lng, ct);
+        var osmTask = !withAi || selectors.Count == 0 ? Task.FromResult<IReadOnlyList<ExternalPlace>?>(null)
+            : SearchOsmAsync(selectors, origin.CityId, wanted, lat, lng, ct);
         await Task.WhenAll(googleTask, osmTask);
         var shown = new List<Known>(registered);
 
@@ -205,6 +209,7 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
             if (page is null) googleTier = new ExternalTierDto("unavailable", null, 0, 0, []);
             else
             {
+                await RememberGooglePlacesAsync(page.Places, origin.CityId, wanted.Count == 1 ? wanted[0].Id : null, ct);
                 var (unique, duplicates) = Dedupe(page.Places, shown);
                 var ordered = unique.OrderBy(p => Km(p, lat, lng)).ToList();
                 shown.AddRange(ordered.Select(p => new Known(p.Name, p.Phone, p.Latitude, p.Longitude)));
@@ -324,16 +329,96 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
 
     /// <summary>OpenStreetMap places near the area, widening to the whole city when the area has few. Null when OpenStreetMap is unreachable.</summary>
     /// <remarks>
-    /// When the area search alone is cached it answers at once. Otherwise both searches start together, so a sparse area costs one wait
-    /// instead of two in a row; the city-wide result (also cached) is only used when the area has too few places.
+    /// Places the OpenStreetMap catalogue agent has stored for the city and sub-categories are read from the database. Otherwise
+    /// OpenStreetMap is asked directly: when the area search alone is cached it answers at once, else both searches start together, so
+    /// a sparse area costs one wait instead of two in a row; the city-wide result (also cached) is only used when the area has too few.
     /// </remarks>
-    private async Task<IReadOnlyList<ExternalPlace>?> SearchOsmAsync(List<string> selectors, double lat, double lng, CancellationToken ct)
+    private async Task<IReadOnlyList<ExternalPlace>?> SearchOsmAsync(List<string> selectors, Guid cityId, List<Sub> wanted, double lat, double lng,
+        CancellationToken ct)
     {
+        if (await StoredOsmAsync(cityId, wanted.Select(s => s.Id).ToList(), lat, lng, ct) is { } stored)
+        {
+            var near = stored.Where(p => Km(p, lat, lng) * 1000 <= RadiusM).ToList();
+            return near.Count >= MinNear ? near : stored;
+        }
+        // Geoapify answers in a second where Overpass often takes many: used when every sub-category maps to its categories.
+        if (wanted.Count > 0 && wanted.All(s => !string.IsNullOrWhiteSpace(s.GeoapifyCategories)) && geoapify.IsEnabled)
+        {
+            var categories = string.Join(',', wanted.Select(s => s.GeoapifyCategories));
+            var near = await geoapify.PlacesAsync(categories, lat, lng, RadiusM, MaxAiResults * 2, background: false, ct);
+            if (near is { Count: >= MinNear }) return near;
+            var wide = await geoapify.PlacesAsync(categories, lat, lng, CityRadiusM, MaxAiResults * 2, background: false, ct);
+            // Nothing from Geoapify: OpenStreetMap's own search (below) may still find places by name.
+            if (wide is { Count: > 0 } && wide.Count >= (near?.Count ?? 0)) return wide;
+            if (near is { Count: > 0 }) return near;
+        }
         var area = osm.SearchAsync(selectors, lat, lng, RadiusM, ct);
         if (area.IsCompletedSuccessfully && area.Result is { Count: >= MinNear } quick) return quick;
         var city = osm.SearchAsync(selectors, lat, lng, CityRadiusM, ct);
         var places = await area;
         return places is { Count: < MinNear } ? await city ?? places : places;
+    }
+
+    /// <summary>
+    /// The city's stored OpenStreetMap places for the sub-categories, within the city-wide radius; null unless every sub-category has a
+    /// recent, successful import for the city (then OpenStreetMap is asked directly). Places no import has found for a while are left out.
+    /// </summary>
+    private async Task<IReadOnlyList<ExternalPlace>?> StoredOsmAsync(Guid cityId, List<Guid> subIds, double lat, double lng, CancellationToken ct)
+    {
+        if (cityId == Guid.Empty || subIds.Count == 0) return null;
+        var since = DateTimeOffset.UtcNow - StoredOsmMaxAge;
+        var imported = await uow.Repository<OsmCityImport>().QueryNoTracking()
+            .CountAsync(i => i.CityId == cityId && subIds.Contains(i.SubCategoryId) && i.Note == null && i.ImportedOn >= since, ct);
+        if (imported < subIds.Count) return null;
+
+        var dLat = CityRadiusM / 111_320.0;
+        var dLng = dLat / Math.Cos(lat * Math.PI / 180);
+        decimal minLat = (decimal)(lat - dLat), maxLat = (decimal)(lat + dLat), minLng = (decimal)(lng - dLng), maxLng = (decimal)(lng + dLng);
+        var rows = await uow.Repository<OsmPlace>().QueryNoTracking()
+            .Where(p => p.Latitude >= minLat && p.Latitude <= maxLat && p.Longitude >= minLng && p.Longitude <= maxLng && p.LastSeenOn >= since
+                        && p.SubCategories.Any(s => subIds.Contains(s.SubCategoryId)))
+            .OrderBy(p => p.Id)
+            .Select(p => new { p.OsmRef, p.Name, p.Kind, p.Address, p.Latitude, p.Longitude, p.Phone, p.Website, p.OpeningHours })
+            .Take(2000)
+            .ToListAsync(ct);
+        return rows
+            .Select(p => new ExternalPlace("osm", p.OsmRef, p.Name, p.Kind, p.Address, (double)p.Latitude, (double)p.Longitude, p.Phone, p.Website,
+                p.OpeningHours, null, null, $"https://www.openstreetmap.org/{p.OsmRef}", "tag"))
+            .Where(p => Km(p, lat, lng) * 1000 <= CityRadiusM)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Keeps the place ids of the Google results (with the city and sub-category searched), which Google's terms allow storing; nothing
+    /// else from Google is stored. Best effort: a failure here never fails the search.
+    /// </summary>
+    private async Task RememberGooglePlacesAsync(IReadOnlyList<ExternalPlace> places, Guid cityId, Guid? subId, CancellationToken ct)
+    {
+        var ids = places.Where(p => p.Source == "google" && p.Id.Length is > 0 and <= 300).Select(p => p.Id).Distinct().ToList();
+        if (ids.Count == 0) return;
+        try
+        {
+            var refs = uow.Repository<GooglePlaceRef>();
+            var known = await refs.Query().Where(g => ids.Contains(g.PlaceId)).ToDictionaryAsync(g => g.PlaceId, ct);
+            var now = DateTimeOffset.UtcNow;
+            Guid? city = cityId == Guid.Empty ? null : cityId;
+            foreach (var id in ids)
+            {
+                if (known.TryGetValue(id, out var row))
+                {
+                    row.LastSeenOn = now;
+                    row.SeenCount++;
+                    row.CityId ??= city;
+                    row.SubCategoryId ??= subId;
+                }
+                else refs.Add(new GooglePlaceRef { PlaceId = id, CityId = city, SubCategoryId = subId, FirstSeenOn = now, LastSeenOn = now, SeenCount = 1 });
+            }
+            await uow.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            // Two searches recorded the same new place at once: it is recorded either way.
+        }
     }
 
     /// <summary>Whether the full OpenStreetMap search (area or city-wide) is still finishing in the background.</summary>
@@ -427,7 +512,7 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
             OpenNow: p.OpenNow);
     }
 
-    private sealed record Sub(string Slug, string Name, string CategorySlug, string CategoryName, string? OsmTags);
+    private sealed record Sub(Guid Id, string Slug, string Name, string CategorySlug, string CategoryName, string? OsmTags, string? GeoapifyCategories);
 
     private sealed record Known(string Name, string? Phone, double Lat, double Lng);
 }

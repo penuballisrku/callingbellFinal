@@ -182,7 +182,7 @@ function Hero({ data }: { data?: HomeData }) {
               <VoiceSearchButton onText={(t) => setQ(t)} submit size="medium" />
             </div>
             {/* text-ink: the hero's white text must not carry into this white field (the place name was invisible in light mode). */}
-            <div className="min-w-0 text-ink sm:w-56 sm:shrink-0"><CitySelect size="medium" fullWidth height={48} /></div>
+            <div className="min-w-0 text-ink sm:w-64 sm:shrink-0"><CitySelect size="medium" fullWidth height={48} /></div>
             <Button type="submit" variant="contained" color="secondary" size="large" sx={{ height: 48, px: 3, flexShrink: 0 }}>Search</Button>
           </form>
           {/* The AI assistant, clearly visible under the search: same animated look as the header's Ask AI. */}

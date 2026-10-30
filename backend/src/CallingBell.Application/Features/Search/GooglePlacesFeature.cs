@@ -185,8 +185,12 @@ public sealed class PlaceContactHandler(IGooglePlacesSearch google) : IRequestHa
 {
     public async Task<PlaceContactDto> Handle(PlaceContactQuery r, CancellationToken ct)
     {
-        if (!google.IsEnabled) throw new ExternalServiceException(503, "Phone lookup is not available right now.");
-        var c = await google.FindContactAsync(r.Name!.Trim(), r.Lat!.Value, r.Lon!.Value, ct);
+        // The card already shows what the place's own source (OpenStreetMap / Geoapify) knows; Google only adds to it. When Google is off or
+        // rejects the request (e.g. a restricted key), the answer is "nothing more found" rather than an error on every card.
+        if (!google.IsEnabled) return new PlaceContactDto(false, null, null, null, null);
+        GooglePlaceContact? c;
+        try { c = await google.FindContactAsync(r.Name!.Trim(), r.Lat!.Value, r.Lon!.Value, ct); }
+        catch (ExternalServiceException) { c = null; }
         if (c is null) return new PlaceContactDto(false, null, null, null, null);
         var credit = c.Photo?.Attributions.FirstOrDefault();
         return new PlaceContactDto(true, c.Phone ?? c.InternationalPhone, c.InternationalPhone, c.Website, c.MapsUrl, c.Rating, c.RatingCount, c.OpenNow,

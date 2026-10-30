@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { GeoapifyCredit } from '@/features/onboarding/AddressSearch';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Chip, Dialog, IconButton, LinearProgress, MenuItem, Pagination, Skeleton, TextField, Tooltip } from '@mui/material';
@@ -242,6 +243,17 @@ export default function BusinessPage() {
                   )}
                   <Row icon={<PlaceOutlined fontSize="small" />}><address className="not-italic">{address}{near && <span className="block text-muted">{near}</span>}</address></Row>
                 </div>
+                {b.mapImageUrl && mapUrl && (
+                  <figure>
+                    {/* Fixed 2:1 box, so the page doesn't shift while the image loads. */}
+                    <a href={mapUrl} target="_blank" rel="noopener" aria-label={`Open ${c.name} in Google Maps`}
+                      className="block aspect-[2/1] overflow-hidden rounded-lg border border-line bg-subtle">
+                      <img src={b.mapImageUrl} alt={`Map showing the location of ${c.name}`} width={600} height={300} loading="lazy"
+                        className="h-full w-full object-cover" onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} />
+                    </a>
+                    <figcaption className="mt-1 text-right"><GeoapifyCredit /></figcaption>
+                  </figure>
+                )}
                 {mapUrl && <Button fullWidth startIcon={<DirectionsOutlined />} href={mapUrl} target="_blank" rel="noopener">Get directions</Button>}
               </div>
             </Panel>

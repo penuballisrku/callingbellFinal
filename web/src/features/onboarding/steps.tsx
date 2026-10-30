@@ -25,6 +25,7 @@ import { asksForGstin, priceBreakdown, taxLabel } from '@/lib/payments';
 import { PolicyList } from '@/lib/legal';
 import { PhoneVerification, phoneDigits } from '@/features/auth/otp';
 import { ImportedPhotos, type ImportedPhotosState } from './JoinImport';
+import { AddressSearch } from './AddressSearch';
 import { api } from '@/lib/api';
 
 export interface WizardData { categories: Category[]; cities: City[]; plans: Plan[]; serviceTypes: Lookup[]; socialPlatforms: Lookup[] }
@@ -276,6 +277,15 @@ export function ContactStep(_props: { data: WizardData }) {
       </Section>
       <Section title="Business address">
         <div className="grid gap-4 sm:grid-cols-2">
+          <AddressSearch onPick={(s) => {
+            // Everything the suggestion knows; fields it doesn't know keep what was entered.
+            const set = (name: Parameters<typeof setValue>[0], value: unknown) => setValue(name, value as never, { shouldValidate: true, shouldDirty: true });
+            if (s.citySlug) { set('business.citySlug', s.citySlug); set('business.areaSlug', s.areaSlug ?? ''); }
+            if (s.addressLine) set('business.addressLine', s.addressLine);
+            if (s.postcode && /^[1-9]\d{5}$/.test(s.postcode)) set('business.pincode', s.postcode);
+            setValue('business.latitude', s.latitude, { shouldDirty: true });
+            setValue('business.longitude', s.longitude, { shouldDirty: true });
+          }} />
           <Controller control={control} name="business.citySlug" render={({ field, fieldState }) => (
             <CityAutocomplete value={field.value || null} label="City" required size="medium" error={!!fieldState.error} helperText={fieldState.error?.message}
               onChange={(slug) => { field.onChange(slug ?? ''); field.onBlur(); setValue('business.areaSlug', ''); }} />

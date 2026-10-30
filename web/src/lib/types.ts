@@ -30,8 +30,27 @@ export interface Category {
 }
 export interface Area { id: string; name: string; slug: string; pincode: string }
 /** A city's area with search aliases: alternate spellings and the sub-localities (neighbourhoods) inside it. */
-export interface CityArea { id: string; name: string; slug: string; pincode: string; areaType?: string | null; altNames: string[]; subLocalities: string[] }
-export interface CityAreas { citySlug: string; cityName: string; state: string; stateSlug?: string | null; discovering: boolean; discoveredOn?: string | null; subLocalityCount: number; areas: CityArea[] }
+export interface CityArea {
+  id: string; name: string; slug: string; pincode: string; areaType?: string | null; altNames: string[]; subLocalities: string[];
+  /** The district of the area's PIN code (India Post directory), when known. */
+  district?: string | null;
+}
+export interface CityAreas { citySlug: string; cityName: string; district?: string | null; state: string; stateSlug?: string | null; discovering: boolean; discoveredOn?: string | null; subLocalityCount: number; areas: CityArea[] }
+/** An address from the sign-up form's address search (GET /api/geo/address-suggestions), with the listed city and area it lies in. */
+export interface AddressSuggestion {
+  formatted: string; addressLine?: string | null; postcode?: string | null; latitude: number; longitude: number;
+  citySlug?: string | null; cityName?: string | null; areaSlug?: string | null; areaName?: string | null;
+  locality?: string | null; district?: string | null; state?: string | null;
+}
+/** enabled: false when address suggestions aren't available (Geoapify not configured or out of credits). */
+export interface AddressSuggestions { enabled: boolean; items: AddressSuggestion[] }
+/** A place the location box suggests (GET /api/locations/search): a whole city, or an area within one. */
+export interface LocationSuggestion {
+  kind: 'city' | 'area'; citySlug: string; cityName: string; district?: string | null; stateSlug?: string | null; stateName: string;
+  areaId?: string | null; areaSlug?: string | null; areaName?: string | null; pincode?: string | null;
+  /** The alternate name, sub-locality or PIN code that matched, when it isn't the name itself. */
+  matched?: string | null; businessCount: number;
+}
 export interface City { id: string; name: string; slug: string; state: string; imageUrl?: string | null; isPopular: boolean; businessCount: number; areas: Area[] }
 /** A country visitors can browse (GET /api/locations/countries). cityCount 0: its cities are imported when it is first chosen. */
 export interface Country { code: string; name: string; cityCount: number }
@@ -172,6 +191,8 @@ export interface BusinessDetail {
   /** The business's city's state and country (ISO code, e.g. "IN"). */
   state?: string | null; countryCode?: string | null;
   planName?: string | null; isFavorite: boolean; services: Service[]; hours: Hours[]; images: BusinessImage[]; ratingBreakdown: Record<string, number>;
+  /** Map image of the location (GET /api/businesses/{slug}/map); null when there is no position or maps are off. */
+  mapImageUrl?: string | null;
   videos: BusinessVideo[]; socialLinks: SocialLink[];
   recentReviews: Review[]; similar: BusinessCard[];
 }

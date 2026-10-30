@@ -100,7 +100,7 @@ internal sealed class CityCatalogWorker(CityCatalogQueue queue, IServiceScopeFac
 /// is part of it;</item>
 /// <item>record the import in <see cref="CountryCatalog"/>.</item>
 /// </list>
-/// Re-running updates populations and links; it never removes cities, nor changes curated ones beyond their GeoNames link. Every fact comes
+/// Re-running updates populations, districts and links; it never removes cities, nor changes curated ones beyond their GeoNames link and district. Every fact comes
 /// from GeoNames; nothing is generated. Areas of each city come later from the area-discovery agent, when the city is first chosen.
 /// </summary>
 internal sealed partial class CityCatalogRun(
@@ -116,7 +116,7 @@ internal sealed partial class CityCatalogRun(
     [GeneratedRegex(@"[^a-z0-9]+")]
     private static partial Regex NonSlug();
 
-    private sealed record GeoCity(long Id, string Name, string AsciiName, double Lat, double Lng, string Admin1, int Population);
+    private sealed record GeoCity(long Id, string Name, string AsciiName, double Lat, double Lng, string Admin1, string Admin2, int Population);
 
     public async Task ExecuteAsync(string countryCode, CancellationToken ct)
     {
@@ -129,6 +129,7 @@ internal sealed partial class CityCatalogRun(
         Directory.CreateDirectory(dir);
         var countryFile = await EnsureFileAsync(dir, "countryInfo.txt", ct);
         var admin1File = await EnsureFileAsync(dir, "admin1CodesASCII.txt", ct);
+        var admin2File = await EnsureFileAsync(dir, "admin2Codes.txt", ct);
         var citiesZip = await EnsureFileAsync(dir, o.CitiesFile + ".zip", ct);
 
         var catalog = await db.CountryCatalogs.FirstOrDefaultAsync(c => c.CountryCode == cc, ct);
@@ -151,6 +152,14 @@ internal sealed partial class CityCatalogRun(
             .Select(l => l.Split('\t')).Where(f => f.Length >= 2 && f[0].StartsWith(cc + ".", StringComparison.Ordinal))
             .ToDictionary(f => f[0][(cc.Length + 1)..], f => f[1]);
         var geoCities = ReadCities(citiesZip, o.CitiesFile + ".txt", cc, o.MinPopulation);
+        // Districts (second-level divisions), keyed "admin1.admin2": "36.1234" → "Hyderabad", by their ASCII name like the city names.
+        // Some states' second level is a revenue division ("Pune Division"), which spans several districts: those are left unknown.
+        var admin2 = (await File.ReadAllLinesAsync(admin2File, ct))
+            .Select(l => l.Split('	')).Where(f => f.Length >= 2 && f[0].StartsWith(cc + ".", StringComparison.Ordinal))
+            .Select(f => (Key: f[0][(cc.Length + 1)..], Name: (f.Length > 2 && !string.IsNullOrWhiteSpace(f[2]) ? f[2] : f[1]).Trim()))
+            .Where(d => d.Name.Length > 0 && !d.Name.EndsWith(" Division", StringComparison.OrdinalIgnoreCase))
+            .GroupBy(d => d.Key).ToDictionary(g => g.Key, g => g.First().Name);
+        string? DistrictOf(GeoCity g) => g.Admin2.Length == 0 ? null : admin2.GetValueOrDefault($"{g.Admin1}.{g.Admin2}");
 
         db.SuppressAuditLog = true;
         var states = await db.States.Where(s => s.CountryCode == cc).ToListAsync(ct);
@@ -217,7 +226,11 @@ internal sealed partial class CityCatalogRun(
                     placed.RemoveAll(p => p.Id == known.Id);
                     continue;
                 }
-                if (known.Population != g.Population) { known.Population = g.Population; known.ModifiedBy = Agent; updated++; pending++; }
+                var district = DistrictOf(g);
+                if (known.Population != g.Population || known.District != district)
+                {
+                    known.Population = g.Population; known.District = district; known.ModifiedBy = Agent; updated++; pending++;
+                }
                 continue;
             }
             if (curatedArea) { merged++; continue; }
@@ -232,7 +245,11 @@ internal sealed partial class CityCatalogRun(
                 {
                     // The curated city itself (or a place inside it): link the first, largest match.
                     var curated = await db.Cities.FirstAsync(c => c.Id == near.Id, ct);
-                    if (curated.ExternalRef is null) { curated.ExternalRef = reference; curated.Population ??= g.Population; curated.ModifiedBy = Agent; linked++; pending++; }
+                    if (curated.ExternalRef is null)
+                    {
+                        curated.ExternalRef = reference; curated.Population ??= g.Population; curated.District ??= DistrictOf(g); curated.ModifiedBy = Agent;
+                        linked++; pending++;
+                    }
                     else merged++;
                 }
                 else merged++;
@@ -244,7 +261,7 @@ internal sealed partial class CityCatalogRun(
             var city = new City
             {
                 StateId = state.Id, Name = displayName, Slug = slug, Latitude = Math.Round((decimal)g.Lat, 6), Longitude = Math.Round((decimal)g.Lng, 6),
-                Population = g.Population, Source = "geonames", ExternalRef = reference, IsActive = true, IsPopular = false,
+                Population = g.Population, District = DistrictOf(g), Source = "geonames", ExternalRef = reference, IsActive = true, IsPopular = false,
                 SortOrder = maxOrder + rank, CreatedBy = Agent,
                 AltNames = string.Equals(g.AsciiName, displayName, StringComparison.OrdinalIgnoreCase) ? null : g.AsciiName,
             };
@@ -288,14 +305,14 @@ internal sealed partial class CityCatalogRun(
         var list = new List<GeoCity>();
         while (reader.ReadLine() is { } line)
         {
-            // 0 id, 1 name, 2 asciiname, 3 alternatenames, 4 lat, 5 lng, 6 feature class, 7 feature code, 8 country, 10 admin1, 14 population
+            // 0 id, 1 name, 2 asciiname, 3 alternatenames, 4 lat, 5 lng, 6 feature class, 7 feature code, 8 country, 10 admin1, 11 admin2, 14 population
             var f = line.Split('\t');
             if (f.Length < 15 || f[8] != cc || f[6] != "P" || !CityCodes.Contains(f[7])) continue;
             if (!int.TryParse(f[14], NumberStyles.Integer, CultureInfo.InvariantCulture, out var population) || population < minPopulation) continue;
             if (!double.TryParse(f[4], NumberStyles.Float, CultureInfo.InvariantCulture, out var lat)
                 || !double.TryParse(f[5], NumberStyles.Float, CultureInfo.InvariantCulture, out var lng)) continue;
             if (!long.TryParse(f[0], out var id) || string.IsNullOrWhiteSpace(f[1])) continue;
-            list.Add(new GeoCity(id, f[1], string.IsNullOrWhiteSpace(f[2]) ? f[1] : f[2], lat, lng, f[10], population));
+            list.Add(new GeoCity(id, f[1], string.IsNullOrWhiteSpace(f[2]) ? f[1] : f[2], lat, lng, f[10], f[11].Trim(), population));
         }
         return list;
     }

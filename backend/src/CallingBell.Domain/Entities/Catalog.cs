@@ -32,6 +32,8 @@ public class City : AuditableEntity
     /// <summary>Source record, e.g. "geonames:1269843" (also set on curated cities the agent matched).</summary>
     public string? ExternalRef { get; set; }
     public int? Population { get; set; }
+    /// <summary>The district (second-level division) the city lies in, from GeoNames; null until the city catalogue agent has set it.</summary>
+    public string? District { get; set; }
     public bool IsPopular { get; set; }
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
@@ -59,6 +61,8 @@ public class Area : AuditableEntity
     public Guid? ParentAreaId { get; set; }
     /// <summary>Alternate and old spellings, '|' separated (used by search).</summary>
     public string? AltNames { get; set; }
+    /// <summary>The district of the area's PIN code (India Post directory); null until the PIN code directory agent has set it.</summary>
+    public string? District { get; set; }
     /// <summary>Null for curated areas; "osm" for areas maintained by the discovery agent.</summary>
     public string? Source { get; set; }
     /// <summary>Source record, e.g. the OpenStreetMap element "node/123".</summary>
@@ -104,6 +108,11 @@ public class SubCategory : AuditableEntity
     /// "key=value" tags (e.g. "craft=electrician") or "name~words" (name contains the words).
     /// </summary>
     public string? OsmTags { get; set; }
+    /// <summary>
+    /// Geoapify place categories for the same kind of place, comma-separated (e.g. "healthcare.dentist"); null when Geoapify has none,
+    /// and then OpenStreetMap's Overpass is used with <see cref="OsmTags"/>.
+    /// </summary>
+    public string? GeoapifyCategories { get; set; }
 
     public Category Category { get; set; } = null!;
     public ICollection<Business> Businesses { get; set; } = new List<Business>();

@@ -105,9 +105,21 @@ internal sealed partial class OsmPlaceSearch(IHttpClientFactory httpFactory, IMe
         return fast;
     }
 
+    public async Task<IReadOnlyList<ExternalPlace>?> FetchAsync(IReadOnlyCollection<string> selectors, double lat, double lng, int radiusM, int maxPlaces,
+        int timeoutSeconds, CancellationToken ct)
+    {
+        var valid = Valid(selectors);
+        if (valid.Count == 0) return [];
+        ct.ThrowIfCancellationRequested();
+        return await OverpassAsync(valid, lat, lng, radiusM, Math.Clamp(maxPlaces, 1, 5000), Math.Clamp(timeoutSeconds, 10, 600), live: false);
+    }
+
     // ---------------- Overpass ----------------
 
-    private async Task<List<ExternalPlace>?> OverpassAsync(List<string> valid, double lat, double lng, int radiusM)
+    /// <param name="live">A visitor's search: a failure marks Overpass as down for a moment, so the next searches use Photon at once. The
+    /// catalogue agent's long city-wide queries don't, so a slow one never holds up visitors.</param>
+    private async Task<List<ExternalPlace>?> OverpassAsync(List<string> valid, double lat, double lng, int radiusM, int maxPlaces = 300,
+        int? timeoutSeconds = null, bool live = true)
     {
         // Tags use the server's tag index directly; name words are one case-insensitive regex over the named points. The area is a
         // bounding box (a global [bbox] is far cheaper for the servers than "around" filters, which busy servers time out on);
@@ -120,10 +132,11 @@ internal sealed partial class OsmPlaceSearch(IHttpClientFactory httpFactory, IMe
         var tags = valid.Where(s => !IsName(s)).Select(s => $"nwr[\"{TagKey(s)}\"=\"{TagValue(s)}\"][\"name\"];");
         var words = valid.Where(IsName).Select(s => s[5..]).ToList();
         var byName = words.Count == 0 ? "" : $"node[\"name\"~\"{string.Join('|', words)}\",i];";
-        var query = $"[out:json][timeout:{o.OverpassTimeoutSeconds}][bbox:{bbox}];({string.Concat(tags)}{byName});out center tags 300;";
+        var timeout = timeoutSeconds ?? o.OverpassTimeoutSeconds;
+        var query = $"[out:json][timeout:{timeout}][bbox:{bbox}];({string.Concat(tags)}{byName});out center tags {maxPlaces};";
         try
         {
-            using var budget = new CancellationTokenSource(TimeSpan.FromSeconds(o.OverpassTimeoutSeconds + 5));
+            using var budget = new CancellationTokenSource(TimeSpan.FromSeconds(timeout + 5));
             var client = Client();
             OverpassResult? result = null;
             foreach (var url in o.OverpassUrls)
@@ -158,7 +171,7 @@ internal sealed partial class OsmPlaceSearch(IHttpClientFactory httpFactory, IMe
         catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException)
         {
             logger.LogWarning("OpenStreetMap (Overpass) search failed: {Error}", ex.Message);
-            cache.Set("down|overpass", true, TimeSpan.FromMinutes(o.OsmRetryAfterMinutes));
+            if (live) cache.Set("down|overpass", true, TimeSpan.FromMinutes(o.OsmRetryAfterMinutes));
             return null;
         }
     }

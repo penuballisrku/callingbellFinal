@@ -30,6 +30,11 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<LookupValue> LookupValues => Set<LookupValue>();
     public DbSet<Media> Media => Set<Media>();
     public DbSet<CountryCatalog> CountryCatalogs => Set<CountryCatalog>();
+    public DbSet<PostOffice> PostOffices => Set<PostOffice>();
+    public DbSet<OsmPlace> OsmPlaces => Set<OsmPlace>();
+    public DbSet<OsmPlaceSubCategory> OsmPlaceSubCategories => Set<OsmPlaceSubCategory>();
+    public DbSet<OsmCityImport> OsmCityImports => Set<OsmCityImport>();
+    public DbSet<GooglePlaceRef> GooglePlaceRefs => Set<GooglePlaceRef>();
     public DbSet<Business> Businesses => Set<Business>();
     public DbSet<BusinessSlugHistory> BusinessSlugHistory => Set<BusinessSlugHistory>();
     public DbSet<BusinessService> BusinessServices => Set<BusinessService>();
