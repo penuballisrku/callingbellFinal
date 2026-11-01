@@ -652,9 +652,13 @@ function PlaceCard({ p, source, onSelect, googleOn = true }: {
       <p className="mt-1 flex flex-wrap items-center gap-x-1 text-xs text-muted">
         {source === 'google' || d.fromGoogle
           ? <>{source === 'ai' && <span>Place from OpenStreetMap ·</span>}<GoogleMapsDataCredit /></>
-          : p.id.startsWith('overture:')
-            ? <>Details from <a href="https://docs.overturemaps.org/attribution/" target="_blank" rel="noreferrer" className="underline">Overture Maps</a> via <a href="https://openplacesapi.com/" target="_blank" rel="noreferrer" className="underline">Open Places API</a></>
-            : <>Details from OpenStreetMap via <a href="https://www.geoapify.com/" target="_blank" rel="noreferrer" className="underline">Geoapify</a></>}
+          : p.fromDatabase
+            ? <>From CallInBell's places database · data © {p.id.startsWith('overture:')
+              ? <a href="https://docs.overturemaps.org/attribution/" target="_blank" rel="noreferrer" className="underline">Overture Maps</a>
+              : <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="underline">OpenStreetMap contributors</a>}</>
+            : p.id.startsWith('overture:')
+              ? <>Details from <a href="https://docs.overturemaps.org/attribution/" target="_blank" rel="noreferrer" className="underline">Overture Maps</a> via <a href="https://openplacesapi.com/" target="_blank" rel="noreferrer" className="underline">Open Places API</a></>
+              : <>Details from OpenStreetMap via <a href="https://www.geoapify.com/" target="_blank" rel="noreferrer" className="underline">Geoapify</a></>}
       </p>
     </article>
   );

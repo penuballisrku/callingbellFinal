@@ -292,16 +292,19 @@ public interface IReviewSummarizer
 
 // ===================== Search beyond the platform =====================
 
-/// <summary>A real place found outside the platform (OpenStreetMap or Google Maps), as the source describes it.</summary>
-/// <param name="Source">"osm" or "google".</param>
+/// <summary>A real place found outside the platform (OpenStreetMap, Overture Maps or Google Maps), as the source describes it.</summary>
+/// <param name="Source">"osm", "overture" or "google".</param>
 /// <param name="Id">Source id, e.g. "node/123" (OpenStreetMap) or a Google place id.</param>
 /// <param name="Kind">What the source says the place is, e.g. "Interior designer".</param>
 /// <param name="SourceUrl">The place's page at the source (also its attribution link).</param>
 /// <param name="MatchedBy">"tag" (matched by a category tag) or "name" (its name contains a search word): name matches are less certain.</param>
 /// <param name="Photo">Google Maps only: the place's first photo.</param>
+/// <param name="FromDatabase">Read from CallInBell's own copy (imported Overture or OpenStreetMap places) rather than fetched from an API
+/// for this search; these are listed first.</param>
 public sealed record ExternalPlace(string Source, string Id, string Name, string? Kind, string? Address, double Latitude, double Longitude,
     string? Phone, string? Website, string? OpeningHours, decimal? Rating, int? RatingCount, string? SourceUrl, string MatchedBy,
-    GooglePlacePhoto? Photo = null, bool? OpenNow = null, string? Email = null, string? Description = null, IReadOnlyList<string>? Features = null, string? CountryCode = null);
+    GooglePlacePhoto? Photo = null, bool? OpenNow = null, string? Email = null, string? Description = null, IReadOnlyList<string>? Features = null, string? CountryCode = null,
+    bool FromDatabase = false);
 
 /// <summary>
 /// Geoapify (geoapify.com): OpenStreetMap-based places, address autocomplete and static map images, within a daily credit budget.

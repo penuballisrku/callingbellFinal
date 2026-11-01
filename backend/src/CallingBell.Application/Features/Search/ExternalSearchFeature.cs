@@ -20,7 +20,7 @@ public sealed record ExternalPlaceDto(string Id, string Name, string? Kind, stri
     decimal? Rating, int? RatingCount, double DistanceKm, string DirectionsUrl, string? SourceUrl,
     string? PhotoUrl = null, string? PhotoCredit = null, string? PhotoCreditUrl = null, string? AiReason = null,
     double? Latitude = null, double? Longitude = null, bool? OpenNow = null, string? Email = null, string? Description = null,
-    IReadOnlyList<string>? Features = null);
+    IReadOnlyList<string>? Features = null, bool FromDatabase = false);
 
 /// <param name="Status">"ready", "off" (not configured), "unavailable" (source unreachable) or "skipped" (nothing to search for).</param>
 /// <param name="AiStatus">AI tier only: "ranked" (picked and ordered by the AI), "pending" (being picked; poll) or "off" (nearest first).</param>
@@ -241,8 +241,11 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
             var overtureKnown = overture?.Select(p => new Known(p.Name, p.Phone, p.Latitude, p.Longitude)).ToList() ?? [];
             var places = (overture ?? []).Concat(Dedupe(osmPlaces ?? [], overtureKnown).Unique);
             var (unique, duplicates) = Dedupe(places, shown);
-            var nearest = unique.OrderBy(p => Km(p, lat, lng)).Take(MaxAiResults).ToList();
-            var (picked, aiStatus, reasons) = Rank(nearest, label, origin, lat, lng, nameOnly: wanted.Count == 0);
+            // CallInBell's own copy first (imported Overture and OpenStreetMap places), then places fetched from APIs; each nearest first.
+            var nearest = unique.OrderBy(p => p.FromDatabase ? 0 : 1).ThenBy(p => Km(p, lat, lng)).Take(MaxAiResults).ToList();
+            var (ranked, aiStatus, reasons) = Rank(nearest, label, origin, lat, lng, nameOnly: wanted.Count == 0);
+            // The AI's order is kept within each group (OrderBy is stable).
+            var picked = ranked.OrderBy(p => p.FromDatabase ? 0 : 1).ToList();
             aiTier = new ExternalTierDto("ready", aiStatus, picked.Count, duplicates,
                 picked.Select(p => ToDto(p, lat, lng) with { AiReason = reasons?.GetValueOrDefault(p.Id) }).ToList(),
                 OsmSearching(selectors, lat, lng));
@@ -423,7 +426,7 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
         return rows
             .Select(p => new ExternalPlace("osm", p.OsmRef, p.Name, p.Kind, p.Address, (double)p.Latitude, (double)p.Longitude, p.Phone, p.Website,
                 p.OpeningHours, null, null, $"https://www.openstreetmap.org/{p.OsmRef}", "tag", Email: p.Email, Description: p.Description,
-                Features: p.Features?.Split('|', StringSplitOptions.RemoveEmptyEntries)))
+                Features: p.Features?.Split('|', StringSplitOptions.RemoveEmptyEntries), FromDatabase: true))
             .Where(p => Km(p, lat, lng) * 1000 <= CityRadiusM)
             .ToList();
     }
@@ -619,7 +622,8 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
             Math.Round(Km(p, lat, lng), 1), directions, p.SourceUrl,
             p.Photo is null ? null : $"/api/places/photo?name={Uri.EscapeDataString(p.Photo.Name)}&maxWidth={PhotoWidthPx}",
             credit?.DisplayName, credit?.Uri, Latitude: Math.Round(p.Latitude, 6), Longitude: Math.Round(p.Longitude, 6),
-            OpenNow: p.OpenNow, Email: p.Email, Description: p.Description, Features: p.Features is { Count: > 0 } f ? f : null);
+            OpenNow: p.OpenNow, Email: p.Email, Description: p.Description, Features: p.Features is { Count: > 0 } f ? f : null,
+            FromDatabase: p.FromDatabase);
     }
 
     private sealed record Sub(Guid Id, string Slug, string Name, string CategorySlug, string CategoryName, string? OsmTags, string? GeoapifyCategories,

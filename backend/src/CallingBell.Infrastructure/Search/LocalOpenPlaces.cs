@@ -94,7 +94,7 @@ internal sealed class LocalOpenPlaces(IServiceScopeFactory scopes, IMemoryCache 
             .Where(o => GeoMath.HaversineKm(lat, lng, (double)o.Latitude, (double)o.Longitude) * 1000 <= radiusM)
             .Select(o => new ExternalPlace("overture", o.PlaceId, o.Name, OverturePlaceText.Label(o.Category), o.Address, (double)o.Latitude,
                 (double)o.Longitude, OverturePlaceText.Phone(o.Phone), o.Website, null, null, null, null, category is null ? "name" : "tag",
-                CountryCode: o.CountryCode))
+                CountryCode: o.CountryCode, FromDatabase: true))
             .ToList();
     }
 
@@ -103,7 +103,8 @@ internal sealed class LocalOpenPlaces(IServiceScopeFactory scopes, IMemoryCache 
 }
 
 /// <summary>
-/// Open Places for the search: the local copy where an imported country covers the point, else the Open Places API when it has a key.
+/// Open Places for the search: the local copy first where an imported country covers the point, then the Open Places API's places that
+/// the copy doesn't have (when it has a key). Outside imported countries, the API alone.
 /// </summary>
 internal sealed class OpenPlacesRouter(LocalOpenPlaces local, OpenPlacesService api, IOptions<OpenPlacesOptions> options) : IOpenPlaces
 {
@@ -113,7 +114,11 @@ internal sealed class OpenPlacesRouter(LocalOpenPlaces local, OpenPlacesService 
         CancellationToken ct, bool namesOnly = false)
     {
         if (!options.Value.Enabled) return null;
-        if (await local.CoversAsync(lat, lng, ct)) return await local.SearchAsync(category, text, lat, lng, radiusM, limit, namesOnly, ct);
-        return api.IsEnabled ? await api.SearchAsync(category, text, lat, lng, radiusM, limit, ct, namesOnly) : null;
+        var fromApi = api.IsEnabled ? api.SearchAsync(category, text, lat, lng, radiusM, limit, ct, namesOnly) : null;
+        if (!await local.CoversAsync(lat, lng, ct)) return fromApi is null ? null : await fromApi;
+        var stored = await local.SearchAsync(category, text, lat, lng, radiusM, limit, namesOnly, ct);
+        if (fromApi is null || await fromApi is not { } live) return stored;
+        var known = stored.Select(p => p.Id).ToHashSet();
+        return [.. stored, .. live.Where(p => !known.Contains(p.Id))];
     }
 }

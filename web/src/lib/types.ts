@@ -335,6 +335,8 @@ export interface ExternalPlace {
   latitude?: number | null; longitude?: number | null;
   /** Google Maps only: open right now by Google's opening hours (null when unknown). */
   openNow?: boolean | null;
+  /** AI tier: read from CallInBell's own copy of the open map data (listed first), not fetched from an API for this search. */
+  fromDatabase?: boolean;
 }
 /** Any other field a place's source returned (e.g. OpenStreetMap "Wheelchair: Yes"). */
 export interface PlaceField { label: string; value: string }
