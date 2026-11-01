@@ -6,6 +6,7 @@ import MapOutlined from '@mui/icons-material/MapOutlined';
 import NearMeOutlined from '@mui/icons-material/NearMeOutlined';
 import PlaceOutlined from '@mui/icons-material/PlaceOutlined';
 import { useCityAreas, useDebounced, useLocationSearch, usePageCity, useVisitorLocation } from '@/lib/hooks';
+import { deviceLocationSupported, useDeviceLocation } from '@/lib/deviceLocation';
 import { number } from '@/lib/format';
 import type { LocationSuggestion } from '@/lib/types';
 import { useCity } from '@/stores/city';
@@ -35,8 +36,8 @@ function Highlight({ text, term }: { text: string; term: string }) {
 /**
  * Location box: type a city, area, locality or PIN code and pick from the suggestions (GET /api/locations/search, the browsed city's
  * areas first). Each suggestion shows its city, state, PIN code and how many businesses are listed there. Picking one applies it at
- * once; a manual choice wins over the IP's location for the session. With nothing typed it offers popular cities, the whole of the
- * current city and (after a manual choice) the visitor's own location. On the results page the current search is refined in place.
+ * once; a manual choice wins over the device's and the IP's location for the session. With nothing typed it offers popular cities, the whole of the
+ * current city and "Use my current location" (the device's area, else the IP's). On the results page the current search is refined in place.
  */
 export function CitySelect({ size = 'small', fullWidth = false, height, bare = false }: {
   size?: 'small' | 'medium'; fullWidth?: boolean; height?: number;
@@ -54,6 +55,7 @@ export function CitySelect({ size = 'small', fullWidth = false, height, bare = f
   const detected = useVisitorLocation();
   const country = detected.data?.country ?? null;
   const located = detected.data?.located ?? false;
+  const device = useDeviceLocation({ auto: false });
 
   // Names for a city chosen elsewhere by its slug alone (e.g. a shared search link), from that city's area list.
   const needNames = !!place.citySlug && (!place.cityName || !place.stateSlug || !place.district
@@ -76,7 +78,7 @@ export function CitySelect({ size = 'small', fullWidth = false, height, bare = f
   const results = useLocationSearch(term, country, place.citySlug, open);
 
   // An area with its district and PIN code ("Mansoorabad, Hyderabad - 500068"); a city with its district when that's another name.
-  const label = !place.ready ? 'Locating…'
+  const label = !place.ready || device.status === 'locating' ? 'Locating…'
     : place.citySlug && place.areaId && place.areaName
       ? `${place.areaName}, ${place.district ?? place.cityName ?? ''}${place.areaPincode ? ` - ${place.areaPincode}` : ''}`
       : place.citySlug ? (!place.cityName ? 'Loading…'
@@ -88,8 +90,10 @@ export function CitySelect({ size = 'small', fullWidth = false, height, bare = f
       .filter(Boolean).join(' · ')
     : label;
 
+  // "Use my current location": the device's area, else the IP's location; offered unless the device's area is already selected.
+  const canLocate = deviceLocationSupported() ? place.source !== 'device' : place.source === 'user' && located;
   const extras: Option[] = term ? [] : [
-    ...(place.source === 'user' && located ? [{ kind: 'detected' } as const] : []),
+    ...(canLocate ? [{ kind: 'detected' } as const] : []),
     ...(place.citySlug && place.areaId ? [{ kind: 'whole-city' } as const] : []),
   ];
   const options: Option[] = [...extras, ...(results.data ?? [])];
@@ -107,8 +111,15 @@ export function CitySelect({ size = 'small', fullWidth = false, height, bare = f
   const choose = (o: Option | null) => {
     if (!o) return;
     if (o.kind === 'detected') {
-      resetToDetected();
-      refineSearch(null, null);
+      void device.locate().then((found) => {
+        if (found) {
+          const s = useCity.getState();
+          refineSearch(s.citySlug, s.areaId);
+        } else {
+          resetToDetected();
+          refineSearch(null, null);
+        }
+      });
     } else if (o.kind === 'whole-city') {
       // The city's own district is filled in again from its area list (the area's may differ).
       setCity(place.citySlug, null, { cityName: place.cityName, stateSlug: place.stateSlug, stateName: place.stateName });
@@ -159,7 +170,7 @@ export function CitySelect({ size = 'small', fullWidth = false, height, bare = f
           : o.kind === 'whole-city' ? <MapOutlined fontSize="small" />
             : o.kind === 'city' ? <LocationCityRounded fontSize="small" /> : <PlaceOutlined fontSize="small" />;
         const [primary, secondary, count] =
-          o.kind === 'detected' ? ['Use my current location', 'Detected from your connection', null]
+          o.kind === 'detected' ? ['Use my current location', deviceLocationSupported() ? 'Your area, from your device' : 'Detected from your connection', null]
             : o.kind === 'whole-city' ? [`All of ${place.cityName ?? 'the city'}`, 'Every area in the city', null]
               : o.kind === 'city' ? [o.cityName, `City · ${o.district ? `${districtLabel(o.district)}, ` : ''}${o.stateName}`, o.businessCount]
                 : [o.areaName ?? '', [whereLabel(o.cityName, o.district, o.stateName), o.pincode && `PIN ${o.pincode}`].filter(Boolean).join(' · '), o.businessCount];

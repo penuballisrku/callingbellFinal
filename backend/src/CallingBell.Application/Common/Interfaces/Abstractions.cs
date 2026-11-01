@@ -316,7 +316,9 @@ public interface IGeoapify
     /// (<see cref="ExternalPlace.Id"/> "node/123"). Null when Geoapify is off, out of credits or failed.
     /// </summary>
     /// <param name="background">The catalogue agent's import: only allowed while most of the day's credits are still free for visitors.</param>
-    Task<IReadOnlyList<ExternalPlace>?> PlacesAsync(string categories, double lat, double lng, int radiusM, int maxPlaces, bool background, CancellationToken ct);
+    /// <param name="name">Only places whose name contains these words (letters, digits and spaces; e.g. "tiffin").</param>
+    Task<IReadOnlyList<ExternalPlace>?> PlacesAsync(string categories, double lat, double lng, int radiusM, int maxPlaces, bool background, CancellationToken ct,
+        string? name = null);
 
     /// <summary>Address suggestions for what was typed, near <paramref name="lat"/>/<paramref name="lng"/> when given. Null when off or failed.</summary>
     Task<IReadOnlyList<AddressSuggestion>?> AutocompleteAsync(string text, string countryCode, double? lat, double? lng, CancellationToken ct);

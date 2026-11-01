@@ -108,6 +108,10 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
     /// <summary>How many of the nearest places the AI judges; the rest follow nearest first.</summary>
     private const int MaxRanked = 20;
     private const int MaxSubCategories = 3;
+    /// <summary>Name words searched on Geoapify per search (one request each), within the groups where local businesses are.</summary>
+    private const int MaxGeoapifyNames = 3;
+    /// <remarks>Each group added makes Geoapify's name filter slower (about 3 s for these; "sport" or "accommodation" time out).</remarks>
+    private const string GeoapifyNameCategories = "commercial,service,office,catering,education,healthcare";
     private const int PhotoWidthPx = 480;
     /// <summary>A city's stored OpenStreetMap import older than this isn't used; OpenStreetMap is asked directly instead.</summary>
     private static readonly TimeSpan StoredOsmMaxAge = TimeSpan.FromDays(60);
@@ -343,22 +347,46 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
             var near = stored.Where(p => Km(p, lat, lng) * 1000 <= RadiusM).ToList();
             return near.Count >= MinNear ? near : stored;
         }
-        // Geoapify answers in a second where Overpass often takes many: used when every sub-category maps to its categories.
-        if (wanted.Count > 0 && wanted.All(s => !string.IsNullOrWhiteSpace(s.GeoapifyCategories)) && geoapify.IsEnabled)
+        // Geoapify answers in a second where Overpass often takes many (or never finishes when it is busy), from the same OpenStreetMap
+        // data: once it has answered, its answer stands, even when it is "nothing here". Overpass is for when Geoapify is off or failing.
+        // One city-wide search (each name search takes a few seconds), narrowed to the area when it has enough.
+        if (wanted.Count > 0 && geoapify.IsEnabled && await GeoapifyAsync(wanted, lat, lng, CityRadiusM, ct) is { } found)
         {
-            var categories = string.Join(',', wanted.Select(s => s.GeoapifyCategories));
-            var near = await geoapify.PlacesAsync(categories, lat, lng, RadiusM, MaxAiResults * 2, background: false, ct);
-            if (near is { Count: >= MinNear }) return near;
-            var wide = await geoapify.PlacesAsync(categories, lat, lng, CityRadiusM, MaxAiResults * 2, background: false, ct);
-            // Nothing from Geoapify: OpenStreetMap's own search (below) may still find places by name.
-            if (wide is { Count: > 0 } && wide.Count >= (near?.Count ?? 0)) return wide;
-            if (near is { Count: > 0 }) return near;
+            var near = found.Where(p => Km(p, lat, lng) * 1000 <= RadiusM).ToList();
+            return near.Count >= MinNear ? near : found;
         }
         var area = osm.SearchAsync(selectors, lat, lng, RadiusM, ct);
         if (area.IsCompletedSuccessfully && area.Result is { Count: >= MinNear } quick) return quick;
         var city = osm.SearchAsync(selectors, lat, lng, CityRadiusM, ct);
         var places = await area;
         return places is { Count: < MinNear } ? await city ?? places : places;
+    }
+
+    /// <summary>
+    /// The sub-categories' places from Geoapify within the radius: by their Geoapify categories, and by the name words in their OpenStreetMap
+    /// tags ("name~tiffin") for those without categories, or for all of them when the categories find nothing. Null when Geoapify gave no
+    /// answer (off, out of credits or failed).
+    /// </summary>
+    private async Task<List<ExternalPlace>?> GeoapifyAsync(List<Sub> wanted, double lat, double lng, int radiusM, CancellationToken ct)
+    {
+        static IEnumerable<string> Names(IEnumerable<Sub> subs) => subs
+            .SelectMany(s => (s.OsmTags ?? "").Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .Where(t => t.StartsWith("name~", StringComparison.Ordinal)).Select(t => t[5..]);
+
+        async Task<List<ExternalPlace>?> Search(string? categories, IEnumerable<string> names)
+        {
+            var searches = names.Distinct().Take(MaxGeoapifyNames)
+                .Select(n => geoapify.PlacesAsync(GeoapifyNameCategories, lat, lng, radiusM, MaxAiResults * 2, background: false, ct, n)).ToList();
+            if (!string.IsNullOrEmpty(categories))
+                searches.Insert(0, geoapify.PlacesAsync(categories, lat, lng, radiusM, MaxAiResults * 2, background: false, ct));
+            if (searches.Count == 0) return [];
+            var found = await Task.WhenAll(searches);
+            return found.All(f => f is null) ? null : found.SelectMany(f => f ?? []).DistinctBy(p => p.Id).ToList();
+        }
+
+        var mapped = wanted.Where(s => !string.IsNullOrWhiteSpace(s.GeoapifyCategories)).ToList();
+        var places = await Search(string.Join(',', mapped.Select(s => s.GeoapifyCategories)), Names(wanted.Except(mapped)));
+        return places is { Count: 0 } && mapped.Count > 0 ? await Search(null, Names(mapped)) ?? places : places;
     }
 
     /// <summary>

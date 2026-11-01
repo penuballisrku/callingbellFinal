@@ -270,8 +270,11 @@ export default function SearchPage() {
   const total = data?.pagination.totalCount ?? 0;
   const plural = (n: number, one: string, many: string) => `${number(n)} ${n === 1 ? one : many}`;
   // With an area selected: how many are in it, and how many more the rest of the city adds (listed after them, nearest first).
+  // Nothing registered and the map still searching: "0 businesses found" would read as the final answer.
+  const mapSearching = searchesExternal && (external.isLoading || (!!external.data?.ai.searching && external.polling));
   const found = data && (total === 0 && mapCount > 0
     ? `${plural(mapCount, 'place', 'places')} nearby · none registered on CallInBell yet`
+    : total === 0 && mapSearching ? 'Searching nearby places…'
     : (areaMatches != null && applied?.areaName
       ? `${plural(areaMatches, 'business', 'businesses')} in ${applied.areaName}`
         + (total > areaMatches ? ` · ${number(total - areaMatches)} more in ${applied.cityName ?? 'the city'}` : '')

@@ -1,5 +1,6 @@
 import { Tooltip } from '@mui/material';
 import { useLocationSync, useVisitorLocation } from '@/lib/hooks';
+import { useDeviceFirstLocation } from '@/lib/deviceLocation';
 
 export { useVisitorDistrict, type VisitorDistrict } from '@/lib/hooks';
 
@@ -69,7 +70,11 @@ export function CountryCode({ onDark }: { onDark?: boolean }) {
   );
 }
 
-/** Keeps the selected place in step with the visitor's IP location (see useLocationSync). Mount once, in the layout. */
+/**
+ * Selects the visitor's place: their device's area first (useDeviceFirstLocation), else their IP's location (useLocationSync). Mount
+ * once, in the layout.
+ */
 export function useDistrictAutoSelect() {
   useLocationSync();
+  useDeviceFirstLocation();
 }

@@ -26,7 +26,7 @@ IF OBJECT_ID('tempdb..#Osm') IS NOT NULL DROP TABLE #Osm;
 CREATE TABLE #Osm (SubSlug nvarchar(140) PRIMARY KEY, OsmTags nvarchar(400) NOT NULL);
 INSERT INTO #Osm (SubSlug, OsmTags) VALUES
 -- Home services
-(N'electrical',            N'craft=electrician|shop=electrical|name~electrician'),
+(N'electrical',            N'craft=electrician|shop=electrical|name~electric'),
 (N'plumbing',              N'craft=plumber|name~plumbing|name~plumber'),
 (N'carpenters',            N'craft=carpenter|name~carpenter|name~furniture works'),
 (N'painting',              N'craft=painter|name~painting contractor|name~painters'),

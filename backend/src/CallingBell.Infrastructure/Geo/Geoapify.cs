@@ -86,12 +86,15 @@ internal sealed class GeoapifyService(IHttpClientFactory httpFactory, IOptions<G
     // ---------------- Places ----------------
 
     public async Task<IReadOnlyList<ExternalPlace>?> PlacesAsync(string categories, double lat, double lng, int radiusM, int maxPlaces, bool background,
-        CancellationToken ct)
+        CancellationToken ct, string? name = null)
     {
         var cats = string.Join(',', categories.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(c => c.All(ch => char.IsAsciiLetterLower(ch) || ch is '.' or '_')).Distinct());
         if (cats.Length == 0) return null;
-        var key = string.Create(CultureInfo.InvariantCulture, $"geoapify-places|{cats}|{lat:0.###},{lng:0.###}|{radiusM}|{maxPlaces}");
+        name = name?.Trim().ToLowerInvariant();
+        if (name is not null && (name.Length is < 2 or > 40 || !name.All(ch => char.IsAsciiLetterOrDigit(ch) || ch == ' '))) return null;
+        var named = name is null ? "" : "&name=" + Uri.EscapeDataString(name);
+        var key = string.Create(CultureInfo.InvariantCulture, $"geoapify-places|{cats}|{name}|{lat:0.###},{lng:0.###}|{radiusM}|{maxPlaces}");
         if (cache.TryGetValue(key, out IReadOnlyList<ExternalPlace>? cached)) return cached;
         const int page = 500; // Geoapify's largest page
         var places = new Dictionary<string, ExternalPlace>();
@@ -102,7 +105,7 @@ internal sealed class GeoapifyService(IHttpClientFactory httpFactory, IOptions<G
                 var limit = Math.Min(page, maxPlaces - offset);
                 if (!TryReserve(1, background)) return offset == 0 ? null : [.. places.Values];
                 var url = string.Create(CultureInfo.InvariantCulture,
-                    $"{options.Value.ApiUrl}/v2/places?categories={cats}&filter=circle:{lng:0.######},{lat:0.######},{radiusM}&bias=proximity:{lng:0.######},{lat:0.######}&limit={limit}&offset={offset}&lang=en&apiKey={Key}");
+                    $"{options.Value.ApiUrl}/v2/places?categories={cats}&filter=circle:{lng:0.######},{lat:0.######},{radiusM}&bias=proximity:{lng:0.######},{lat:0.######}{named}&limit={limit}&offset={offset}&lang=en&apiKey={Key}");
                 using var response = await Client().GetAsync(url, ct);
                 if (!response.IsSuccessStatusCode)
                 {
