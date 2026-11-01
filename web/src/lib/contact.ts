@@ -40,7 +40,7 @@ export function directionsHref(lat?: number | null, lng?: number | null, query?:
 
 /**
  * Business sign-up, pre-filled with what is known about the place (the owner can change everything). With the place's source id
- * ("google:…" / "osm:node/1") only that reference goes in the URL; the sign-up form loads the full details from the API.
+ * ("google:…" / "osm:node/1" / "overture:…") only that reference goes in the URL; the sign-up form loads the full details from the API.
  */
 export function joinHref(p: { name: string; phone?: string | null; website?: string | null; address?: string | null; sourceId?: string | null },
   hint?: string | null): string {

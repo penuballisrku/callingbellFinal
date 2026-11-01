@@ -95,7 +95,7 @@ public sealed class ExternalSearchValidator : AbstractValidator<ExternalSearchQu
 /// </list>
 /// Each source leaves out places a higher-priority source already listed.
 /// </summary>
-public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver origins, IOsmPlaceSearch osm, IGeoapify geoapify, IGooglePlacesSearch google,
+public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver origins, IOsmPlaceSearch osm, IGeoapify geoapify, IOpenPlaces openPlaces, IGooglePlacesSearch google,
     ISearchAssistant assistant, ISemanticCatalog semantic, IPlaceGeocoder geocoder, ReferenceDataCache reference, CountryPricingService pricing,
     IGeoLocationService geo) : IRequestHandler<ExternalSearchQuery, ExternalSearchDto>
 {
@@ -112,6 +112,8 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
     private const int MaxGeoapifyNames = 3;
     /// <remarks>Each group added makes Geoapify's name filter slower (about 3 s for these; "sport" or "accommodation" time out).</remarks>
     private const string GeoapifyNameCategories = "commercial,service,office,catering,education,healthcare";
+    /// <summary>Sub-categories searched on Open Places per search (up to two requests each, from the plan's monthly quota).</summary>
+    private const int MaxOpenPlacesSubs = 2;
     private const int PhotoWidthPx = 480;
     /// <summary>A city's stored OpenStreetMap import older than this isn't used; OpenStreetMap is asked directly instead.</summary>
     private static readonly TimeSpan StoredOsmMaxAge = TimeSpan.FromDays(60);
@@ -140,7 +142,7 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
 
         // What: the sub-categories searched for, with their OpenStreetMap tags.
         var subs = (await reference.ActiveSubCategoriesAsync(ct))
-            .Select(s => new Sub(s.Id, s.Slug, s.Name, s.CategorySlug, s.CategoryName, s.OsmTags, s.GeoapifyCategories)).ToList();
+            .Select(s => new Sub(s.Id, s.Slug, s.Name, s.CategorySlug, s.CategoryName, s.OsmTags, s.GeoapifyCategories, s.OpenPlacesCategories)).ToList();
         var q = (r.Q ?? "").Trim();
         var label = subs.FirstOrDefault(s => s.Slug == r.Sub)?.Name
                     ?? subs.FirstOrDefault(s => s.CategorySlug == r.Category)?.CategoryName
@@ -196,7 +198,8 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
             : Task.FromResult<GoogleSearchPage?>(new GoogleSearchPage([], null));
         var osmTask = !withAi || selectors.Count == 0 ? Task.FromResult<IReadOnlyList<ExternalPlace>?>(null)
             : SearchOsmAsync(selectors, origin.CityId, wanted, lat, lng, ct);
-        await Task.WhenAll(googleTask, osmTask);
+        var openTask = withAi ? OpenPlacesAsync(wanted, q, lat, lng, ct) : Task.FromResult<List<ExternalPlace>?>(null);
+        await Task.WhenAll(googleTask, osmTask, openTask);
         var shown = new List<Known>(registered);
 
         // 2. Google Maps (after the registered businesses).
@@ -224,14 +227,20 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
             }
         }
 
-        // 3. AI recommended: real OpenStreetMap places, picked by the free local AI.
+        // 3. AI recommended: real places from Open Places (Overture Maps) and OpenStreetMap, picked by the free local AI.
         ExternalTierDto aiTier;
         if (!withAi) return new ExternalSearchDto(label, origin.PlaceName, origin.CityName, origin.Source, skipped, googleTier);
-        if (selectors.Count == 0) aiTier = skipped;
-        else if (await osmTask is not { } osmPlaces) aiTier = new ExternalTierDto("unavailable", null, 0, 0, [], OsmSearching(selectors, lat, lng));
+        var overture = await openTask;
+        var osmPlaces = await osmTask;
+        if (selectors.Count == 0 && overture is null) aiTier = skipped;
+        else if (osmPlaces is null && overture is null) aiTier = new ExternalTierDto("unavailable", null, 0, 0, [], OsmSearching(selectors, lat, lng));
         else
         {
-            var (unique, duplicates) = Dedupe(osmPlaces, shown);
+            if (overture is { Count: > 0 }) await RememberOpenPlacesAsync(overture, ct);
+            // Overture first (it usually has the phone number); an OpenStreetMap place that is the same business is left out quietly.
+            var overtureKnown = overture?.Select(p => new Known(p.Name, p.Phone, p.Latitude, p.Longitude)).ToList() ?? [];
+            var places = (overture ?? []).Concat(Dedupe(osmPlaces ?? [], overtureKnown).Unique);
+            var (unique, duplicates) = Dedupe(places, shown);
             var nearest = unique.OrderBy(p => Km(p, lat, lng)).Take(MaxAiResults).ToList();
             var (picked, aiStatus, reasons) = Rank(nearest, label, origin, lat, lng, nameOnly: wanted.Count == 0);
             aiTier = new ExternalTierDto("ready", aiStatus, picked.Count, duplicates,
@@ -452,6 +461,76 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
         }
     }
 
+    /// <summary>
+    /// Overture Maps places from the Open Places API, city-wide and nearest first. Each sub-category (at most
+    /// <see cref="MaxOpenPlacesSubs"/>) by its first Open Places category, and, when that finds fewer than <see cref="MinNear"/> or it has
+    /// none, by the first name word in its OpenStreetMap tags ("electric" finds "Lakshmi Electricals", which Overture often leaves
+    /// uncategorised in India). A free-text search that names no sub-category is searched as typed. Each request is one search from the
+    /// plan's monthly quota and is cached for a day. Null when Open Places is off or every request failed.
+    /// </summary>
+    private async Task<List<ExternalPlace>?> OpenPlacesAsync(List<Sub> wanted, string q, double lat, double lng, CancellationToken ct)
+    {
+        if (!openPlaces.IsEnabled) return null;
+        if (wanted.Count == 0)
+            return q.Length >= 3 && await openPlaces.SearchAsync(null, q, lat, lng, CityRadiusM, MaxAiResults, ct) is { } typed ? [.. typed] : null;
+
+        async Task<IReadOnlyList<ExternalPlace>?> ForSub(Sub s)
+        {
+            var category = (s.OpenPlacesCategories ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
+            var byCategory = category is null ? null : await openPlaces.SearchAsync(category, null, lat, lng, CityRadiusM, MaxAiResults, ct);
+            if (byCategory is { Count: >= MinNear }) return byCategory;
+            var word = (s.OsmTags ?? "").Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .FirstOrDefault(t => t.StartsWith("name~", StringComparison.Ordinal))?[5..] ?? string.Join(' ', Words(s.Name));
+            var byName = await openPlaces.SearchAsync(null, word, lat, lng, CityRadiusM, MaxAiResults, ct, namesOnly: true);
+            return byCategory is null && byName is null ? null : [.. byCategory ?? [], .. byName ?? []];
+        }
+
+        var found = await Task.WhenAll(wanted.Take(MaxOpenPlacesSubs).Select(ForSub));
+        return found.All(f => f is null) ? null : found.SelectMany(f => f ?? []).DistinctBy(p => p.Id).ToList();
+    }
+
+    /// <summary>
+    /// Keeps the Open Places API results (their open licences allow it), so a place's details and "Join CallInBell" work after the search:
+    /// the API can't look up a single place. Known places are refreshed at most daily, and imported ones (already complete) never. Best
+    /// effort: a failure never fails the search.
+    /// </summary>
+    private async Task RememberOpenPlacesAsync(IReadOnlyList<ExternalPlace> places, CancellationToken ct)
+    {
+        var ids = places.Select(p => p.Id).Distinct().ToList();
+        try
+        {
+            var repo = uow.Repository<OpenPlace>();
+            var known = await repo.Query().Where(o => ids.Contains(o.PlaceId)).ToDictionaryAsync(o => o.PlaceId, ct);
+            var now = DateTimeOffset.UtcNow;
+            var changed = false;
+            foreach (var p in places.DistinctBy(p => p.Id))
+            {
+                if (!known.TryGetValue(p.Id, out var row))
+                {
+                    row = new OpenPlace { PlaceId = p.Id, FirstSeenOn = now };
+                    repo.Add(row);
+                }
+                else if (row.Release is not null || row.LastSeenOn > now.AddDays(-1)) continue;
+                row.Name = p.Name.Length > 300 ? p.Name[..300] : p.Name;
+                row.Category = p.Kind is { Length: <= 100 } ? p.Kind : null;
+                row.Address = p.Address;
+                row.CountryCode = p.CountryCode;
+                row.Latitude = Math.Round((decimal)p.Latitude, 6);
+                row.Longitude = Math.Round((decimal)p.Longitude, 6);
+                row.Cell = OpenPlace.CellOf(p.Latitude, p.Longitude);
+                row.Phone = p.Phone is { Length: <= 50 } ? p.Phone : null;
+                row.Website = p.Website is { Length: <= 500 } ? p.Website : null;
+                row.LastSeenOn = now;
+                changed = true;
+            }
+            if (changed) await uow.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            // Two searches saved the same new place at once: it is saved either way.
+        }
+    }
+
     /// <summary>Whether the full OpenStreetMap search (area or city-wide) is still finishing in the background.</summary>
     private bool OsmSearching(List<string> selectors, double lat, double lng) =>
         osm.IsSearching(selectors, lat, lng, RadiusM) || osm.IsSearching(selectors, lat, lng, CityRadiusM);
@@ -543,7 +622,8 @@ public sealed class ExternalSearchHandler(IUnitOfWork uow, VisitorOriginResolver
             OpenNow: p.OpenNow, Email: p.Email, Description: p.Description, Features: p.Features is { Count: > 0 } f ? f : null);
     }
 
-    private sealed record Sub(Guid Id, string Slug, string Name, string CategorySlug, string CategoryName, string? OsmTags, string? GeoapifyCategories);
+    private sealed record Sub(Guid Id, string Slug, string Name, string CategorySlug, string CategoryName, string? OsmTags, string? GeoapifyCategories,
+        string? OpenPlacesCategories);
 
     private sealed record Known(string Name, string? Phone, double Lat, double Lng);
 }

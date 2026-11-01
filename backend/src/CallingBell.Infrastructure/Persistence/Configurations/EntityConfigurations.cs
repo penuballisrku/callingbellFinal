@@ -275,7 +275,8 @@ internal sealed class CatalogConfiguration :
 /// <summary>Reference data imported from open sources (39_PlaceData.sql): PIN codes, OpenStreetMap places, Google place ids.</summary>
 internal sealed class PlaceDataConfiguration :
     IEntityTypeConfiguration<PostOffice>, IEntityTypeConfiguration<OsmPlace>, IEntityTypeConfiguration<OsmPlaceSubCategory>,
-    IEntityTypeConfiguration<OsmCityImport>, IEntityTypeConfiguration<GooglePlaceRef>
+    IEntityTypeConfiguration<OsmCityImport>, IEntityTypeConfiguration<GooglePlaceRef>, IEntityTypeConfiguration<OpenPlace>,
+    IEntityTypeConfiguration<OpenPlacesImport>
 {
     public void Configure(EntityTypeBuilder<PostOffice> b)
     {
@@ -314,6 +315,27 @@ internal sealed class PlaceDataConfiguration :
         b.ToTable("GooglePlaceRefs");
         b.HasKey(x => x.PlaceId);
         b.Property(x => x.PlaceId).HasMaxLength(300);
+    }
+
+    public void Configure(EntityTypeBuilder<OpenPlace> b)
+    {
+        b.ToTable("OpenPlaces");
+        b.HasKey(x => x.PlaceId).IsClustered(false);
+        b.Property(x => x.PlaceId).HasMaxLength(100);
+        b.Property(x => x.Latitude).HasPrecision(9, 6);
+        b.Property(x => x.Longitude).HasPrecision(9, 6);
+        b.Property(x => x.Confidence).HasPrecision(4, 3);
+        b.HasIndex(x => x.Cell).IsClustered();
+    }
+
+    public void Configure(EntityTypeBuilder<OpenPlacesImport> b)
+    {
+        b.ToTable("OpenPlacesImports");
+        b.HasKey(x => x.CountryCode);
+        b.Property(x => x.CountryCode).HasMaxLength(2);
+        foreach (var p in new[] { nameof(OpenPlacesImport.MinLatitude), nameof(OpenPlacesImport.MaxLatitude),
+                     nameof(OpenPlacesImport.MinLongitude), nameof(OpenPlacesImport.MaxLongitude) })
+            b.Property(p).HasPrecision(9, 6);
     }
 }
 

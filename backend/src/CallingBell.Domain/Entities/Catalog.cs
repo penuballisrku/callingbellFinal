@@ -113,6 +113,11 @@ public class SubCategory : AuditableEntity
     /// and then OpenStreetMap's Overpass is used with <see cref="OsmTags"/>.
     /// </summary>
     public string? GeoapifyCategories { get; set; }
+    /// <summary>
+    /// Open Places API (Overture Maps) category slugs for the same kind of place, comma-separated (e.g. "electrician"); null searches
+    /// Open Places by the sub-category's name instead.
+    /// </summary>
+    public string? OpenPlacesCategories { get; set; }
 
     public Category Category { get; set; } = null!;
     public ICollection<Business> Businesses { get; set; } = new List<Business>();

@@ -19,8 +19,9 @@ public static partial class JoinImport
 {
     [GeneratedRegex("^[A-Za-z0-9_-]{10,300}$")] private static partial Regex GoogleId();
     [GeneratedRegex("^(node|way|relation)/[0-9]{1,15}$")] private static partial Regex OsmId();
+    [GeneratedRegex("^[A-Za-z0-9_.-]{6,100}$")] private static partial Regex OvertureId();
 
-    /// <summary>"google:ChIJ…" or "osm:node/123"; null for anything else.</summary>
+    /// <summary>"google:ChIJ…", "osm:node/123" or "overture:{place id}"; null for anything else.</summary>
     public static SourceRef? ParseSource(string? value)
     {
         if (string.IsNullOrWhiteSpace(value) || value.Length > 320) return null;
@@ -32,9 +33,13 @@ public static partial class JoinImport
         {
             "google" when GoogleId().IsMatch(id) => new SourceRef("google", id),
             "osm" when OsmId().IsMatch(id) => new SourceRef("osm", id),
+            "overture" when OvertureId().IsMatch(id) => new SourceRef("overture", id),
             _ => null,
         };
     }
+
+    /// <summary>The source's name as shown to people: "Google Maps", "Overture Maps" or "OpenStreetMap".</summary>
+    public static string SourceName(string provider) => provider switch { "google" => "Google Maps", "overture" => "Overture Maps", _ => "OpenStreetMap" };
 
     // ---------- text ----------
 

@@ -45,7 +45,7 @@ export default function BusinessWizard({ mode }: { mode: 'register' | 'setup' })
   const serviceTypes = useLookup('ServiceType');
   const socialPlatforms = useLookup('SocialPlatform');
   const payments = usePaymentConfig();
-  // "Join CallInBell": ?source=google:… / osm:… - the full details come from the API (read from the source on the server).
+  // "Join CallInBell": ?source=google:… / osm:… / overture:… - the full details come from the API (read from the source on the server).
   const [params] = useSearchParams();
   const source = params.get('source');
   const hint = params.get('hint');

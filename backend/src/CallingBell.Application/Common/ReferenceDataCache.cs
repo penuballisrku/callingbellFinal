@@ -11,7 +11,7 @@ public sealed record CityRef(Guid Id, string Slug, string Name, string State, st
 
 /// <summary>An active sub-category with its category, as search needs it.</summary>
 public sealed record SubCategoryRef(Guid Id, string Slug, string Name, string CategorySlug, string CategoryName, string? OsmTags,
-    string? GeoapifyCategories = null);
+    string? GeoapifyCategories = null, string? OpenPlacesCategories = null);
 
 /// <summary>
 /// Reference data that nearly every request reads but that changes rarely (thousands of cities once a country is imported, the
@@ -38,7 +38,7 @@ public sealed class ReferenceDataCache(IUnitOfWork uow, IMemoryCache cache)
     public Task<IReadOnlyList<SubCategoryRef>> ActiveSubCategoriesAsync(CancellationToken ct) => GetAsync(SubCategoriesKey, () =>
         uow.Repository<SubCategory>().QueryNoTracking().Where(s => s.IsActive && s.Category.IsActive)
             .OrderBy(s => s.Category.SortOrder).ThenBy(s => s.SortOrder)
-            .Select(s => new SubCategoryRef(s.Id, s.Slug, s.Name, s.Category.Slug, s.Category.Name, s.OsmTags, s.GeoapifyCategories))
+            .Select(s => new SubCategoryRef(s.Id, s.Slug, s.Name, s.Category.Slug, s.Category.Name, s.OsmTags, s.GeoapifyCategories, s.OpenPlacesCategories))
             .ToListAsync(ct), ct);
 
     /// <summary>Caches any other view of the reference data under <paramref name="key"/>; it is dropped by <see cref="Invalidate"/> too.</summary>

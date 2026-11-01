@@ -53,7 +53,7 @@ public sealed record JoinCallingBellBusinessDto(
 
 // ===================== Query =====================
 
-/// <param name="SourceId">"google:{place id}" or "osm:node/123", as on the search and Explore nearby results.</param>
+/// <param name="SourceId">"google:{place id}", "osm:node/123" or "overture:{place id}", as on the search and Explore nearby results.</param>
 /// <param name="Hint">
 /// What the person was browsing when they clicked: a sub-category or category slug ("electrical") or search text ("electrician"). Used
 /// for the category only when the source's own category doesn't match one (Google often just says "Services").
@@ -154,7 +154,7 @@ public sealed class GetJoinCallingBellBusinessHandler(ISender sender, IUnitOfWor
         var existing = await duplicates.FindAsync(new DuplicateProbe(source, name, [phone, alternate, whatsApp], website, place?.City.Id, lat, lon), ct);
 
         return new JoinCallingBellBusinessDto(
-            source.ToString(), source.Provider, d.Source == "google" ? "Google Maps" : "OpenStreetMap", d.MapsUrl ?? d.SourceUrl, d.GooglePlaceId ?? (source.Provider == "google" ? source.ExternalId : null),
+            source.ToString(), source.Provider, JoinImport.SourceName(d.Source), d.MapsUrl ?? d.SourceUrl, d.GooglePlaceId ?? (source.Provider == "google" ? source.ExternalId : null),
             name, JoinImport.Clean(d.Description, 2000), JoinImport.Clean(d.Category, 120), d.Tags.Select(t => JoinImport.Clean(t, 60)).OfType<string>().Distinct().Take(20).ToList(),
             category?.CategorySlug ?? categorySlug, category?.Slug, categoryName, category?.Name,
             JoinImport.Clean(d.Address, 300), JoinImport.StreetAddress(d.Address, cityName, d.City, d.State, d.Country, place?.Region?.Name, d.PostalCode, pincode),
@@ -245,7 +245,7 @@ public sealed class GetJoinCallingBellBusinessHandler(ISender sender, IUnitOfWor
             string Url(int width) => $"/api/places/photo?name={Uri.EscapeDataString(reference)}&maxWidth={width}";
             var author = photo.Attributions.FirstOrDefault();
             list.Add(new JoinImageDto(reference, Url(1200), Url(400), Url(800), Url(1600), $"Photo of {name}", i == 0, i + 1,
-                d.Source == "google" ? "Google Maps" : "OpenStreetMap", author?.DisplayName, author?.Uri, importable));
+                JoinImport.SourceName(d.Source), author?.DisplayName, author?.Uri, importable));
         }
         return list;
     }

@@ -184,9 +184,11 @@ export function ExternalResults({ ext, loading, isError, only, polling, onRefres
             : ext.ai.aiStatus === 'pending'
               ? 'Nearest first · AI is picking the best matches…'
               : 'Nearest first · not on CallInBell'}
-          empty={`OpenStreetMap has no ${what} mapped near ${where?.label ?? 'this location'} yet.`}
+          empty={`No ${what} found on the open maps near ${where?.label ?? 'this location'} yet.`}
           attribution={<>Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="underline">OpenStreetMap contributors</a>
-            {' · '}Places via <a href="https://www.geoapify.com/" target="_blank" rel="noreferrer" className="underline">Geoapify</a></>} />
+            {ext.ai.items.some((p) => p.id.startsWith('overture:')) && <>{', '}<a href="https://docs.overturemaps.org/attribution/" target="_blank" rel="noreferrer" className="underline">Overture Maps Foundation</a></>}
+            {' · '}Places via <a href="https://www.geoapify.com/" target="_blank" rel="noreferrer" className="underline">Geoapify</a>
+            {ext.ai.items.some((p) => p.id.startsWith('overture:')) && <>{' and '}<a href="https://openplacesapi.com/" target="_blank" rel="noreferrer" className="underline">Open Places API</a></>}</>} />
       )}
     </>
   );
@@ -650,7 +652,9 @@ function PlaceCard({ p, source, onSelect, googleOn = true }: {
       <p className="mt-1 flex flex-wrap items-center gap-x-1 text-xs text-muted">
         {source === 'google' || d.fromGoogle
           ? <>{source === 'ai' && <span>Place from OpenStreetMap ·</span>}<GoogleMapsDataCredit /></>
-          : <>Details from OpenStreetMap via <a href="https://www.geoapify.com/" target="_blank" rel="noreferrer" className="underline">Geoapify</a></>}
+          : p.id.startsWith('overture:')
+            ? <>Details from <a href="https://docs.overturemaps.org/attribution/" target="_blank" rel="noreferrer" className="underline">Overture Maps</a> via <a href="https://openplacesapi.com/" target="_blank" rel="noreferrer" className="underline">Open Places API</a></>
+            : <>Details from OpenStreetMap via <a href="https://www.geoapify.com/" target="_blank" rel="noreferrer" className="underline">Geoapify</a></>}
       </p>
     </article>
   );

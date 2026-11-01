@@ -184,10 +184,10 @@ function BusinessDetailView({ slug }: { slug: string }) {
 /* ---------- Google Maps / AI recommended place ---------- */
 
 function PlaceDetailView({ source, place }: { source: 'google' | 'ai'; place: ExternalPlace }) {
-  // Result ids are "google:<place id>" or "osm:node/123".
+  // Result ids are "google:<place id>", "osm:node/123" or "overture:<place id>".
   const [kind, ...rest] = place.id.split(':');
   const id = rest.join(':');
-  const apiSource = kind === 'google' ? 'google' : 'osm';
+  const apiSource = kind === 'google' || kind === 'overture' ? kind : 'osm';
   const { data: d, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['place-details', apiSource, id],
     queryFn: () => api.get<PlaceDetails>('/api/places/details',
@@ -299,9 +299,9 @@ function PlaceDetailView({ source, place }: { source: 'google' | 'ai'; place: Ex
         )}
 
         <Section title="Source">
-          <Field label="Source" value={d.source === 'google' ? 'Google Maps' : 'OpenStreetMap'} />
+          <Field label="Source" value={sourceName(d.source)} />
           <Field label="Source ID" value={<code className="break-all text-xs">{d.sourceId}</code>} />
-          <Field label="Google place ID" value={d.source === 'osm' && d.googlePlaceId ? <code className="break-all text-xs">{d.googlePlaceId}</code> : null} />
+          <Field label="Google place ID" value={d.source !== 'google' && d.googlePlaceId ? <code className="break-all text-xs">{d.googlePlaceId}</code> : null} />
           <Field label="Details from" value={d.dataSources.join(' and ')} />
           {source === 'ai' && place.aiReason && <Field label="Why AI picked it" value={place.aiReason} />}
         </Section>
@@ -314,6 +314,9 @@ function PlaceDetailView({ source, place }: { source: 'google' | 'ai'; place: Ex
 }
 
 /* ---------- Shared pieces ---------- */
+
+const sourceName = (source: PlaceDetails['source']) =>
+  source === 'google' ? 'Google Maps' : source === 'overture' ? 'Overture Maps' : 'OpenStreetMap';
 
 /** The actions this result supports; each only when its data exists. */
 function Actions({ name, phone, whatsApp, website, directions, shareUrl, extra }: {

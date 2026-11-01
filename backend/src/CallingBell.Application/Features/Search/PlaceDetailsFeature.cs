@@ -3,8 +3,10 @@ using System.Text.RegularExpressions;
 using CallingBell.Application.Common.Exceptions;
 using CallingBell.Application.Common.Interfaces;
 using CallingBell.Application.Features.Businesses;
+using CallingBell.Domain.Entities;
 using FluentValidation;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace CallingBell.Application.Features.Search;
 
@@ -15,8 +17,8 @@ public sealed record PlaceFieldDto(string Label, string Value);
 /// Everything known about a place found outside CallInBell (a Google Maps or AI recommended search result), combined from its sources
 /// for the result detail window. Fields a source doesn't have are null or empty; nothing is filled in by guesswork.
 /// </summary>
-/// <param name="Source">"google" or "osm" (the AI recommended places come from OpenStreetMap).</param>
-/// <param name="SourceId">The place's id at its source: a Google place id, or "node/123" in OpenStreetMap.</param>
+/// <param name="Source">"google", "osm" or "overture" (the AI recommended places come from OpenStreetMap and Overture Maps).</param>
+/// <param name="SourceId">The place's id at its source: a Google place id, "node/123" in OpenStreetMap, or an Overture place id.</param>
 /// <param name="GooglePlaceId">For an OpenStreetMap place, the Google Maps place it was matched to (by name, within 300 m), if any.</param>
 /// <param name="Phone">National format; <paramref name="Mobile"/> is a separately listed mobile number.</param>
 /// <param name="OpeningHours">One line per day or rule, as the source gives them.</param>
@@ -29,8 +31,8 @@ public sealed record PlaceDetailsDto(string Source, string SourceId, string Name
     IReadOnlyList<GooglePlacePhotoDto> Photos, string? MapsUrl, string? SourceUrl, string? GooglePlaceId, IReadOnlyList<PlaceFieldDto> OtherFields,
     IReadOnlyList<string> DataSources);
 
-/// <param name="Source">"google" or "osm".</param>
-/// <param name="Id">Google place id, or an OpenStreetMap element ("node/123").</param>
+/// <param name="Source">"google", "osm" or "overture".</param>
+/// <param name="Id">Google place id, an OpenStreetMap element ("node/123"), or an Overture place id (from the Open Places API).</param>
 /// <param name="Name">OpenStreetMap only: the place's name and position, to find the same place on Google Maps.</param>
 public sealed record GetPlaceDetailsQuery(string? Source, string? Id, string? Name, double? Lat, double? Lon) : IRequest<PlaceDetailsDto>;
 
@@ -38,11 +40,17 @@ public sealed partial class GetPlaceDetailsValidator : AbstractValidator<GetPlac
 {
     [GeneratedRegex("^[A-Za-z0-9_-]{10,300}$")] private static partial Regex GoogleId();
     [GeneratedRegex("^(node|way|relation)/[0-9]{1,15}$")] private static partial Regex OsmId();
+    [GeneratedRegex("^[A-Za-z0-9_.-]{6,100}$")] private static partial Regex OvertureId();
 
     public GetPlaceDetailsValidator()
     {
-        RuleFor(x => x.Source).Must(s => s is "google" or "osm").WithMessage("source must be \"google\" or \"osm\".");
-        RuleFor(x => x.Id).NotEmpty().Must((q, id) => q.Source == "google" ? GoogleId().IsMatch(id ?? "") : OsmId().IsMatch(id ?? ""))
+        RuleFor(x => x.Source).Must(s => s is "google" or "osm" or "overture").WithMessage("source must be \"google\", \"osm\" or \"overture\".");
+        RuleFor(x => x.Id).NotEmpty().Must((q, id) => q.Source switch
+            {
+                "google" => GoogleId().IsMatch(id ?? ""),
+                "overture" => OvertureId().IsMatch(id ?? ""),
+                _ => OsmId().IsMatch(id ?? ""),
+            })
             .WithMessage("Invalid place id.");
         RuleFor(x => x.Name).MaximumLength(200);
         RuleFor(x => x.Lat).InclusiveBetween(-90, 90);
@@ -55,7 +63,7 @@ public sealed partial class GetPlaceDetailsValidator : AbstractValidator<GetPlac
 /// Google Maps when one matches (phone, rating, photos, hours), with OpenStreetMap's own values taking precedence. Nothing is stored:
 /// Google's terms don't allow keeping its data, and OpenStreetMap elements are only cached in memory.
 /// </summary>
-public sealed class GetPlaceDetailsHandler(IGooglePlacesSearch google, IOsmPlaceSearch osm) : IRequestHandler<GetPlaceDetailsQuery, PlaceDetailsDto>
+public sealed class GetPlaceDetailsHandler(IGooglePlacesSearch google, IOsmPlaceSearch osm, IUnitOfWork uow) : IRequestHandler<GetPlaceDetailsQuery, PlaceDetailsDto>
 {
     private const int MaxPhotos = 8;
     private const int PhotoWidthPx = 960;
@@ -68,6 +76,7 @@ public sealed class GetPlaceDetailsHandler(IGooglePlacesSearch google, IOsmPlace
             var g = await google.GetDetailsAsync(r.Id!, ct) ?? throw new NotFoundException("Place", r.Id!);
             return FromGoogle(g);
         }
+        if (r.Source == "overture") return await OvertureAsync(r.Id!, ct);
 
         var element = await osm.GetElementAsync(r.Id!, ct);
         // The same place on Google Maps, for what OpenStreetMap rarely has (phone, rating, photos).
@@ -86,6 +95,37 @@ public sealed class GetPlaceDetailsHandler(IGooglePlacesSearch google, IOsmPlace
         if (element is null && match is null)
             throw new ExternalServiceException(503, "OpenStreetMap is not responding right now. Please try again in a moment.");
         return FromOsm(r.Id!, name ?? match?.Name ?? "Place", lat, lon, element?.Tags ?? new Dictionary<string, string>(), match);
+    }
+
+    /// <summary>
+    /// An Overture place from dbo.OpenPlaces (imported, or saved when the Open Places API returned it: the API has no single-place lookup), plus the same place
+    /// on Google Maps when Google is on and one matches, for what Overture doesn't have (rating, photos, hours).
+    /// </summary>
+    private async Task<PlaceDetailsDto> OvertureAsync(string id, CancellationToken ct)
+    {
+        var o = await uow.Repository<OpenPlace>().QueryNoTracking().FirstOrDefaultAsync(p => p.PlaceId == id, ct)
+                ?? throw new NotFoundException("Place", id);
+        double lat = (double)o.Latitude, lon = (double)o.Longitude;
+        GooglePlaceDetails? g = null;
+        if (google.IsEnabled)
+        {
+            try
+            {
+                if (await google.FindContactAsync(o.Name, lat, lon, ct) is { Id: { } placeId }) g = await google.GetDetailsAsync(placeId, ct);
+            }
+            catch (ExternalServiceException) { /* Google unavailable: Overture's details alone */ }
+        }
+        // Overture's slug as words ("automotive_repair" -> "Automotive repair"), as OpenStreetMap kinds are shown and matched.
+        var category = o.Category is null ? null : Humanize(o.Category);
+        var tags = new List<string>();
+        if (category is not null) tags.Add(category);
+        if (g is not null) tags.AddRange(TypeNames(g.Types));
+        return new PlaceDetailsDto("overture", id, o.Name, category ?? g?.PrimaryType, tags.Distinct(StringComparer.OrdinalIgnoreCase).ToList(), g?.Summary,
+            o.Address ?? g?.FormattedAddress, o.Locality ?? g?.City, o.Region ?? g?.State, o.CountryCode is { } cc ? CountryName(cc) : g?.Country,
+            o.Postcode ?? g?.PostalCode, lat, lon,
+            o.Phone ?? g?.Phone, g?.InternationalPhone, null, null, o.Website ?? g?.Website, [], g?.OpeningHours ?? [], g?.OpenNow, g?.Rating,
+            g?.RatingCount, PriceLevel(g?.PriceLevel), Status(g?.BusinessStatus), g is null ? [] : Photos(g), g?.MapsUrl, null, g?.Id, [],
+            g is null ? ["Overture Maps"] : ["Overture Maps", "Google Maps"]);
     }
 
     private static PlaceDetailsDto FromGoogle(GooglePlaceDetails g) => new(

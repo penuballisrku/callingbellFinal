@@ -87,3 +87,60 @@ public class GooglePlaceRef
     public DateTimeOffset LastSeenOn { get; set; }
     public int SeenCount { get; set; }
 }
+
+/// <summary>
+/// An Overture Maps place (open data: CDLA-Permissive 2.0, Apache 2.0 or CC0, which allow storing it): imported for a whole country from
+/// Overture's releases (tools/overture/import_places.py, searched locally), or kept when the Open Places API returned it, so its details
+/// and "Join CallInBell" work later.
+/// </summary>
+public class OpenPlace
+{
+    /// <summary>Overture's place id, without the "overture:" prefix.</summary>
+    public string PlaceId { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    /// <summary>Overture category slug, e.g. "electrician".</summary>
+    public string? Category { get; set; }
+    /// <summary>Other categories, as ",slug,slug,".</summary>
+    public string? AltCategories { get; set; }
+    /// <summary>The category's place in Overture's taxonomy, e.g. "services_and_business/home_service/electrician".</summary>
+    public string? CategoryPath { get; set; }
+    /// <summary>The whole address on one line.</summary>
+    public string? Address { get; set; }
+    public string? Locality { get; set; }
+    public string? Region { get; set; }
+    public string? Postcode { get; set; }
+    public string? CountryCode { get; set; }
+    public decimal Latitude { get; set; }
+    public decimal Longitude { get; set; }
+    /// <summary>0.1 degree grid cell of the position (<see cref="CellOf"/>), so searches read only the cells around a point.</summary>
+    public int Cell { get; set; }
+    public string? Phone { get; set; }
+    public string? Website { get; set; }
+    /// <summary>Overture's confidence that the place exists, 0 to 1.</summary>
+    public decimal? Confidence { get; set; }
+    /// <summary>Where Overture got it, e.g. "meta,Microsoft" (for attribution).</summary>
+    public string? Datasets { get; set; }
+    /// <summary>The Overture release a bulk import came from; null for places kept from API results.</summary>
+    public string? Release { get; set; }
+    public DateTimeOffset FirstSeenOn { get; set; }
+    public DateTimeOffset LastSeenOn { get; set; }
+
+    public const double CellSize = 0.1;
+
+    /// <summary>The grid cell of a position; the import tool computes the same value.</summary>
+    public static int CellOf(double latitude, double longitude) =>
+        (int)Math.Floor((latitude + 90) / CellSize) * 10000 + (int)Math.Floor((longitude + 180) / CellSize);
+}
+
+/// <summary>A country's Overture places imported into <see cref="OpenPlace"/>, and the area they cover (searches inside it are local).</summary>
+public class OpenPlacesImport
+{
+    public string CountryCode { get; set; } = string.Empty;
+    public string Release { get; set; } = string.Empty;
+    public int Places { get; set; }
+    public decimal MinLatitude { get; set; }
+    public decimal MaxLatitude { get; set; }
+    public decimal MinLongitude { get; set; }
+    public decimal MaxLongitude { get; set; }
+    public DateTimeOffset ImportedOn { get; set; }
+}

@@ -528,7 +528,7 @@ public sealed class PlacesController : ApiControllerBase
     /// CallInBell businesses that may already be this one (<c>existingBusinesses</c>; a strong match can't be registered again).
     /// 404 when the place can't be found. Nothing is stored.
     /// </summary>
-    /// <param name="sourceId">"google:{place id}" or "osm:node/123", as on the search and Explore nearby results.</param>
+    /// <param name="sourceId">"google:{place id}", "osm:node/123" or "overture:{place id}", as on the search and Explore nearby results.</param>
     /// <param name="hint">What the person was browsing (a category slug or the search text); used only when the source's category doesn't match.</param>
     [HttpGet("join-calling-bell"), EnableRateLimiting("public-search")]
     public async Task<ActionResult<ApiResponse<CallingBell.Application.Features.Onboarding.JoinCallingBellBusinessDto>>> JoinCallingBell(

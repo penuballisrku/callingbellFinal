@@ -301,7 +301,7 @@ public interface IReviewSummarizer
 /// <param name="Photo">Google Maps only: the place's first photo.</param>
 public sealed record ExternalPlace(string Source, string Id, string Name, string? Kind, string? Address, double Latitude, double Longitude,
     string? Phone, string? Website, string? OpeningHours, decimal? Rating, int? RatingCount, string? SourceUrl, string MatchedBy,
-    GooglePlacePhoto? Photo = null, bool? OpenNow = null, string? Email = null, string? Description = null, IReadOnlyList<string>? Features = null);
+    GooglePlacePhoto? Photo = null, bool? OpenNow = null, string? Email = null, string? Description = null, IReadOnlyList<string>? Features = null, string? CountryCode = null);
 
 /// <summary>
 /// Geoapify (geoapify.com): OpenStreetMap-based places, address autocomplete and static map images, within a daily credit budget.
@@ -331,6 +331,25 @@ public sealed record AddressSuggestion(string Formatted, string? AddressLine1, s
     string? State, string? Postcode, string? CountryCode, double Latitude, double Longitude);
 
 public sealed record StaticMapImage(byte[] Content, string ContentType);
+
+/// <summary>
+/// Open Places API (openplacesapi.com): Overture Maps places (Foursquare, Microsoft, Meta and OpenStreetMap listings merged). Off
+/// (<see cref="IsEnabled"/> false) until an API key is configured, and for the rest of the month once the plan's searches are used up.
+/// Places are returned with <see cref="ExternalPlace.Source"/> "overture".
+/// </summary>
+public interface IOpenPlaces
+{
+    bool IsEnabled { get; }
+
+    /// <summary>
+    /// Places of an Overture <paramref name="category"/> (exact slug, e.g. "electrician"), or matching <paramref name="text"/> when no
+    /// category is given, within the radius, nearest first. Null when off, out of searches or failed.
+    /// </summary>
+    /// <param name="namesOnly">Match <paramref name="text"/> in place names only ("electric" finds "Lakshmi Electricals"), without reading it
+    /// as a category.</param>
+    Task<IReadOnlyList<ExternalPlace>?> SearchAsync(string? category, string? text, double lat, double lng, int radiusM, int limit, CancellationToken ct,
+        bool namesOnly = false);
+}
 
 /// <summary>Finds named places near a point in OpenStreetMap by "key=value" tag and "name~words" selectors.</summary>
 public interface IOsmPlaceSearch

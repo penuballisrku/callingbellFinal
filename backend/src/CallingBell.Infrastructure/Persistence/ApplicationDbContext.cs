@@ -35,6 +35,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<OsmPlaceSubCategory> OsmPlaceSubCategories => Set<OsmPlaceSubCategory>();
     public DbSet<OsmCityImport> OsmCityImports => Set<OsmCityImport>();
     public DbSet<GooglePlaceRef> GooglePlaceRefs => Set<GooglePlaceRef>();
+    public DbSet<OpenPlace> OpenPlaces => Set<OpenPlace>();
+    public DbSet<OpenPlacesImport> OpenPlacesImports => Set<OpenPlacesImport>();
     public DbSet<Business> Businesses => Set<Business>();
     public DbSet<BusinessSlugHistory> BusinessSlugHistory => Set<BusinessSlugHistory>();
     public DbSet<BusinessService> BusinessServices => Set<BusinessService>();

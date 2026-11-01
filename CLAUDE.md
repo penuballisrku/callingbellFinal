@@ -117,6 +117,9 @@ python backend/tests/seo-smoke/seo_smoke.py   # needs the API running
 - **Search:**
   - Calling Bell listings: `Features/Businesses`; search parsing and suggestions: `Features/Search/*`.
   - Google Maps and OpenStreetMap ("AI recommended") tiers: `ExternalSearchFeature`; Google Places: `Infrastructure/Search/GooglePlacesSearch`.
+  - Overture Maps places join the "AI recommended" tier: searched locally in `dbo.OpenPlaces` where a country is imported
+    (`tools/overture/import_places.py --database <db>`, monthly; India is 4.5M places, about 1.3 GB), else through the Open Places API
+    when `OpenPlaces:ApiKey` is set (`Infrastructure/Search/OpenPlaces`, `LocalOpenPlaces`). Categories: `SubCategories.OpenPlacesCategories`.
   - Explore nearby: `/nearby` (`features/places`). Its "Popular searches" come from `dbo.PopularSearches`, counted per search.
 - **Location:**
   - Country from IP: MaxMind / ip-api, cached per IP.
@@ -144,7 +147,7 @@ python backend/tests/seo-smoke/seo_smoke.py   # needs the API running
 
 ## Secrets and configuration
 
-- **Never commit secrets.** That covers the Google Places key, the JWT key, Razorpay keys, the Firebase service account, WhatsApp and
+- **Never commit secrets.** That covers the Google Places key, the Open Places key, the JWT key, Razorpay keys, the Firebase service account, WhatsApp and
   SMS tokens, and webhook secrets.
 - **Where they go:** `dotnet user-secrets` (the API has a UserSecretsId) in development; environment variables (`Section__Key`)
   or Azure App Service settings / Key Vault elsewhere.

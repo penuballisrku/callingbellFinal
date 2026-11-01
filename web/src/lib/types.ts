@@ -343,7 +343,7 @@ export interface PlaceField { label: string; value: string }
  * doesn't have are null or empty.
  */
 export interface PlaceDetails {
-  source: 'google' | 'osm'; sourceId: string; name: string; category?: string | null; tags: string[]; description?: string | null;
+  source: 'google' | 'osm' | 'overture'; sourceId: string; name: string; category?: string | null; tags: string[]; description?: string | null;
   address?: string | null; city?: string | null; state?: string | null; country?: string | null; postalCode?: string | null;
   latitude?: number | null; longitude?: number | null; phone?: string | null; internationalPhone?: string | null; mobile?: string | null;
   email?: string | null; website?: string | null; socialLinks: SocialLink[]; openingHours: string[]; openNow?: boolean | null;
@@ -393,7 +393,7 @@ export interface JoinCallingBellHours { dayOfWeek: number; open?: string | null;
 /** A CallInBell business that may be the same place; isStrong = registering again is refused. */
 export interface ExistingBusinessMatch { id: string; slug: string; name: string; city?: string | null; status: string; matchedBy: string; isStrong: boolean }
 export interface JoinCallingBellBusiness {
-  sourceBusinessId: string; source: 'google' | 'osm'; sourceName: string; sourceUrl?: string | null; googlePlaceId?: string | null;
+  sourceBusinessId: string; source: 'google' | 'osm' | 'overture'; sourceName: string; sourceUrl?: string | null; googlePlaceId?: string | null;
   businessName: string; description?: string | null; sourceCategory?: string | null; tags: string[];
   categorySlug?: string | null; subCategorySlug?: string | null; categoryName?: string | null; subCategoryName?: string | null;
   address?: string | null; addressLine?: string | null; area?: string | null; city?: string | null; state?: string | null; country?: string | null;

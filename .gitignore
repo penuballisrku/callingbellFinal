@@ -26,3 +26,7 @@ tests/e2e/output/
 
 ## Production build output (web + API), made by dotnet publish / vite build
 publish/
+
+## Overture places downloads and the import tool's Python environment (tools/overture/import_places.py)
+tools/overture/.venv/
+tools/overture/data/

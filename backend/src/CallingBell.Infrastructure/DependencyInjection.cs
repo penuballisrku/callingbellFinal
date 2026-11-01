@@ -191,6 +191,14 @@ public static class DependencyInjection
         services.AddHttpClient(GeoapifyService.HttpClientName).RemoveAllLoggers();
         services.AddSingleton<GeoapifyService>();
         services.AddSingleton<IGeoapify>(sp => sp.GetRequiredService<GeoapifyService>());
+        // Overture Maps places for the "AI recommended" results: the local copy where a country is imported (tools/overture), else the
+        // Open Places API (optional, needs OpenPlaces:ApiKey). The key travels in the Authorization header; request logging is off so the
+        // searches made aren't logged either.
+        services.Configure<OpenPlacesOptions>(configuration.GetSection(OpenPlacesOptions.Section));
+        services.AddHttpClient(OpenPlacesService.HttpClientName).RemoveAllLoggers();
+        services.AddSingleton<OpenPlacesService>();
+        services.AddSingleton<LocalOpenPlaces>();
+        services.AddSingleton<IOpenPlaces, OpenPlacesRouter>();
         services.AddSingleton<IPlaceGeocoder, FallbackPlaceGeocoder>();
         // Join CallInBell: photos copied from the source only when Onboarding:AllowExternalPhotoImport is on (licence permitting).
         services.Configure<CallingBell.Application.Features.Onboarding.OnboardingOptions>(configuration.GetSection(CallingBell.Application.Features.Onboarding.OnboardingOptions.Section));
